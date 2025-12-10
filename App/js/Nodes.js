@@ -2,13 +2,11 @@ window.globalNodes = [
     {
         "name": "Event BeginPlay",
         "color": "var(--n-event)",
-        "width": 160,
         "outputs": [{"name": "Out", "type": "exec"}]
     },
     {
         "name": "Print String",
         "color": "var(--n-func)",
-        "width": 200,
         "inputs": [
             {"name": "In", "type": "exec"},
             {"name": "String", "type": "string"},
@@ -30,7 +28,6 @@ window.globalNodes = [
     {
         "name": "Spawn Actor From Class",
         "color": "var(--n-func)",
-        "width": 260,
         "inputs": [
             {"name": "Exec", "type": "exec"},
             {
@@ -40,7 +37,7 @@ window.globalNodes = [
             },
             {"name": "Spawn Transform", "type": "transform"},
             {
-                "name": "Collision Handling", "type": "string", "widget": "dropdown",
+                "name": "Collision Handling Override", "type": "string", "widget": "dropdown",
                 "options": ["Default", "Always Spawn", "Try To Adjust"],
                 "default": "Default"
             },
@@ -58,5 +55,19 @@ window.globalNodes = [
             {"name": "Out", "type": "exec"},
             {"name": "Return Value", "type": "object"}
         ]
+    },
+    {
+        "name": "Vector + Vector",
+        "hideHeader": true,
+        "centerLabel": "+",
+        "inputs": [{"name": "", "type": "vector"}, {"name": "", "type": "vector"}],
+        "outputs": [{"name": "", "type": "vector"}]
+    },
+    {
+        "name": "Int + Int",
+        "hideHeader": true,
+        "centerLabel": "+",
+        "inputs": [{"name": "", "type": "int"}, {"name": "", "type": "int"}],
+        "outputs": [{"name": "", "type": "int"}]
     }
 ];

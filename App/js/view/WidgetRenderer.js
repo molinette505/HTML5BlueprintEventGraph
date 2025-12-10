@@ -5,7 +5,7 @@ class WidgetRenderer {
         switch (widget.type) {
             case 'text': return this.createInput(widget, 'text', '60px', onUpdate);
             case 'number': return this.createInput(widget, 'number', '40px', onUpdate);
-            case 'color': return this.createInput(widget, 'color', '40px', onUpdate);
+            case 'color': return this.createInput(widget, 'color', null, onUpdate); // Null width = CSS handles it
             case 'checkbox': return this.createCheckbox(widget, onUpdate);
             case 'dropdown': return this.createDropdown(widget, onUpdate);
             case 'vector3': return this.createVector(widget, onUpdate);
@@ -17,7 +17,9 @@ class WidgetRenderer {
         const input = document.createElement('input');
         input.type = type;
         input.className = 'node-widget';
+        // Only set width inline if specific override is passed (like for text inputs)
         if (width) input.style.width = width;
+        
         input.value = widget.value;
         const evt = type === 'color' ? 'change' : 'input';
         input.addEventListener(evt, (e) => {
@@ -44,7 +46,8 @@ class WidgetRenderer {
     createDropdown(widget, onUpdate) {
         const select = document.createElement('select');
         select.className = 'node-widget';
-        select.style.width = '100px';
+        // Removed hardcoded width here to let CSS (auto) handle it
+        
         (widget.options || []).forEach(opt => {
             const option = document.createElement('option');
             option.value = opt;
