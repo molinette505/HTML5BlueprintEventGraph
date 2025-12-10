@@ -1,0 +1,1079 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Visual Blueprint Editor</title>
+    <style>
+        :root {
+            --bg-color: #1a1a1a;
+            --grid-line: #252525;
+            --grid-major: #303030;
+            --node-bg: rgba(30, 30, 30, 0.95);
+            --header-bg: #2d2d2d;
+            --text-main: #e0e0e0;
+            --text-dim: #888;
+            --accent: #007acc;
+            --danger: #d9534f;
+            --wire-default: #fff;
+            --wire-highlight: #ff9900;
+        }
+
+        * { box-sizing: border-box; outline: none; -webkit-tap-highlight-color: transparent; }
+
+        body, html {
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            overflow: hidden;
+            font-family: 'Segoe UI', Inter, Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            touch-action: none; 
+            user-select: none;
+        }
+
+        #app { display: flex; flex-direction: column; height: 100vh; }
+
+        /* TOOLBAR */
+        #toolbar {
+            height: 48px;
+            background: #252526;
+            border-bottom: 1px solid #333;
+            display: flex;
+            align-items: center;
+            padding: 0 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            z-index: 50;
+            justify-content: space-between;
+        }
+
+        .tab-group { display: flex; height: 100%; }
+        
+        .tab {
+            background: transparent; border: none; color: #888;
+            font-size: 13px; font-weight: 600; cursor: pointer;
+            padding: 0 20px; height: 100%;
+            border-bottom: 3px solid transparent;
+            transition: all 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .tab:hover { color: #ccc; background: rgba(255,255,255,0.02); }
+        .tab.active { color: white; border-bottom-color: var(--accent); background: rgba(255,255,255,0.05); }
+
+        .btn-action {
+            background: #2d8a4e; color: white; border: none;
+            padding: 6px 16px; border-radius: 4px; font-weight: 600; font-size: 12px;
+            cursor: pointer; display: flex; align-items: center; gap: 6px;
+            transition: background 0.2s; box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        .btn-action:hover { background: #36a55d; }
+        .btn-action:active { transform: translateY(1px); }
+        .btn-action svg { width: 14px; height: 14px; fill: currentColor; }
+
+        /* CONTENT AREA */
+        #main-content { flex-grow: 1; position: relative; overflow: hidden; }
+        .view { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: none; }
+        .view.active { display: block; }
+
+        /* SETTINGS / JSON EDITOR */
+        #settings-view { padding: 30px; overflow-y: auto; background: #1e1e1e; max-width: 800px; margin: 0 auto; user-select: text; }
+        h3 { color: var(--text-dim); border-bottom: 1px solid #333; padding-bottom: 8px; font-size: 14px; text-transform: uppercase; margin-top: 20px; }
+        textarea.code-editor {
+            width: 100%; height: 200px; background: #111; color: #d4d4d4;
+            border: 1px solid #333; font-family: 'Consolas', 'Monaco', monospace; font-size: 12px;
+            padding: 15px; border-radius: 4px; line-height: 1.5; resize: vertical;
+        }
+        .hint { color: #666; font-size: 12px; margin-top: 5px; font-style: italic; }
+
+        /* GRAPH CANVAS */
+        #graph-container {
+            width: 100%; height: 100%;
+            background-color: #1a1a1a;
+            background-image: 
+                linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+                linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+            background-size: 100px 100px, 100px 100px, 20px 20px, 20px 20px;
+            background-position: -1px -1px;
+            cursor: grab;
+            position: relative;
+            overflow: hidden;
+        }
+        #graph-container:active { cursor: grabbing; }
+
+        #transform-layer { 
+            transform-origin: 0 0; 
+            position: absolute; top:0; left:0; width:100%; height:100%; 
+            pointer-events: none; 
+        }
+        
+        #connections-layer { 
+            width: 100%; height: 100%; position: absolute; top:0; left:0; 
+            overflow: visible; z-index: 1; pointer-events: none; 
+        }
+
+        #nodes-layer {
+            width: 100%; height: 100%; position: absolute; top:0; left:0; 
+            z-index: 10; pointer-events: none;
+        }
+
+        /* NODES */
+        .node {
+            position: absolute; min-width: 140px;
+            background: var(--node-bg);
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5), 0 0 0 1px rgba(0,0,0,0.4);
+            color: #eee; font-size: 12px;
+            display: flex; flex-direction: column;
+            pointer-events: all;
+            backdrop-filter: blur(4px);
+            transition: box-shadow 0.2s;
+        }
+        .node:hover { box-shadow: 0 6px 20px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.2); z-index: 100; }
+        .node.selected { box-shadow: 0 0 0 2px var(--accent), 0 4px 15px rgba(0,0,0,0.5); z-index: 101; }
+
+        .node-header {
+            padding: 8px 12px;
+            border-radius: 8px 8px 0 0;
+            font-weight: 700;
+            background: linear-gradient(180deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 100%);
+            display: flex; align-items: center; gap: 8px;
+            border-bottom: 1px solid rgba(0,0,0,0.3);
+            text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+        }
+
+        /* 3-COLUMN LAYOUT */
+        .node-body { 
+            padding: 8px 0; 
+            display: grid; 
+            grid-template-columns: auto 1fr auto; /* Left, Center (Stretch), Right */
+            align-items: start; /* Align to Top */
+            width: 100%;
+        }
+
+        .col { display: flex; flex-direction: column; justify-content: flex-start; /* Align pins to top */ }
+        .col-left { align-items: flex-start; margin-right: 8px; padding-left: 0; min-width: 20px; }
+        .col-right { align-items: flex-end; margin-left: 8px; padding-right: 0; min-width: 20px; }
+        .col-center { 
+            align-items: center; justify-content: center; 
+            display: flex; flex-direction: column; height: 100%; 
+            min-width: 20px; /* Spacer */
+        }
+        
+        .center-label {
+            font-weight: bold; font-size: 18px; opacity: 0.7;
+            align-self: center; justify-self: center; margin-top: 4px;
+        }
+
+        .pin-row {
+            display: flex; align-items: center; height: 26px; 
+            position: relative; white-space: nowrap;
+        }
+        .pin-label { margin: 0 8px; color: #ccc; font-size: 11px; font-weight: 500; pointer-events: none; }
+        
+        /* PINS */
+        .pin {
+            width: 12px; height: 12px; box-sizing: border-box;
+            border: 2px solid var(--pin-color);
+            border-radius: 50%;
+            background: transparent; cursor: crosshair;
+            transition: transform 0.15s, background-color 0.15s;
+            position: relative;
+            pointer-events: all;
+            margin-top: 1px;
+            flex-shrink: 0;
+        }
+        .pin:hover { transform: scale(1.3); background-color: rgba(255,255,255,0.3); }
+        .pin.connected { background-color: var(--pin-color); }
+        
+        .pin.snapped {
+            transform: scale(1.6);
+            box-shadow: 0 0 10px white;
+            background-color: var(--pin-color) !important;
+            border-color: white !important;
+        }
+
+        /* EXEC PINS */
+        .pin.exec {
+            border-radius: 0; width: 14px; height: 15px; border: none; background: none;
+            clip-path: polygon(0 0, 80% 0, 100% 50%, 80% 100%, 0 100%);
+            background-color: white; opacity: 0.9;
+            margin-top: 0;
+        }
+        /* Specific Margins to align flush with node edge */
+        .col-left .pin-row { padding-left: 0; }
+        .col-right .pin-row { padding-right: 0; }
+        
+        .col-left .pin.exec { margin-left: 0; margin-right: 8px; }
+        .col-right .pin.exec { margin-right: 0; margin-left: 8px; }
+        
+        /* Standard Pins Margin */
+        .col-left .pin:not(.exec) { margin-left: 8px; }
+        .col-right .pin:not(.exec) { margin-right: 8px; }
+
+
+        .pin.exec:hover { opacity: 1; transform: scale(1.2); }
+        .pin.exec.connected { opacity: 1; }
+        .pin.exec.snapped { transform: scale(1.5); box-shadow: none; filter: drop-shadow(0 0 5px white); }
+
+        /* CONNECTIONS */
+        path.connection {
+            fill: none; stroke: var(--wire-default); stroke-width: 2px;
+            stroke-linecap: round; pointer-events: stroke; cursor: pointer;
+            transition: stroke-width 0.1s, stroke 0.2s;
+        }
+        path.connection:hover { stroke-width: 4px; stroke: var(--danger); }
+        path.connection.dragging { pointer-events: none; }
+        
+        path.connection.pulse {
+            stroke: var(--wire-highlight);
+            stroke-width: 4px;
+            filter: drop-shadow(0 0 5px orange);
+            animation: dash 0.5s linear infinite;
+            stroke-dasharray: 10, 5;
+        }
+        @keyframes dash { to { stroke-dashoffset: -15; } }
+
+        /* CONTEXT MENU */
+        #context-menu {
+            display: none; flex-direction: column;
+            position: fixed; width: 220px; max-height: 320px;
+            background: #252526; border: 1px solid #454545;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            border-radius: 6px; z-index: 2000; overflow: hidden;
+        }
+        #context-menu.visible { display: flex; }
+        
+        #context-search {
+            background: #1e1e1e; border: none; color: white;
+            padding: 10px; font-size: 13px; border-bottom: 1px solid #333;
+        }
+        #context-search:focus { background: #111; }
+        
+        #context-list { list-style: none; padding: 0; margin: 0; overflow-y: auto; }
+        .ctx-item {
+            padding: 8px 12px; cursor: pointer; display: flex; justify-content: space-between;
+            align-items: center; font-size: 13px; color: #ccc;
+            border-bottom: 1px solid #2a2a2a;
+        }
+        .ctx-item:hover { background-color: var(--accent); color: white; }
+        .ctx-cat { font-size: 10px; opacity: 0.6; text-transform: uppercase; }
+
+        /* WIDGETS */
+        .node-widget {
+            background: #111; border: 1px solid #333; color: white;
+            border-radius: 3px; font-size: 11px; padding: 2px 4px;
+            margin: 0 4px; height: 18px; font-family: monospace;
+            pointer-events: all;
+            display: inline-block;
+        }
+        .widget-vec3 { display: flex; gap: 2px; pointer-events: all; }
+        .widget-vec3 input { width: 35px; text-align: center; border: 1px solid #333; background: #111; color: #ddd; font-size: 10px; border-radius: 2px; }
+
+        /* HIDE WIDGETS ON CONNECTION */
+        .pin-row.has-connection .node-widget, 
+        .pin-row.has-connection .widget-vec3 {
+            display: none !important;
+        }
+
+        /* NOTIFICATION */
+        #notification {
+            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+            background: #333; color: white; padding: 10px 20px; border-radius: 20px;
+            font-size: 13px; pointer-events: none; opacity: 0; transition: opacity 0.3s;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5); z-index: 3000;
+        }
+    </style>
+</head>
+<body>
+
+<div id="app">
+    <div id="toolbar">
+        <div class="tab-group">
+            <button class="tab active" onclick="switchTab('graph')">Graph Editor</button>
+            <button class="tab" onclick="switchTab('settings')">Library (JSON)</button>
+        </div>
+        <button class="btn-action" id="simulate-btn">
+            <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+            Simulate
+        </button>
+    </div>
+
+    <div id="main-content">
+        <div id="graph-view" class="view active">
+            <div id="graph-container">
+                <div id="transform-layer">
+                    <svg id="connections-layer"></svg>
+                    <div id="nodes-layer"></div>
+                </div>
+            </div>
+            <div id="context-menu">
+                <input type="text" id="context-search" placeholder="Search nodes..." autocomplete="off">
+                <ul id="context-list"></ul>
+            </div>
+        </div>
+
+        <div id="settings-view" class="view">
+            <h3>Data Types Definition</h3>
+            <textarea id="types-input" class="code-editor">
+[
+  { "name": "exec", "color": "#FFFFFF", "widget": "none" },
+  { "name": "boolean", "color": "#8c0000", "widget": "checkbox" },
+  { "name": "float", "color": "#96ce02", "widget": "number" },
+  { "name": "string", "color": "#d800ff", "widget": "text" },
+  { "name": "vector", "color": "#ffcc00", "widget": "vector3" },
+  { "name": "color", "color": "#00aaff", "widget": "color" }
+]</textarea>
+            <div class="hint">Define pin colors and input widgets here.</div>
+
+            <h3>Node Library Definition</h3>
+            <textarea id="nodes-input" class="code-editor">
+[
+  {
+    "name": "Event BeginPlay",
+    "color": "#8b0000",
+    "width": 160,
+    "outputs": [{"name": "Out", "type": "exec"}]
+  },
+  {
+    "name": "Print String",
+    "color": "#4466aa",
+    "width": 180,
+    "inputs": [
+      {"name": "In", "type": "exec"},
+      {"name": "String", "type": "string", "default": "Hello World"}
+    ],
+    "outputs": [{"name": "Out", "type": "exec"}]
+  },
+  {
+    "name": "Make Vector",
+    "color": "#333",
+    "inputs": [
+        {"name": "X", "type": "float"},
+        {"name": "Y", "type": "float"},
+        {"name": "Z", "type": "float"}
+    ],
+    "outputs": [{"name": "Vec", "type": "vector"}]
+  },
+  {
+    "name": "Delay",
+    "inputs": [
+      {"name": "In", "type": "exec"},
+      {"name": "Duration", "type": "float", "default": 0.2}
+    ],
+    "outputs": [
+      {"name": "Completed", "type": "exec"}
+    ]
+  },
+  {
+      "name": "Vector + Vector",
+      "hideHeader": true,
+      "centerLabel": "+",
+      "inputs": [{"name": "", "type": "vector"}, {"name": "", "type": "vector"}],
+      "outputs": [{"name": "", "type": "vector"}]
+  }
+]</textarea>
+            <br>
+            <button class="btn-action" id="update-lib-btn" style="width:100%; justify-content:center;">Apply Changes</button>
+        </div>
+    </div>
+</div>
+
+<div id="notification"></div>
+
+<script>
+    let nodes = [];
+    let connections = [];
+    let nodeTemplates = [];
+    let typeDefinitions = {};
+    
+    let scale = 1;
+    let panX = 0, panY = 0;
+    
+    let isDraggingNode = false;
+    let draggedNodeId = null;
+    let dragOffset = {x:0, y:0};
+    
+    let isDraggingWire = false;
+    let wireStart = { nodeId: null, pinIndex: null, type: null, dataType: null };
+    let pointerPos = {x:0, y:0};
+    let snapTarget = null;
+    
+    let isPanning = false;
+    let panStart = {x:0, y:0};
+
+    let longPressTimer = null;
+    let longPressStartPos = {x:0, y:0};
+    const LONG_PRESS_DURATION = 600;
+    
+    let nextNodeId = 1;
+    let nextConnId = 1;
+
+    const graphContainer = document.getElementById('graph-container');
+    const nodesLayer = document.getElementById('nodes-layer');
+    const connectionsLayer = document.getElementById('connections-layer');
+    const transformLayer = document.getElementById('transform-layer');
+    const contextMenu = document.getElementById('context-menu');
+    
+    function init() {
+        loadLibrary();
+        createNode(nodeTemplates[0], 100, 150);
+        createNode(nodeTemplates[1], 400, 150);
+        createNode(nodeTemplates[2], 100, 350);
+        createNode(nodeTemplates[4], 350, 350); 
+        connectNodes(1, 0, 2, 0, 'exec');
+        updateTransform();
+        renderLoop();
+    }
+
+    function switchTab(tab) {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+        
+        if(tab === 'graph') {
+            document.querySelectorAll('.tab')[0].classList.add('active');
+            document.getElementById('graph-view').classList.add('active');
+            setTimeout(renderConnections, 50);
+        } else {
+            document.querySelectorAll('.tab')[1].classList.add('active');
+            document.getElementById('settings-view').classList.add('active');
+        }
+    }
+
+    function loadLibrary() {
+        try {
+            const types = JSON.parse(document.getElementById('types-input').value);
+            typeDefinitions = {};
+            types.forEach(t => typeDefinitions[t.name] = t);
+            const rawNodes = JSON.parse(document.getElementById('nodes-input').value);
+            nodeTemplates = Array.isArray(rawNodes) ? rawNodes : [rawNodes];
+            showNotification("Library loaded successfully");
+        } catch(e) {
+            showNotification("JSON Error: " + e.message);
+        }
+    }
+
+    function createNode(template, x, y) {
+        const node = {
+            id: nextNodeId++,
+            x: x,
+            y: y,
+            config: JSON.parse(JSON.stringify(template)),
+            element: null
+        };
+        nodes.push(node);
+        renderNodeElement(node);
+        return node;
+    }
+
+    function deleteNode(id) {
+        nodes = nodes.filter(n => n.id !== id);
+        connections = connections.filter(c => c.fromNode !== id && c.toNode !== id);
+        document.getElementById(`node-${id}`).remove();
+        renderConnections();
+    }
+
+    function connectNodes(fromNode, fromPin, toNode, toPin, type) {
+        connections.push({
+            id: nextConnId++,
+            fromNode, fromPin, toNode, toPin, type
+        });
+        renderConnections();
+    }
+
+    function renderNodeElement(node) {
+        const el = document.createElement('div');
+        el.className = `node ${node.config.hideHeader ? 'compact' : ''}`;
+        el.id = `node-${node.id}`;
+        el.style.left = node.x + 'px';
+        el.style.top = node.y + 'px';
+        if(node.config.width) el.style.width = node.config.width + 'px';
+        if(node.config.color) el.style.setProperty('--header-bg', node.config.color);
+
+        if (!node.config.hideHeader) {
+            const header = document.createElement('div');
+            header.className = 'node-header';
+            header.style.background = node.config.color || '#444';
+            header.innerText = node.config.name;
+            el.appendChild(header);
+        }
+
+        const body = document.createElement('div');
+        body.className = 'node-body';
+
+        // 1. INPUTS
+        const leftCol = document.createElement('div');
+        leftCol.className = 'col col-left';
+        (node.config.inputs || []).forEach((pin, idx) => {
+            leftCol.appendChild(createPinRow(node.id, idx, pin, 'input'));
+        });
+        body.appendChild(leftCol);
+
+        // 2. CENTER (Label or Spacer)
+        const centerCol = document.createElement('div');
+        centerCol.className = 'col col-center';
+        if(node.config.centerLabel) {
+            const label = document.createElement('div');
+            label.className = 'center-label';
+            label.innerText = node.config.centerLabel;
+            centerCol.appendChild(label);
+        }
+        body.appendChild(centerCol);
+
+        // 3. OUTPUTS
+        const rightCol = document.createElement('div');
+        rightCol.className = 'col col-right';
+        (node.config.outputs || []).forEach((pin, idx) => {
+            rightCol.appendChild(createPinRow(node.id, idx, pin, 'output'));
+        });
+        body.appendChild(rightCol);
+
+        el.appendChild(body);
+
+        el.addEventListener('mousedown', (e) => startDragNode(e, node.id));
+        el.addEventListener('touchstart', (e) => {
+            if(e.touches.length === 1) {
+                const touch = e.touches[0];
+                longPressStartPos = {x: touch.clientX, y: touch.clientY};
+                longPressTimer = setTimeout(() => {
+                    isDraggingNode = false; draggedNodeId = null;
+                    if(navigator.vibrate) navigator.vibrate(50);
+                    showContextMenu(touch.clientX, touch.clientY, 'node', node.id);
+                }, LONG_PRESS_DURATION);
+                startDragNode(e, node.id);
+            }
+        }, {passive: false});
+        
+        el.addEventListener('contextmenu', (e) => {
+            e.preventDefault(); e.stopPropagation();
+            showContextMenu(e.clientX, e.clientY, 'node', node.id);
+        });
+
+        nodesLayer.appendChild(el);
+        node.element = el;
+    }
+
+    function createPinRow(nodeId, index, config, type) {
+        const row = document.createElement('div');
+        row.className = 'pin-row';
+        row.id = `row-${nodeId}-${type}-${index}`;
+        
+        const pin = document.createElement('div');
+        pin.className = `pin ${config.type}`;
+        pin.dataset.node = nodeId;
+        pin.dataset.index = index;
+        pin.dataset.type = type; 
+        pin.dataset.dataType = config.type; 
+        pin.id = `pin-${nodeId}-${type}-${index}`;
+        
+        const typeConf = typeDefinitions[config.type] || {color: '#999'};
+        pin.style.setProperty('--pin-color', typeConf.color);
+
+        const startWire = (e) => {
+            e.stopPropagation(); e.preventDefault();
+            hideContextMenu();
+            
+            // DRAG-TO-DISCONNECT LOGIC (Input Data Pins)
+            if(type === 'input') {
+                const existingConnIndex = connections.findIndex(c => c.toNode === nodeId && c.toPin === index);
+                if(existingConnIndex >= 0) {
+                    const conn = connections[existingConnIndex];
+                    const outputPinEl = document.getElementById(`pin-${conn.fromNode}-output-${conn.fromPin}`);
+                    if(outputPinEl) {
+                        const rect = outputPinEl.getBoundingClientRect();
+                        const gx = (rect.left + rect.width/2 - graphContainer.getBoundingClientRect().left - panX)/scale;
+                        const gy = (rect.top + rect.height/2 - graphContainer.getBoundingClientRect().top - panY)/scale;
+                        
+                        connections.splice(existingConnIndex, 1);
+                        
+                        isDraggingWire = true;
+                        snapTarget = null;
+                        wireStart = { 
+                            nodeId: conn.fromNode, 
+                            pinIndex: conn.fromPin, 
+                            type: 'output', 
+                            dataType: config.type, 
+                            startX: gx, 
+                            startY: gy 
+                        };
+                        pointerPos = {x: e.clientX || e.touches[0].clientX, y: e.clientY || e.touches[0].clientY};
+                        
+                        renderConnections();
+                        return;
+                    }
+                }
+            }
+
+            // Standard Start Logic
+            const rect = pin.getBoundingClientRect();
+            const gx = (rect.left + rect.width/2 - graphContainer.getBoundingClientRect().left - panX)/scale;
+            const gy = (rect.top + rect.height/2 - graphContainer.getBoundingClientRect().top - panY)/scale;
+            isDraggingWire = true;
+            snapTarget = null;
+            wireStart = { nodeId, pinIndex: index, type: type, dataType: config.type, startX: gx, startY: gy };
+            pointerPos = {x: e.clientX || e.touches[0].clientX, y: e.clientY || e.touches[0].clientY};
+        };
+
+        pin.addEventListener('mousedown', startWire);
+        pin.addEventListener('touchstart', startWire);
+
+        const label = document.createElement('span');
+        label.className = 'pin-label';
+        label.innerText = config.name || '';
+
+        const widget = createWidget(config);
+
+        if(type === 'input') {
+            row.appendChild(pin);
+            if(config.name) row.appendChild(label);
+            if(widget) row.appendChild(widget);
+        } else {
+            if(config.name) row.appendChild(label);
+            row.appendChild(pin);
+        }
+        return row;
+    }
+
+    function createWidget(config) {
+        const typeConf = typeDefinitions[config.type];
+        if(!typeConf || !typeConf.widget || typeConf.widget === 'none') return null;
+        
+        if (typeConf.widget === 'text') {
+            const inp = document.createElement('input');
+            inp.className = 'node-widget';
+            inp.value = config.default || '';
+            inp.style.width = '60px';
+            preventDrag(inp);
+            return inp;
+        }
+        if (typeConf.widget === 'number') {
+            const inp = document.createElement('input');
+            inp.type = 'number';
+            inp.className = 'node-widget';
+            inp.value = config.default || 0;
+            inp.style.width = '40px';
+            preventDrag(inp);
+            return inp;
+        }
+        if (typeConf.widget === 'checkbox') {
+            const inp = document.createElement('input');
+            inp.type = 'checkbox';
+            preventDrag(inp);
+            return inp;
+        }
+        if (typeConf.widget === 'vector3') {
+            const wrap = document.createElement('div');
+            wrap.className = 'widget-vec3';
+            ['X','Y','Z'].forEach(l => {
+                const i = document.createElement('input');
+                i.placeholder = l;
+                preventDrag(i);
+                wrap.appendChild(i);
+            });
+            return wrap;
+        }
+        return null;
+    }
+
+    function preventDrag(el) {
+        el.addEventListener('mousedown', e => e.stopPropagation());
+        el.addEventListener('touchstart', e => e.stopPropagation());
+    }
+
+    function renderConnections() {
+        connectionsLayer.innerHTML = '';
+        
+        // Reset Visuals
+        document.querySelectorAll('.pin').forEach(p => {
+            p.classList.remove('connected');
+            p.classList.remove('snapped');
+        });
+        document.querySelectorAll('.pin-row').forEach(r => r.classList.remove('has-connection'));
+
+        connections.forEach(conn => {
+            const p1 = getPinPos(conn.fromNode, conn.fromPin, 'output');
+            const p2 = getPinPos(conn.toNode, conn.toPin, 'input');
+            if(p1 && p2) {
+                const typeDef = typeDefinitions[conn.type] || {color:'#fff'};
+                drawCurve(p1, p2, typeDef.color, conn.type, conn.id);
+                
+                const outPin = document.getElementById(`pin-${conn.fromNode}-output-${conn.fromPin}`);
+                const inPin = document.getElementById(`pin-${conn.toNode}-input-${conn.toPin}`);
+                
+                if(outPin) outPin.classList.add('connected');
+                if(inPin) {
+                    inPin.classList.add('connected');
+                    const row = inPin.closest('.pin-row');
+                    if(row) row.classList.add('has-connection');
+                }
+            }
+        });
+
+        if(isDraggingWire) {
+            const startPos = {x: wireStart.startX, y: wireStart.startY};
+            let endPos;
+
+            if (snapTarget) {
+                const el = document.getElementById(`pin-${snapTarget.nodeId}-${snapTarget.type}-${snapTarget.index}`);
+                if(el) {
+                    el.classList.add('snapped');
+                    const rect = el.getBoundingClientRect();
+                    const gx = (rect.left + rect.width/2 - graphContainer.getBoundingClientRect().left - panX)/scale;
+                    const gy = (rect.top + rect.height/2 - graphContainer.getBoundingClientRect().top - panY)/scale;
+                    endPos = {x: gx, y: gy};
+                } else {
+                    const rect = graphContainer.getBoundingClientRect();
+                    endPos = {
+                        x: (pointerPos.x - rect.left - panX) / scale,
+                        y: (pointerPos.y - rect.top - panY) / scale
+                    };
+                }
+            } else {
+                 const rect = graphContainer.getBoundingClientRect();
+                 endPos = {
+                     x: (pointerPos.x - rect.left - panX) / scale,
+                     y: (pointerPos.y - rect.top - panY) / scale
+                 };
+            }
+
+            const typeDef = typeDefinitions[wireStart.dataType] || {color:'#fff'};
+            if(wireStart.type === 'output') {
+                drawCurve(startPos, endPos, typeDef.color, wireStart.dataType, null, true);
+            } else {
+                drawCurve(endPos, startPos, typeDef.color, wireStart.dataType, null, true);
+            }
+        }
+    }
+
+    function getPinPos(nodeId, index, type) {
+        const el = document.getElementById(`pin-${nodeId}-${type}-${index}`);
+        if(!el) return null;
+        const rect = el.getBoundingClientRect();
+        const cRect = graphContainer.getBoundingClientRect();
+        return {
+            x: (rect.left + rect.width/2 - cRect.left - panX)/scale,
+            y: (rect.top + rect.height/2 - cRect.top - panY)/scale
+        };
+    }
+
+    function drawCurve(p1, p2, color, type, id, isDrag = false) {
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        const dist = Math.abs(p2.x - p1.x);
+        const cp = Math.max(dist * 0.5, 50);
+        const d = `M ${p1.x} ${p1.y} C ${p1.x + cp} ${p1.y}, ${p2.x - cp} ${p2.y}, ${p2.x} ${p2.y}`;
+        path.setAttribute('d', d);
+        path.setAttribute('class', `connection ${type === 'exec' ? 'exec' : ''} ${isDrag ? 'dragging' : ''}`);
+        path.style.stroke = color;
+        if(id) {
+            path.id = `conn-${id}`;
+            path.addEventListener('contextmenu', (e) => {
+                e.preventDefault(); e.stopPropagation();
+                if(confirm("Delete connection?")) {
+                    connections = connections.filter(c => c.id !== id);
+                    renderConnections();
+                }
+            });
+        }
+        connectionsLayer.appendChild(path);
+    }
+
+    function startDragNode(e, id) {
+        if(e.target.classList.contains('pin') || e.target.tagName === 'INPUT' || e.target.closest('.node-widget')) return;
+        isDraggingNode = true;
+        draggedNodeId = id;
+        hideContextMenu();
+        
+        const cRect = graphContainer.getBoundingClientRect();
+        const node = nodes.find(n => n.id === id);
+        const clientX = e.clientX || e.touches[0].clientX;
+        const clientY = e.clientY || e.touches[0].clientY;
+        
+        const nodeScreenX = node.x * scale + panX + cRect.left;
+        const nodeScreenY = node.y * scale + panY + cRect.top;
+        
+        dragOffset.x = (clientX - nodeScreenX) / scale;
+        dragOffset.y = (clientY - nodeScreenY) / scale;
+        
+        const el = document.getElementById(`node-${id}`);
+        nodesLayer.appendChild(el); 
+    }
+
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('touchmove', handleMove, {passive: false});
+    window.addEventListener('mouseup', handleEnd);
+    window.addEventListener('touchend', handleEnd);
+
+    graphContainer.addEventListener('mousedown', (e) => {
+        if(e.target.closest('.node') || e.target.closest('.pin') || e.target.closest('.connection') || e.target.closest('.node-widget')) return;
+        isPanning = true;
+        panStart.x = e.clientX - panX;
+        panStart.y = e.clientY - panY;
+        hideContextMenu();
+    });
+
+    graphContainer.addEventListener('touchstart', (e) => {
+        if(e.touches.length === 1) {
+             const t = e.touches[0];
+             if(!e.target.closest('.node') && !e.target.closest('.pin')) {
+                 isPanning = true;
+                 panStart.x = t.clientX - panX;
+                 panStart.y = t.clientY - panY;
+                 hideContextMenu();
+                 longPressStartPos = {x: t.clientX, y: t.clientY};
+                 longPressTimer = setTimeout(() => {
+                     isPanning = false; 
+                     if(navigator.vibrate) navigator.vibrate(50);
+                     showContextMenu(t.clientX, t.clientY, 'canvas');
+                 }, LONG_PRESS_DURATION);
+             }
+        }
+    }, {passive: false});
+
+    graphContainer.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const zoomIntensity = 0.1;
+        const delta = e.deltaY > 0 ? -zoomIntensity : zoomIntensity;
+        const newScale = Math.min(Math.max(0.2, scale + delta), 3);
+        const rect = graphContainer.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+        panX = mouseX - (mouseX - panX) * (newScale / scale);
+        panY = mouseY - (mouseY - panY) * (newScale / scale);
+        scale = newScale;
+        updateTransform();
+    });
+
+    function handleMove(e) {
+        const clientX = e.clientX || (e.touches && e.touches[0].clientX);
+        const clientY = e.clientY || (e.touches && e.touches[0].clientY);
+        if(clientX === undefined) return;
+        
+        pointerPos = {x: clientX, y: clientY};
+
+        if(longPressTimer) {
+            const dx = Math.abs(clientX - longPressStartPos.x);
+            const dy = Math.abs(clientY - longPressStartPos.y);
+            if(dx > 10 || dy > 10) {
+                clearTimeout(longPressTimer);
+                longPressTimer = null;
+            }
+        }
+
+        if(isDraggingNode) {
+            e.preventDefault();
+            const rect = graphContainer.getBoundingClientRect();
+            const node = nodes.find(n => n.id === draggedNodeId);
+            node.x = (clientX - rect.left - panX) / scale - dragOffset.x;
+            node.y = (clientY - rect.top - panY) / scale - dragOffset.y;
+            node.element.style.left = node.x + 'px';
+            node.element.style.top = node.y + 'px';
+            renderConnections();
+        }
+        else if(isDraggingWire) {
+            e.preventDefault();
+            
+            snapTarget = null;
+            const snapThreshold = 30; 
+            let minDistance = Infinity;
+            
+            document.querySelectorAll('.pin').forEach(pin => {
+                const pNode = parseInt(pin.dataset.node);
+                const pIndex = parseInt(pin.dataset.index);
+                const pType = pin.dataset.type;
+                const pDataType = pin.dataset.dataType;
+                
+                if(pNode !== wireStart.nodeId && 
+                   pType !== wireStart.type &&
+                   pDataType === wireStart.dataType) {
+                       
+                    const rect = pin.getBoundingClientRect();
+                    const dist = Math.hypot(rect.left + rect.width/2 - clientX, rect.top + rect.height/2 - clientY);
+                    
+                    if(dist < snapThreshold && dist < minDistance) {
+                        minDistance = dist;
+                        snapTarget = { nodeId: pNode, index: pIndex, type: pType, dataType: pDataType };
+                    }
+                }
+            });
+
+            renderConnections();
+        }
+        else if(isPanning) {
+            e.preventDefault();
+            panX = clientX - panStart.x;
+            panY = clientY - panStart.y;
+            updateTransform();
+        }
+    }
+
+    function handleEnd(e) {
+        if(longPressTimer) {
+            clearTimeout(longPressTimer);
+            longPressTimer = null;
+        }
+
+        if(isDraggingWire) {
+            if(snapTarget) {
+                const fromNode = wireStart.type === 'output' ? wireStart.nodeId : snapTarget.nodeId;
+                const fromPin = wireStart.type === 'output' ? wireStart.pinIndex : snapTarget.index;
+                const toNode = wireStart.type === 'output' ? snapTarget.nodeId : wireStart.nodeId;
+                const toPin = wireStart.type === 'output' ? snapTarget.index : wireStart.pinIndex;
+                
+                // 1. EXEC OUTPUT RULE: Replace existing connection
+                if(wireStart.dataType === 'exec') {
+                    // If connecting FROM an output
+                    if(wireStart.type === 'output') {
+                        connections = connections.filter(c => !(c.fromNode === wireStart.nodeId && c.fromPin === wireStart.pinIndex));
+                    }
+                    // If connecting TO an output (dragged from input back to output)
+                    else if(wireStart.type === 'input') {
+                         connections = connections.filter(c => !(c.fromNode === snapTarget.nodeId && c.fromPin === snapTarget.index));
+                    }
+                }
+
+                // 2. INPUT PIN RULE: Replace existing connection (Only 1 wire allowed into Input Data Pin)
+                // This applies to both Data AND Exec inputs usually (Exec Inputs can take multiple? Standard BP is multiple in, single out. 
+                // But Data is Single In. Let's enforce Single In for Data, Multiple In for Exec)
+                if(wireStart.dataType !== 'exec') {
+                    connections = connections.filter(c => !(c.toNode === toNode && c.toPin === toPin));
+                }
+                
+                connectNodes(fromNode, fromPin, toNode, toPin, wireStart.dataType);
+            }
+            
+            isDraggingWire = false;
+            snapTarget = null;
+            renderConnections();
+        }
+        isDraggingNode = false;
+        isPanning = false;
+        draggedNodeId = null;
+    }
+
+    function updateTransform() {
+        transformLayer.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+        const gridSize = 100 * scale;
+        const subGrid = 20 * scale;
+        graphContainer.style.backgroundPosition = `${panX}px ${panY}px`;
+        graphContainer.style.backgroundSize = `${gridSize}px ${gridSize}px, ${gridSize}px ${gridSize}px, ${subGrid}px ${subGrid}px, ${subGrid}px ${subGrid}px`;
+    }
+
+    function showContextMenu(x, y, type, targetId) {
+        const rect = graphContainer.getBoundingClientRect();
+        if(x + 220 > window.innerWidth) x -= 220;
+        if(y + 300 > window.innerHeight) y -= 300;
+        
+        contextMenu.style.left = x + 'px';
+        contextMenu.style.top = y + 'px';
+        contextMenu.classList.add('visible');
+        
+        const list = document.getElementById('context-list');
+        list.innerHTML = '';
+        
+        const graphX = (x - rect.left - panX) / scale;
+        const graphY = (y - rect.top - panY) / scale;
+
+        if(type === 'node') {
+             document.getElementById('context-search').style.display = 'none';
+             addMenuItem("Delete Node", () => {
+                 deleteNode(targetId);
+                 hideContextMenu();
+             });
+        } else {
+             document.getElementById('context-search').style.display = 'block';
+             document.getElementById('context-search').value = '';
+             document.getElementById('context-search').focus();
+             renderNodeList(graphX, graphY, '');
+             document.getElementById('context-search').oninput = (e) => {
+                 renderNodeList(graphX, graphY, e.target.value.toLowerCase());
+             };
+        }
+    }
+
+    function addMenuItem(label, action, cat) {
+        const li = document.createElement('li');
+        li.className = 'ctx-item';
+        li.innerHTML = `<span>${label}</span> ${cat ? `<span class="ctx-cat">${cat}</span>` : ''}`;
+        li.onclick = action;
+        document.getElementById('context-list').appendChild(li);
+    }
+
+    function renderNodeList(x, y, filter) {
+        const list = document.getElementById('context-list');
+        list.innerHTML = '';
+        nodeTemplates.forEach(tmpl => {
+            if(tmpl.name.toLowerCase().includes(filter)) {
+                addMenuItem(tmpl.name, () => {
+                    createNode(tmpl, x, y);
+                    hideContextMenu();
+                }, tmpl.outputs && tmpl.outputs.some(o=>o.type==='exec') ? 'Flow' : 'Data');
+            }
+        });
+    }
+
+    function hideContextMenu() {
+        contextMenu.classList.remove('visible');
+    }
+
+    graphContainer.addEventListener('contextmenu', (e) => {
+        if(!e.target.closest('.node')) {
+            e.preventDefault();
+            showContextMenu(e.clientX, e.clientY, 'canvas');
+        }
+    });
+    
+    window.addEventListener('mousedown', (e) => {
+        if(contextMenu.classList.contains('visible') && !contextMenu.contains(e.target)) {
+            hideContextMenu();
+        }
+    });
+
+    document.getElementById('simulate-btn').addEventListener('click', () => {
+        const beginNodes = nodes.filter(n => n.config.name === "Event BeginPlay");
+        if(beginNodes.length === 0) {
+            showNotification("No 'Event BeginPlay' node found!");
+            return;
+        }
+        showNotification("Simulation Started...");
+        beginNodes.forEach(node => runFlow(node.id));
+    });
+
+    async function runFlow(nodeId) {
+        const nodeEl = document.getElementById(`node-${nodeId}`);
+        if(nodeEl) {
+             nodeEl.style.boxShadow = "0 0 0 4px #ff9900";
+             await new Promise(r => setTimeout(r, 600)); 
+             nodeEl.style.boxShadow = ""; 
+        }
+        const outConns = connections.filter(c => c.fromNode === nodeId && c.type === 'exec');
+        for(let conn of outConns) {
+            const path = document.getElementById(`conn-${conn.id}`);
+            if(path) {
+                path.classList.add('pulse');
+                await new Promise(r => setTimeout(r, 500)); 
+                path.classList.remove('pulse');
+            }
+            await runFlow(conn.toNode);
+        }
+    }
+
+    function showNotification(msg) {
+        const n = document.getElementById('notification');
+        n.innerText = msg;
+        n.style.opacity = 1;
+        setTimeout(() => n.style.opacity = 0, 2000);
+    }
+    
+    document.getElementById('update-lib-btn').addEventListener('click', loadLibrary);
+
+    renderLoop();
+    function renderLoop() {
+        requestAnimationFrame(renderLoop);
+    }
+
+    init();
+
+</script>
+</body>
+</html>
