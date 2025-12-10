@@ -333,7 +333,8 @@
                 { "name": "float",   "color": "var(--c-float)",  "widget": "number" },
                 { "name": "string",  "color": "var(--c-string)", "widget": "text" },
                 { "name": "vector",  "color": "var(--c-vector)", "widget": "vector3" },
-                { "name": "color",   "color": "var(--c-color)",  "widget": "color" }
+                { "name": "color",   "color": "var(--c-color)",  "widget": "color" },
+                { "name": "int",     "color": "var(--c-int)",    "widget": "number" }
                 ]
             </textarea>
             <div class="hint">Define pin colors and input widgets here.</div>
@@ -383,6 +384,13 @@
                     "centerLabel": "+",
                     "inputs": [{"name": "", "type": "vector"}, {"name": "", "type": "vector"}],
                     "outputs": [{"name": "", "type": "vector"}]
+                },
+                {
+                    "name": "Int + Int",
+                    "hideHeader": true,
+                    "centerLabel": "+",
+                    "inputs": [{"name": "", "type": "int"}, {"name": "", "type": "int"}],
+                    "outputs": [{"name": "", "type": "int"}]
                 }
                 ]
             </textarea>
