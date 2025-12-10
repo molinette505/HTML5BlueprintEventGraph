@@ -327,72 +327,11 @@
         <div id="settings-view" class="view">
             <h3>Data Types Definition</h3>
             <textarea id="types-input" class="code-editor">
-                [
-                { "name": "exec",    "color": "var(--c-exec)",   "widget": "none" },
-                { "name": "boolean", "color": "var(--c-bool)",   "widget": "checkbox" },
-                { "name": "float",   "color": "var(--c-float)",  "widget": "number" },
-                { "name": "string",  "color": "var(--c-string)", "widget": "text" },
-                { "name": "vector",  "color": "var(--c-vector)", "widget": "vector3" },
-                { "name": "color",   "color": "var(--c-color)",  "widget": "color" },
-                { "name": "int",     "color": "var(--c-int)",    "widget": "number" }
-                ]
             </textarea>
             <div class="hint">Define pin colors and input widgets here.</div>
 
             <h3>Node Library Definition</h3>
             <textarea id="nodes-input" class="code-editor">
-                [
-                {
-                    "name": "Event BeginPlay",
-                    "color": "#8b0000",
-                    "width": 160,
-                    "outputs": [{"name": "Out", "type": "exec"}]
-                },
-                {
-                    "name": "Print String",
-                    "color": "#4466aa",
-                    "width": 180,
-                    "inputs": [
-                    {"name": "In", "type": "exec"},
-                    {"name": "String", "type": "string", "default": "Hello World"}
-                    ],
-                    "outputs": [{"name": "Out", "type": "exec"}]
-                },
-                {
-                    "name": "Make Vector",
-                    "color": "#333",
-                    "inputs": [
-                        {"name": "X", "type": "float"},
-                        {"name": "Y", "type": "float"},
-                        {"name": "Z", "type": "float"}
-                    ],
-                    "outputs": [{"name": "Vec", "type": "vector"}]
-                },
-                {
-                    "name": "Delay",
-                    "inputs": [
-                    {"name": "In", "type": "exec"},
-                    {"name": "Duration", "type": "float", "default": 0.2}
-                    ],
-                    "outputs": [
-                    {"name": "Completed", "type": "exec"}
-                    ]
-                },
-                {
-                    "name": "Vector + Vector",
-                    "hideHeader": true,
-                    "centerLabel": "+",
-                    "inputs": [{"name": "", "type": "vector"}, {"name": "", "type": "vector"}],
-                    "outputs": [{"name": "", "type": "vector"}]
-                },
-                {
-                    "name": "Int + Int",
-                    "hideHeader": true,
-                    "centerLabel": "+",
-                    "inputs": [{"name": "", "type": "int"}, {"name": "", "type": "int"}],
-                    "outputs": [{"name": "", "type": "int"}]
-                }
-                ]
             </textarea>
             <br>
             <button class="btn-action" id="update-lib-btn" style="width:100%; justify-content:center;">Apply Changes</button>
@@ -401,6 +340,9 @@
 </div>
 
 <div id="notification"></div>
+
+<script src="DataTypes.js"></script>
+<script src="Nodes.js"></script>
 
 <script>
     let nodes = [];
@@ -437,12 +379,42 @@
     const contextMenu = document.getElementById('context-menu');
     
     function init() {
+        // 1. POPULATE TEXT AREAS FROM EXTERNAL FILES
+        if (window.globalDataTypes) {
+            // "null, 4" formats it with 4 spaces indentation so it looks good in the tab
+            document.getElementById('types-input').value = JSON.stringify(window.globalDataTypes, null, 4);
+        } else {
+            console.error("DataType.js not loaded");
+        }
+
+        if (window.globalNodes) {
+            document.getElementById('nodes-input').value = JSON.stringify(window.globalNodes, null, 4);
+        } else {
+            console.error("Nodes.js not loaded");
+        }
+
+        // 2. READ FROM TEXT AREAS INTO APP MEMORY
+        // This re-uses your existing logic, ensuring the Text Area is the "Master"
         loadLibrary();
-        createNode(nodeTemplates[0], 100, 150);
-        createNode(nodeTemplates[1], 400, 150);
-        createNode(nodeTemplates[2], 100, 350);
-        createNode(nodeTemplates[4], 350, 350); 
-        connectNodes(1, 0, 2, 0, 'exec');
+
+        // 3. CREATE DEMO SCENE
+        // (Only try to create nodes if templates exist)
+        if(nodeTemplates.length > 0) {
+            // Note: I added checks to find specific nodes by name in case indices change
+            const beginPlay = nodeTemplates.find(n => n.name === "Event BeginPlay") || nodeTemplates[0];
+            const printString = nodeTemplates.find(n => n.name === "Print String") || nodeTemplates[1];
+            const makeVector = nodeTemplates.find(n => n.name === "Make Vector");
+            const vecAdd = nodeTemplates.find(n => n.name === "Vector + Vector");
+
+            if(beginPlay) createNode(beginPlay, 100, 150);
+            if(printString) createNode(printString, 400, 150);
+            if(makeVector) createNode(makeVector, 100, 350);
+            if(vecAdd) createNode(vecAdd, 350, 350); 
+            
+            // Connect the first two nodes created (IDs are 1 and 2)
+            connectNodes(1, 0, 2, 0, 'exec');
+        }
+
         updateTransform();
         renderLoop();
     }
