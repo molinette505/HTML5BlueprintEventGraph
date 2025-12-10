@@ -6,6 +6,7 @@
     <title>Visual Blueprint Editor</title>
     <style>
         :root {
+            /* Theme Colors */
             --bg-color: #1a1a1a;
             --grid-line: #252525;
             --grid-major: #303030;
@@ -17,6 +18,15 @@
             --danger: #d9534f;
             --wire-default: #fff;
             --wire-highlight: #ff9900;
+
+            /* Data Type Colors (Unreal Engine Style) */
+            --c-exec:   #FFFFFF;
+            --c-bool:   #8c0000;
+            --c-float:  #96ce02;
+            --c-string: #d800ff;
+            --c-vector: #ffcc00;
+            --c-color:  #00aaff;
+            --c-int:    #1ee6aa;
         }
 
         * { box-sizing: border-box; outline: none; -webkit-tap-highlight-color: transparent; }
@@ -317,63 +327,65 @@
         <div id="settings-view" class="view">
             <h3>Data Types Definition</h3>
             <textarea id="types-input" class="code-editor">
-[
-  { "name": "exec", "color": "#FFFFFF", "widget": "none" },
-  { "name": "boolean", "color": "#8c0000", "widget": "checkbox" },
-  { "name": "float", "color": "#96ce02", "widget": "number" },
-  { "name": "string", "color": "#d800ff", "widget": "text" },
-  { "name": "vector", "color": "#ffcc00", "widget": "vector3" },
-  { "name": "color", "color": "#00aaff", "widget": "color" }
-]</textarea>
+                [
+                { "name": "exec",    "color": "var(--c-exec)",   "widget": "none" },
+                { "name": "boolean", "color": "var(--c-bool)",   "widget": "checkbox" },
+                { "name": "float",   "color": "var(--c-float)",  "widget": "number" },
+                { "name": "string",  "color": "var(--c-string)", "widget": "text" },
+                { "name": "vector",  "color": "var(--c-vector)", "widget": "vector3" },
+                { "name": "color",   "color": "var(--c-color)",  "widget": "color" }
+                ]
+            </textarea>
             <div class="hint">Define pin colors and input widgets here.</div>
 
             <h3>Node Library Definition</h3>
             <textarea id="nodes-input" class="code-editor">
-[
-  {
-    "name": "Event BeginPlay",
-    "color": "#8b0000",
-    "width": 160,
-    "outputs": [{"name": "Out", "type": "exec"}]
-  },
-  {
-    "name": "Print String",
-    "color": "#4466aa",
-    "width": 180,
-    "inputs": [
-      {"name": "In", "type": "exec"},
-      {"name": "String", "type": "string", "default": "Hello World"}
-    ],
-    "outputs": [{"name": "Out", "type": "exec"}]
-  },
-  {
-    "name": "Make Vector",
-    "color": "#333",
-    "inputs": [
-        {"name": "X", "type": "float"},
-        {"name": "Y", "type": "float"},
-        {"name": "Z", "type": "float"}
-    ],
-    "outputs": [{"name": "Vec", "type": "vector"}]
-  },
-  {
-    "name": "Delay",
-    "inputs": [
-      {"name": "In", "type": "exec"},
-      {"name": "Duration", "type": "float", "default": 0.2}
-    ],
-    "outputs": [
-      {"name": "Completed", "type": "exec"}
-    ]
-  },
-  {
-      "name": "Vector + Vector",
-      "hideHeader": true,
-      "centerLabel": "+",
-      "inputs": [{"name": "", "type": "vector"}, {"name": "", "type": "vector"}],
-      "outputs": [{"name": "", "type": "vector"}]
-  }
-]</textarea>
+                [
+                {
+                    "name": "Event BeginPlay",
+                    "color": "#8b0000",
+                    "width": 160,
+                    "outputs": [{"name": "Out", "type": "exec"}]
+                },
+                {
+                    "name": "Print String",
+                    "color": "#4466aa",
+                    "width": 180,
+                    "inputs": [
+                    {"name": "In", "type": "exec"},
+                    {"name": "String", "type": "string", "default": "Hello World"}
+                    ],
+                    "outputs": [{"name": "Out", "type": "exec"}]
+                },
+                {
+                    "name": "Make Vector",
+                    "color": "#333",
+                    "inputs": [
+                        {"name": "X", "type": "float"},
+                        {"name": "Y", "type": "float"},
+                        {"name": "Z", "type": "float"}
+                    ],
+                    "outputs": [{"name": "Vec", "type": "vector"}]
+                },
+                {
+                    "name": "Delay",
+                    "inputs": [
+                    {"name": "In", "type": "exec"},
+                    {"name": "Duration", "type": "float", "default": 0.2}
+                    ],
+                    "outputs": [
+                    {"name": "Completed", "type": "exec"}
+                    ]
+                },
+                {
+                    "name": "Vector + Vector",
+                    "hideHeader": true,
+                    "centerLabel": "+",
+                    "inputs": [{"name": "", "type": "vector"}, {"name": "", "type": "vector"}],
+                    "outputs": [{"name": "", "type": "vector"}]
+                }
+                ]
+            </textarea>
             <br>
             <button class="btn-action" id="update-lib-btn" style="width:100%; justify-content:center;">Apply Changes</button>
         </div>
