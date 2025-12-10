@@ -1,6 +1,6 @@
 class Graph {
     constructor() {
-        this.nodes = []; // Now contains Node instances
+        this.nodes = [];
         this.connections = [];
         this.nextId = 1;
         this.nextConnId = 1;
@@ -9,7 +9,6 @@ class Graph {
     }
 
     addNode(template, x, y) {
-        // CHANGE: Use the new Node Class
         const node = new Node(this.nextId++, template, x, y);
         this.nodes.push(node);
         return node;
@@ -25,17 +24,16 @@ class Graph {
     }
 
     addConnection(fromNode, fromPin, toNode, toPin, type) {
+        // Enforce Rules (Single Wire)
         if (type === 'exec') {
             this.connections = this.connections.filter(c => !(c.fromNode === fromNode && c.fromPin === fromPin));
         } else {
             this.connections = this.connections.filter(c => !(c.toNode === toNode && c.toPin === toPin));
         }
         
-        this.connections.push({ 
-            id: this.nextConnId++, 
-            fromNode, fromPin, 
-            toNode, toPin, 
-            type 
-        });
+        // Instantiate Connection Class
+        const conn = new Connection(this.nextConnId++, fromNode, fromPin, toNode, toPin, type);
+        this.connections.push(conn);
+        return conn;
     }
 }
