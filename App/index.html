@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visual Blueprint Editor</title>
+    
+    <link rel="stylesheet" href="css/theme.css">
+    <link rel="stylesheet" href="css/graph.css">
+    <link rel="stylesheet" href="css/ui.css">
+</head>
+<body>
+
+<div id="app">
+    <div id="toolbar">
+        <div class="tab-group">
+            <button class="tab active" onclick="window.App.switchTab('graph')">Graph Editor</button>
+            <button class="tab" onclick="window.App.switchTab('library')">Library</button>
+        </div>
+        <button class="btn-action" id="simulate-btn">
+            <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg> Simulate
+        </button>
+    </div>
+
+    <div id="main-content">
+        <div id="graph-view" class="view active">
+            <div id="graph-container">
+                <div id="transform-layer">
+                    <svg id="connections-layer"></svg>
+                    <div id="nodes-layer"></div>
+                </div>
+            </div>
+            <div id="context-menu">
+                <input type="text" id="context-search" placeholder="Search nodes..." autocomplete="off">
+                <ul id="context-list"></ul>
+            </div>
+        </div>
+
+        <div id="settings-view" class="view">
+            <h3>Data Types Definition</h3>
+            <textarea id="types-input" class="code-editor"></textarea>
+            <h3>Node Library Definition</h3>
+            <textarea id="nodes-input" class="code-editor"></textarea>
+            <br>
+            <button class="btn-action" id="update-lib-btn" style="width:100%; justify-content:center;">Apply Changes</button>
+        </div>
+    </div>
+</div>
+
+<div id="notification"></div>
+
+<script src="js/DataTypes.js"></script>
+<script src="js/Nodes.js"></script>
+
+<script src="js/Graph.js"></script>
+<script src="js/Renderer.js"></script>
+<script src="js/Interaction.js"></script>
+<script src="js/Simulation.js"></script>
+<script src="js/Editor.js"></script>
+
+</body>
+</html>

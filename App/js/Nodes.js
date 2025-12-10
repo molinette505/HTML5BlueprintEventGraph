@@ -1,13 +1,13 @@
 window.globalNodes = [
     {
         "name": "Event BeginPlay",
-        "color": "#8b0000",
+        "color": "var(--n-event)",
         "width": 160,
         "outputs": [{"name": "Out", "type": "exec"}]
     },
     {
         "name": "Print String",
-        "color": "#4466aa",
+        "color": "var(--n-func)",
         "width": 180,
         "inputs": [
             {"name": "In", "type": "exec"},
@@ -17,7 +17,7 @@ window.globalNodes = [
     },
     {
         "name": "Make Vector",
-        "color": "#333",
+        "color": "var(--n-pure)",
         "inputs": [
             {"name": "X", "type": "float"},
             {"name": "Y", "type": "float"},
