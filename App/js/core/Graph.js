@@ -1,6 +1,6 @@
 class Graph {
     constructor() {
-        this.nodes = [];
+        this.nodes = []; // Now contains Node instances
         this.connections = [];
         this.nextId = 1;
         this.nextConnId = 1;
@@ -9,11 +9,8 @@ class Graph {
     }
 
     addNode(template, x, y) {
-        const node = { 
-            id: this.nextId++, 
-            x, y, 
-            config: JSON.parse(JSON.stringify(template)) 
-        };
+        // CHANGE: Use the new Node Class
+        const node = new Node(this.nextId++, template, x, y);
         this.nodes.push(node);
         return node;
     }
@@ -28,12 +25,9 @@ class Graph {
     }
 
     addConnection(fromNode, fromPin, toNode, toPin, type) {
-        // RULE 1: Exec Outputs are Single-Wire (replace existing)
         if (type === 'exec') {
             this.connections = this.connections.filter(c => !(c.fromNode === fromNode && c.fromPin === fromPin));
-        } 
-        // RULE 2: Data Inputs are Single-Wire (replace existing)
-        if (type !== 'exec') {
+        } else {
             this.connections = this.connections.filter(c => !(c.toNode === toNode && c.toPin === toPin));
         }
         
