@@ -1,0 +1,35 @@
+:root {
+    /* --- UI THEME --- */
+    --bg-color: #1a1a1a;
+    --grid-line: #252525;
+    --grid-major: #303030;
+    --node-bg: rgba(30, 30, 30, 0.95);
+    --header-default: #444;
+    
+    --text-main: #e0e0e0;
+    --text-dim: #888;
+    
+    --accent-color: #007acc;
+    --danger-color: #d9534f;
+    
+    /* --- WIRE STYLES --- */
+    --wire-default: #fff;
+    --wire-highlight: #ff9900;
+
+    /* --- DATA TYPES (Pins & Wires) --- */
+    --c-exec:      #FFFFFF;
+    --c-boolean:   #8c0000;
+    --c-float:     #96ce02;
+    --c-string:    #d800ff;
+    --c-vector:    #ffcc00;
+    --c-color:     #00aaff;
+    --c-int:       #1ee6aa;
+    --c-class:     #5500FF;
+    --c-object:    #00A8FF;
+    --c-transform: #FF6600;
+
+    /* --- NODE HEADERS --- */
+    --n-event: #8b0000;
+    --n-func:  #4466aa;
+    --n-pure:  #333333;
+}
