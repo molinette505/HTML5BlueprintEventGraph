@@ -3,30 +3,37 @@ class Interaction {
         this.graph = graph;
         this.renderer = renderer;
         this.dom = dom;
+        
         this.dragNode = null;
         this.dragWire = null;
         this.isPanning = false;
+        
         this.startPos = {x:0, y:0};
         this.offset = {x:0, y:0};
         this.contextMenuPos = {x:0, y:0};
+
         this.bindEvents();
     }
 
     bindEvents() {
         const c = this.dom.container;
 
+        // 1. MOUSE DOWN
         c.addEventListener('mousedown', e => {
             this.hideContextMenu();
+            
             if(e.target.classList.contains('pin')) {
                 this.handlePinDown(e);
                 return;
             }
+            
             if(e.target === c || e.target === this.dom.transformLayer || e.target.id === 'connections-layer') {
                 this.isPanning = true;
                 this.startPos = { x: e.clientX - this.graph.pan.x, y: e.clientY - this.graph.pan.y };
             }
         });
 
+        // 2. RIGHT CLICK
         c.addEventListener('contextmenu', e => {
             e.preventDefault();
             const nodeEl = e.target.closest('.node');
@@ -38,12 +45,15 @@ class Interaction {
             }
         });
 
+        // 3. MOUSE MOVE
         window.addEventListener('mousemove', e => {
+            // Panning
             if(this.isPanning) {
                 this.graph.pan.x = e.clientX - this.startPos.x;
                 this.graph.pan.y = e.clientY - this.startPos.y;
                 this.renderer.updateTransform();
             }
+            // Drag Node
             if(this.dragNode) {
                 const rect = c.getBoundingClientRect();
                 this.dragNode.x = (e.clientX - rect.left - this.graph.pan.x)/this.graph.scale - this.offset.x;
@@ -52,19 +62,24 @@ class Interaction {
                 if(el) { el.style.left = this.dragNode.x+'px'; el.style.top = this.dragNode.y+'px'; }
                 this.renderer.render(); 
             }
+            // Drag Wire
             if(this.dragWire) {
                 const rect = c.getBoundingClientRect();
                 const mx = (e.clientX - rect.left - this.graph.pan.x)/this.graph.scale;
                 const my = (e.clientY - rect.top - this.graph.pan.y)/this.graph.scale;
+                
                 this.renderer.dom.connectionsLayer.innerHTML = '';
                 this.graph.connections.forEach(cx => this.renderer.drawConnection(cx));
+                
                 const p1 = {x: this.dragWire.startX, y: this.dragWire.startY};
                 const p2 = {x: mx, y: my};
+                
                 if(this.dragWire.sourceType === 'output') this.renderer.drawCurve(p1, p2, this.dragWire.dataType, true);
                 else this.renderer.drawCurve(p2, p1, this.dragWire.dataType, true);
             }
         });
 
+        // 4. MOUSE UP
         window.addEventListener('mouseup', e => {
             this.isPanning = false;
             this.dragNode = null;
@@ -76,13 +91,29 @@ class Interaction {
             }
         });
 
+        // 5. ZOOM (UPDATED MATH)
         c.addEventListener('wheel', e => {
             e.preventDefault();
-            const d = e.deltaY > 0 ? -0.1 : 0.1;
-            this.graph.scale = Math.max(0.2, this.graph.scale + d);
+            
+            // Get Mouse Position relative to container
+            const rect = c.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+
+            // Calculate Scale
+            const delta = e.deltaY > 0 ? -0.1 : 0.1;
+            const oldScale = this.graph.scale;
+            const newScale = Math.min(Math.max(0.2, oldScale + delta), 3); // Min 0.2, Max 3.0
+
+            // MATH: Adjust Pan so the point under mouse stays stationary
+            // NewPan = Mouse - (Mouse - OldPan) * (NewScale / OldScale)
+            this.graph.pan.x = mouseX - (mouseX - this.graph.pan.x) * (newScale / oldScale);
+            this.graph.pan.y = mouseY - (mouseY - this.graph.pan.y) * (newScale / oldScale);
+            this.graph.scale = newScale;
+
             this.renderer.updateTransform();
             this.hideContextMenu();
-        });
+        }, { passive: false });
     }
 
     startNodeDrag(e, nodeId) {
