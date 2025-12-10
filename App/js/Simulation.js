@@ -15,12 +15,10 @@ class Simulation {
             el.style.boxShadow = "";
         }
 
-        const outIdx = (node.config.outputs||[]).findIndex(p => p.type === 'exec');
+        const outIdx = (node.outputs||[]).findIndex(p => p.type === 'exec');
         if(outIdx !== -1) {
             const conn = this.graph.connections.find(c => c.fromNode === node.id && c.fromPin === outIdx);
             if(conn) {
-                // Find path element to pulse
-                // This would be better if connections had IDs in DOM, but for now simple pulse
                 const next = this.graph.nodes.find(n => n.id === conn.toNode);
                 if(next) await this.exec(next);
             }

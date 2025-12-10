@@ -1,16 +1,40 @@
 class Pin {
     constructor(node, index, direction, template) {
-        this.node = node;          // Reference to parent Node object
-        this.nodeId = node.id;     // ID for easy DOM dataset access
-        this.index = index;        // 0, 1, 2...
-        this.direction = direction; // 'input' or 'output'
+        this.node = node;
+        this.nodeId = node.id;
+        this.index = index;
+        this.direction = direction;
         
         this.name = template.name;
-        this.type = template.type;      // 'exec', 'string', 'int'
-        this.dataType = template.type;  // Alias for code compatibility
-        this.value = template.default;  // Current value (if input)
+        this.type = template.type;
+        this.dataType = template.type;
+        this.advanced = template.advanced || false;
         
-        // Unique ID for DOM lookup (e.g. "1-input-0")
-        this.id = `${node.id}-${direction}-${index}`;
+        this.widget = null;
+        if (direction === 'input') {
+            const typeDef = window.typeDefinitions ? window.typeDefinitions[this.type] : null;
+            const widgetType = template.widget || (typeDef ? typeDef.widget : 'none');
+
+            if (widgetType && widgetType !== 'none') {
+                const defaultValue = this.getDefaultValue(this.type, template.default);
+                this.widget = new Widget(widgetType, defaultValue, template.options);
+                this.value = defaultValue;
+            }
+        }
+    }
+
+    getDefaultValue(type, manualDefault) {
+        if (manualDefault !== undefined) return manualDefault;
+        switch (type) {
+            case 'string': return "Hello World";
+            case 'float': return 0.0;
+            case 'int': return 0;
+            case 'boolean': return true;
+            case 'color': return "#FFFFFF";
+            case 'vector': return {x:0, y:0, z:0};
+            case 'class': return "None";
+            case 'object': return "None";
+            default: return null;
+        }
     }
 }

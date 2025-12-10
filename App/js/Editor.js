@@ -43,7 +43,7 @@ class Editor {
         if(!window.nodeTemplates) return;
         const t1 = window.nodeTemplates.find(n => n.name === "Event BeginPlay");
         const t2 = window.nodeTemplates.find(n => n.name === "Print String");
-        const t3 = window.nodeTemplates.find(n => n.name === "Make Vector");
+        const t3 = window.nodeTemplates.find(n => n.name === "Spawn Actor From Class");
         
         if(t1 && t2) {
             const n1 = this.graph.addNode(t1, 100, 150);

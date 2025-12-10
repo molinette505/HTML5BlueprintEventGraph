@@ -8,10 +8,12 @@ window.globalNodes = [
     {
         "name": "Print String",
         "color": "var(--n-func)",
-        "width": 180,
+        "width": 200,
         "inputs": [
             {"name": "In", "type": "exec"},
-            {"name": "String", "type": "string", "default": "Hello World"}
+            {"name": "String", "type": "string"},
+            {"name": "Log To Screen", "type": "boolean"},
+            {"name": "Text Color", "type": "color"}
         ],
         "outputs": [{"name": "Out", "type": "exec"}]
     },
@@ -26,27 +28,35 @@ window.globalNodes = [
         "outputs": [{"name": "Vec", "type": "vector"}]
     },
     {
-        "name": "Delay",
+        "name": "Spawn Actor From Class",
+        "color": "var(--n-func)",
+        "width": 260,
         "inputs": [
-            {"name": "In", "type": "exec"},
-            {"name": "Duration", "type": "float", "default": 0.2}
+            {"name": "Exec", "type": "exec"},
+            {
+                "name": "Class", "type": "class", 
+                "options": ["BP_Button", "BP_Door", "BP_Button1", "BP_Door1", "BP_Door2"], 
+                "default": "BP_Button"
+            },
+            {"name": "Spawn Transform", "type": "transform"},
+            {
+                "name": "Collision Handling", "type": "string", "widget": "dropdown",
+                "options": ["Default", "Always Spawn", "Try To Adjust"],
+                "default": "Default"
+            },
+            // ADVANCED PINS
+            {
+                "name": "Owner", "type": "object", "advanced": true,
+                "options": ["Self", "Player", "Level"], "default": "Self"
+            },
+            {
+                "name": "Instigator", "type": "object", "advanced": true,
+                "options": ["Self", "Player", "Level"], "default": "Self"
+            }
         ],
         "outputs": [
-            {"name": "Completed", "type": "exec"}
+            {"name": "Out", "type": "exec"},
+            {"name": "Return Value", "type": "object"}
         ]
-    },
-    {
-        "name": "Vector + Vector",
-        "hideHeader": true,
-        "centerLabel": "+",
-        "inputs": [{"name": "", "type": "vector"}, {"name": "", "type": "vector"}],
-        "outputs": [{"name": "", "type": "vector"}]
-    },
-    {
-        "name": "Int + Int",
-        "hideHeader": true,
-        "centerLabel": "+",
-        "inputs": [{"name": "", "type": "int"}, {"name": "", "type": "int"}],
-        "outputs": [{"name": "", "type": "int"}]
     }
 ];

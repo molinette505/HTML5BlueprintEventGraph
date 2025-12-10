@@ -1,46 +1,31 @@
 class NodeRenderer {
     constructor() {
-        // Cache widget generators to keep code clean
-        this.widgetGenerators = {
-            'text': (pin) => this.createInput(pin, 'text', '60px'),
-            'number': (pin) => this.createInput(pin, 'number', '40px'),
-            'checkbox': (pin) => this.createInput(pin, 'checkbox', ''),
-            'vector3': (pin) => this.createVectorWidget(pin),
-            'color': (pin) => this.createInput(pin, 'color', '40px')
-        };
+        this.widgetRenderer = new WidgetRenderer();
     }
 
-    // Create the main DOM element
     createElement(node) {
         const el = document.createElement('div');
-        el.className = `node ${node.hideHeader ? 'compact' : ''}`;
+        el.className = `node ${node.hideHeader ? 'compact' : ''} ${node.showAdvanced ? 'expanded' : ''}`;
         el.id = `node-${node.id}`;
         el.style.left = `${node.x}px`;
         el.style.top = `${node.y}px`;
         if (node.width) el.style.width = `${node.width}px`;
-        
-        // CSS Variable for color
-        el.style.setProperty('--header-bg', node.color);
+        if (node.color) el.style.setProperty('--header-bg', node.color);
 
-        // 1. Header
         if (!node.hideHeader) {
             const header = document.createElement('div');
             header.className = 'node-header';
             header.innerText = node.name;
-            // Use specific color if defined, else generic header style
             header.style.background = node.color;
             el.appendChild(header);
         }
 
-        // 2. Body
         const body = document.createElement('div');
         body.className = 'node-body';
+        const left = this.col('col-left');
+        const center = this.col('col-center');
+        const right = this.col('col-right');
 
-        const left = this.createCol();
-        const center = this.createCol('col-center');
-        const right = this.createCol('col-right');
-
-        // Center Label (Math nodes)
         if (node.centerLabel) {
             const lbl = document.createElement('div');
             lbl.className = 'center-label';
@@ -48,96 +33,70 @@ class NodeRenderer {
             center.appendChild(lbl);
         }
 
-        // 3. Pins
-        node.inputs.forEach(pin => left.appendChild(this.createPinElement(pin)));
-        node.outputs.forEach(pin => right.appendChild(this.createPinElement(pin)));
+        node.inputs.forEach(p => {
+            if (!p.advanced || node.showAdvanced) left.appendChild(this.renderPin(p));
+        });
+        node.outputs.forEach(p => {
+            if (!p.advanced || node.showAdvanced) right.appendChild(this.renderPin(p));
+        });
 
         body.append(left, center, right);
         el.appendChild(body);
 
+        if (node.hasAdvancedPins()) {
+            const arrow = document.createElement('div');
+            arrow.className = 'advanced-arrow';
+            arrow.title = "Toggle Advanced Pins";
+            arrow.addEventListener('mousedown', (e) => {
+                e.stopPropagation();
+                node.showAdvanced = !node.showAdvanced;
+                const evt = new CustomEvent('node-refresh', { detail: { nodeId: node.id } });
+                window.dispatchEvent(evt);
+            });
+            el.appendChild(arrow);
+        }
+
         return el;
     }
 
-    createCol(extraClass = '') {
+    col(cls) {
         const d = document.createElement('div');
-        d.className = `col ${extraClass}`;
+        d.className = `col ${cls}`;
         return d;
     }
 
-    createPinElement(pin) {
+    renderPin(pin) {
         const row = document.createElement('div');
         row.className = 'pin-row';
         
-        // Find Type Definition (Color, Widget Type)
-        const typeDef = window.typeDefinitions[pin.type] || { color: '#999', widget: 'none' };
+        const shape = document.createElement('div');
+        shape.className = `pin ${pin.type}`;
+        shape.dataset.node = pin.nodeId;
+        shape.dataset.index = pin.index;
+        shape.dataset.type = pin.direction;
+        shape.dataset.dataType = pin.dataType;
+        shape.dataset.id = pin.id;
 
-        // 1. The Pin Circle
-        const pinShape = document.createElement('div');
-        pinShape.className = `pin ${pin.type}`;
-        pinShape.dataset.id = pin.id; // "1-input-0"
-        pinShape.dataset.node = pin.nodeId;
-        pinShape.dataset.index = pin.index;
-        pinShape.dataset.type = pin.direction;
-        pinShape.dataset.dataType = pin.type;
-        pinShape.style.setProperty('--pin-color', typeDef.color);
+        const typeDef = window.typeDefinitions[pin.type] || { color: '#999' };
+        shape.style.setProperty('--pin-color', typeDef.color);
 
-        // 2. Label
         const label = document.createElement('span');
         label.className = 'pin-label';
         label.innerText = pin.name;
 
-        // 3. Widget (Only for inputs)
-        let widget = null;
-        if (pin.direction === 'input' && typeDef.widget && typeDef.widget !== 'none') {
-            if (this.widgetGenerators[typeDef.widget]) {
-                widget = this.widgetGenerators[typeDef.widget](pin);
-            }
+        let widgetEl = null;
+        if (pin.widget) {
+            widgetEl = this.widgetRenderer.render(pin.widget, (val) => { pin.value = val; });
         }
 
-        // Assembly
         if (pin.direction === 'input') {
-            row.appendChild(pinShape);
-            if (pin.name) row.appendChild(label);
-            if (widget) row.appendChild(widget);
+            row.append(shape);
+            if (pin.name) row.append(label);
+            if (widgetEl) row.append(widgetEl);
         } else {
-            if (pin.name) row.appendChild(label);
-            row.appendChild(pinShape);
+            if (pin.name) row.append(label);
+            row.append(shape);
         }
-
         return row;
-    }
-
-    // --- Widgets ---
-    createInput(pin, type, width) {
-        const input = document.createElement('input');
-        input.type = type;
-        input.className = 'node-widget';
-        if (width) input.style.width = width;
-        input.value = pin.value || '';
-        
-        // Update Model when user types
-        input.oninput = (e) => { pin.value = e.target.value; };
-        
-        // Stop drag propagation
-        input.addEventListener('mousedown', e => e.stopPropagation());
-        return input;
-    }
-
-    createVectorWidget(pin) {
-        const wrap = document.createElement('div');
-        wrap.className = 'widget-vec3';
-        const axes = ['x', 'y', 'z'];
-        // Ensure value is object
-        if (!pin.value || typeof pin.value !== 'object') pin.value = {x:0, y:0, z:0};
-
-        axes.forEach(axis => {
-            const i = document.createElement('input');
-            i.placeholder = axis.toUpperCase();
-            i.value = pin.value[axis] || 0;
-            i.oninput = (e) => { pin.value[axis] = parseFloat(e.target.value); };
-            i.addEventListener('mousedown', e => e.stopPropagation());
-            wrap.appendChild(i);
-        });
-        return wrap;
     }
 }

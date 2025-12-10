@@ -61,16 +61,30 @@
     position: relative; pointer-events: all; margin-top: 1px; flex-shrink: 0;
 }
 .pin:hover { transform: scale(1.3); background-color: rgba(255,255,255,0.3); }
-.pin.connected { background-color: var(--pin-color); } /* Filled when connected */
+.pin.connected { background-color: var(--pin-color); } 
 .pin.snapped { transform: scale(1.6); box-shadow: 0 0 10px white; background-color: var(--pin-color) !important; border-color: white !important; }
 
-/* EXEC PINS */
+/* Exec Pins */
 .pin.exec {
     border-radius: 0; width: 14px; height: 15px; border: none; background: none;
     clip-path: polygon(0 0, 80% 0, 100% 50%, 80% 100%, 0 100%);
     background-color: white; opacity: 0.9; margin-top: 0;
 }
 .pin.exec:hover { opacity: 1; transform: scale(1.2); }
+
+/* ADVANCED ARROW */
+.advanced-arrow {
+    width: 100%; height: 16px; background: rgba(255,255,255,0.05);
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    border-radius: 0 0 8px 8px; transition: background 0.2s;
+}
+.advanced-arrow:hover { background: rgba(255,255,255,0.1); }
+.advanced-arrow::after {
+    content: ''; display: block; width: 0; height: 0;
+    border-left: 5px solid transparent; border-right: 5px solid transparent;
+    border-top: 5px solid #aaa; transition: transform 0.2s;
+}
+.node.expanded .advanced-arrow::after { transform: rotate(180deg); }
 
 /* WIDGETS */
 .node-widget {
@@ -82,7 +96,6 @@
 .widget-vec3 { display: flex; gap: 2px; pointer-events: all; }
 .widget-vec3 input { width: 35px; text-align: center; border: 1px solid #333; background: #111; color: #ddd; font-size: 10px; border-radius: 2px; }
 
-/* Hide widgets when connected */
 .pin-row.has-connection .node-widget, .pin-row.has-connection .widget-vec3 { display: none !important; }
 
 /* WIRES */

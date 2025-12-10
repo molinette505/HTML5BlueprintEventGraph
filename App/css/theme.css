@@ -11,7 +11,7 @@
     --wire-default: #fff;
     --wire-highlight: #ff9900;
 
-    /* DATA TYPE COLORS */
+    /* Data Type Colors */
     --c-exec: #FFFFFF;
     --c-bool: #8c0000;
     --c-float: #96ce02;
@@ -20,7 +20,7 @@
     --c-color: #00aaff;
     --c-int: #1ee6aa;
 
-    /* NODE HEADER COLORS */
+    /* Node Header Colors */
     --n-event: #8b0000;
     --n-func: #4466aa;
     --n-pure: #333333;
