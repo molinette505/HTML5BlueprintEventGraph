@@ -5,58 +5,42 @@ class Simulation {
         
         // State Machine: STOPPED -> RUNNING <-> PAUSED
         this.status = 'STOPPED'; 
-        this.executionQueue = []; // Queue of { node, conn } waiting to process
+        this.executionQueue = []; 
         this.timer = null;
         
         // Track the last item to support "Replay"
         this.lastProcessedItem = null;
         
-        // Optional callback to update UI buttons in Editor.js
         this.onStateChange = null; 
     }
     
-    /**
-     * Prepares the simulation state but does not trigger the loop.
-     */
     initialize() {
         if (this.status !== 'STOPPED') this.stop();
         
         console.clear();
         console.log("--- Simulation Initialized ---");
         
-        // Reset old data
         this.graph.nodes.forEach(n => n.executionResult = null);
         this.executionQueue = [];
         this.lastProcessedItem = null;
 
-        // Find Entry Points
         const starts = this.graph.nodes.filter(n => n.name === "Event BeginPlay");
         starts.forEach(n => {
             this.executionQueue.push({ node: n, conn: null });
         });
     }
 
-    /**
-     * Starts execution immediately.
-     */
     start() {
         this.initialize();
         this.setStatus('RUNNING');
         this.tick();
     }
 
-    /**
-     * Initializes the simulation but keeps it paused at the beginning.
-     */
     startPaused() {
         this.initialize();
         this.setStatus('PAUSED');
-        // We don't call tick(), so it waits here.
     }
 
-    /**
-     * Pauses execution after the current step finishes.
-     */
     pause() {
         if (this.status === 'RUNNING') {
             this.setStatus('PAUSED');
@@ -64,9 +48,6 @@ class Simulation {
         }
     }
 
-    /**
-     * Resumes execution from the current queue.
-     */
     resume() {
         if (this.status === 'PAUSED') {
             this.setStatus('RUNNING');
@@ -74,9 +55,6 @@ class Simulation {
         }
     }
 
-    /**
-     * Stops execution, clears queue, and resets UI.
-     */
     stop() {
         this.setStatus('STOPPED');
         this.executionQueue = [];
@@ -85,14 +63,9 @@ class Simulation {
         console.log("--- Simulation Stopped ---");
     }
 
-    /**
-     * Executes exactly one step (the next node in the queue).
-     * Can now start the simulation if it's currently stopped.
-     */
     step() {
         if (this.status === 'STOPPED') {
             this.startPaused();
-            // Allow visual update to settle before processing
             this.processNext(true); 
         } else if (this.status === 'PAUSED') {
             this.processNext(true); 
@@ -100,15 +73,36 @@ class Simulation {
     }
 
     /**
-     * REPLAY: Puts the last executed node back at the front of the queue
-     * and executes it again immediately.
+     * REPLAY: Clears the cache for the current step's data dependencies
+     * and re-executes the node so animations play again.
      */
     replayStep() {
         if (this.status === 'PAUSED' && this.lastProcessedItem) {
+            // [FIX] Clear cached results for the subgraph of this node
+            // so gatherInputs() is forced to re-run and re-animate the data flow.
+            this.clearPureNodeCache(this.lastProcessedItem.node);
+
             // Push back to front
             this.executionQueue.unshift(this.lastProcessedItem);
             this.processNext(true);
         }
+    }
+
+    /**
+     * Recursive helper to clear execution results of upstream pure nodes.
+     */
+    clearPureNodeCache(node) {
+        node.inputs.forEach(pin => {
+            if (pin.type === 'exec') return;
+            const conn = this.graph.connections.find(c => c.toNode === node.id && c.toPin === pin.index);
+            if (conn) {
+                const src = this.graph.nodes.find(n => n.id === conn.fromNode);
+                if (this.isPureNode(src)) {
+                    src.executionResult = null; // Clear cache
+                    this.clearPureNodeCache(src); // Recurse up
+                }
+            }
+        });
     }
 
     setStatus(s) {
@@ -116,25 +110,17 @@ class Simulation {
         if (this.onStateChange) this.onStateChange(s);
     }
 
-    /**
-     * Main Loop Trigger
-     */
     tick() {
         if (this.status !== 'RUNNING') return;
         this.processNext(false);
     }
 
-    /**
-     * Processes the next item in the execution queue.
-     * @param {Boolean} isSingleStep - If true, do not schedule the next tick.
-     */
     async processNext(isSingleStep) {
         if (this.executionQueue.length === 0) {
             this.stop();
             return;
         }
 
-        // Pop next task
         const item = this.executionQueue.shift();
         
         // Save for Replay capability
@@ -142,21 +128,20 @@ class Simulation {
         
         const { node, conn } = item;
 
-        // 1. Animate Wire (if arriving via connection)
+        // 1. Animate Wire
         if (conn && this.renderer) {
             this.renderer.animateExecWire(conn);
-            // Wait for visual travel time (1.5s)
             await new Promise(r => setTimeout(r, 1500));
         }
 
-        // 2. Check Pause State again (user might have clicked Pause during animation)
+        // 2. Re-check Pause
         if (this.status === 'PAUSED' && !isSingleStep) {
-            // Put it back in front of queue to retry later
             this.executionQueue.unshift(item); 
             return;
         }
 
-        // 3. Execute Node Logic
+        // 3. Execute Node
+        // Note: Highlighting happens here for the Impusle node itself
         this.highlightNode(node.id);
         node.setError(null);
 
@@ -169,24 +154,21 @@ class Simulation {
             } catch (err) {
                 if (err.isBlueprintError) node.setError(err.message);
                 else console.error(err);
-                this.stop(); // Stop on error
+                this.stop(); 
                 return;
             }
         }
 
-        // 4. Find Next Node(s)
+        // 4. Find Next
         let targetPinName = null;
-        // Branching Logic
         if (node.name === "Branch") {
             targetPinName = node.executionResult ? "True" : "False";
         }
 
-        // Find outputs
         let outExecPin = null;
         if (targetPinName) {
             outExecPin = node.outputs.find(p => p.type === 'exec' && p.name === targetPinName);
         } else {
-            // Default: First exec pin
             outExecPin = node.outputs.find(p => p.type === 'exec');
         }
 
@@ -200,79 +182,69 @@ class Simulation {
             }
         }
 
-        // 5. Schedule Next Tick
         if (this.status === 'RUNNING' && !isSingleStep) {
-            // Small delay between nodes for visual pacing
             this.timer = setTimeout(() => this.tick(), 100);
         }
     }
 
     async gatherInputs(node) {
         const args = [];
-        
         for(let i = 0; i < node.inputs.length; i++) {
             const pin = node.inputs[i];
             if (pin.type === 'exec') continue;
 
             const conn = this.graph.connections.find(c => c.toNode === node.id && c.toPin === pin.index);
-            
             if (conn) {
                 const sourceNode = this.graph.nodes.find(n => n.id === conn.fromNode);
                 
-                // Pure nodes (Math, Logic) are executed on demand here
+                // Process Pure Nodes
                 if (this.isPureNode(sourceNode)) {
                     try {
-                        // Recurse to calculate dependency
                         if (sourceNode.executionResult === null) {
                             
-                            // [VISUAL] Highlight Pure Node as a "Step"
-                            this.highlightNode(sourceNode.id);
-                            // Short delay to visualize the Pure node doing work
-                            await new Promise(r => setTimeout(r, 600)); 
-
+                            // [FIX] RECURSE FIRST, then HIGHLIGHT/CALCULATE
+                            // This ensures the visualization flows from Leaf -> Root (Data Flow direction)
                             const sourceArgs = await this.gatherInputs(sourceNode);
-                            if (sourceArgs === null) return null; // Propagate stop signal
+                            if (sourceArgs === null) return null;
+
+                            // Now that dependencies are done, we highlight this node as "working"
+                            this.highlightNode(sourceNode.id);
+                            await new Promise(r => setTimeout(r, 600)); 
 
                             sourceNode.setError(null);
                             sourceNode.executionResult = sourceNode.jsFunctionRef(...sourceArgs);
                         }
                     } catch (err) {
-                        if (err.isBlueprintError) {
-                            sourceNode.setError(err.message);
-                            return null; 
-                        }
-                        throw err; 
+                        sourceNode.setError(err.message || "Error");
+                        return null;
                     }
                 }
-
+                
                 // DATA FLOW ANIMATION
                 if (this.renderer) {
-                    // Gather input values again to generate the visual label string
+                    // [FIX] Correctly gather input values for the visualizer.
+                    // Instead of blindly reading widgets (which are empty if connected),
+                    // we must check connections to get the actual upstream values.
                     let debugInputs = [];
                     for(let k=0; k<sourceNode.inputs.length; k++) {
-                        // Simple lookup: if connected, use upstream result, else use widget value
-                        // Since we just calculated sourceNode, its upstream inputs are effectively resolved/cached or available.
-                        // However, strictly speaking, we'd need to peek at them. 
-                        // For simplicity, we just use the widget values if not connected, or we'd need a more complex 'peek' function.
-                        // Ideally, we'd cache inputs in the node during execution.
-                        // Here we just grab what we can for the visualizer.
-                        
-                        // NOTE: This re-access is safe but might be slightly inaccurate for complex chains if we don't traverse. 
-                        // But since we just executed it, we assume we can just look at `getInputValue` or we skip it.
-                        // Let's rely on FunctionRegistry to handle missing inputs gracefully.
-                        debugInputs.push(sourceNode.getInputValue(k)); 
+                        const inputConn = this.graph.connections.find(c => c.toNode === sourceNode.id && c.toPin === k);
+                        if (inputConn) {
+                            // If connected, read the calculated result from the upstream node
+                            const upstreamNode = this.graph.nodes.find(n => n.id === inputConn.fromNode);
+                            debugInputs.push(upstreamNode.executionResult);
+                        } else {
+                            // If not connected, safe to read the widget
+                            debugInputs.push(sourceNode.getInputValue(k));
+                        }
                     }
 
                     const debugLabel = window.FunctionRegistry.getVisualDebug(sourceNode, debugInputs, sourceNode.executionResult);
                     this.renderer.animateDataWire(conn, debugLabel);
                     
-                    // [DELAY] Spend time on data wire
                     await new Promise(r => setTimeout(r, 1000)); 
                 }
-
                 args.push(sourceNode.executionResult);
             } else {
-                // No connection: Use the literal value from the widget
                 args.push(node.getInputValue(i));
             }
         }
