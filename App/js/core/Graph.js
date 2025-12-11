@@ -23,6 +23,15 @@ class Graph {
         this.connections = this.connections.filter(c => c.id !== connId);
     }
 
+    //Helper for Alt+Click to break specific pin links
+    disconnectPin(nodeId, pinIndex, type) {
+        if (type === 'input') {
+            this.connections = this.connections.filter(c => !(c.toNode === nodeId && c.toPin === pinIndex));
+        } else {
+            this.connections = this.connections.filter(c => !(c.fromNode === nodeId && c.fromPin === pinIndex));
+        }
+    }
+
     addConnection(fromNode, fromPin, toNode, toPin, type) {
         if (type === 'exec') {
             this.connections = this.connections.filter(c => !(c.fromNode === fromNode && c.fromPin === fromPin));

@@ -23,7 +23,7 @@ body, html {
         linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
     background-size: 100px 100px, 100px 100px, 20px 20px, 20px 20px;
     background-position: -1px -1px;
-    cursor: grab;
+    cursor: default;
     position: relative;
     overflow: hidden;
 }
@@ -31,4 +31,15 @@ body, html {
 
 /* LAYERS */
 #transform-layer { transform-origin: 0 0; position: absolute; top:0; left:0; width:100%; height:100%; pointer-events: none; }
+#connections-layer { width: 100%; height: 100%; position: absolute; top:0; left:0; overflow: visible; z-index: 1; pointer-events: none; }
 #nodes-layer { width: 100%; height: 100%; position: absolute; top:0; left:0; z-index: 10; pointer-events: none; }
+
+/* SELECTION BOX */
+#selection-box {
+    position: absolute;
+    border: 1px solid var(--accent-color);
+    background-color: rgba(0, 122, 204, 0.2);
+    pointer-events: none;
+    display: none;
+    z-index: 1000;
+}

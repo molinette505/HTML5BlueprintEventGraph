@@ -10,12 +10,18 @@
     display: flex; flex-direction: column;
     pointer-events: all;
     backdrop-filter: blur(4px);
-    transition: box-shadow 0.2s;
+    transition: box-shadow 0.1s;
 }
 
 .node:hover {
     box-shadow: 0 6px 20px var(--node-shadow-hover), 0 0 0 1px var(--node-border-hover);
     z-index: 100;
+}
+
+/* SELECTED STATE */
+.node.selected {
+    box-shadow: 0 0 0 2px var(--wire-highlight), 0 4px 15px rgba(0,0,0,0.5);
+    z-index: 101; /* Pop above other nodes */
 }
 
 .node-header {
