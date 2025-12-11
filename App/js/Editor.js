@@ -1,5 +1,6 @@
 class Editor {
     constructor() {
+        // 1. Cache DOM elements
         this.dom = {
             container: document.getElementById('graph-container'),
             nodesLayer: document.getElementById('nodes-layer'),
@@ -9,28 +10,40 @@ class Editor {
             contextList: document.getElementById('context-list'),
             contextSearch: document.getElementById('context-search'),
             
-            // Buttons
+            // Simulation Controls
             btnPlay: document.getElementById('btn-play'),
             btnPause: document.getElementById('btn-pause'),
             btnStep: document.getElementById('btn-step'),
+            btnReplay: document.getElementById('btn-replay'),
             btnStop: document.getElementById('btn-stop')
         };
         
+        // 2. Initialize Logic Systems
         this.graph = new Graph();
         this.renderer = new Renderer(this.graph, this.dom);
         this.interaction = new Interaction(this.graph, this.renderer, this.dom);
+        
+        // Pass renderer to Simulation so it can trigger wire animations
         this.simulation = new Simulation(this.graph, this.renderer);
 
+        // Bind State Change for UI Updates (Button states)
         this.simulation.onStateChange = (status) => this.updateControls(status);
 
+        // 3. PHASE 1: Load Data from Files -> Memory
         this.importFileGlobals();
         
-        // Bind Controls
+        // 4. Bind Events
+        
+        // --- Play Button Logic ---
+        // Toggles between "Start" (from stopped) and "Resume" (from paused)
         this.dom.btnPlay.onclick = () => {
             if(this.simulation.status === 'PAUSED') this.simulation.resume();
             else this.simulation.start();
         };
         
+        // --- Pause / Start Paused Logic ---
+        // If Stopped: Starts the simulation but immediately pauses (Start Paused).
+        // If Running: Pauses the simulation.
         this.dom.btnPause.onclick = () => {
             if (this.simulation.status === 'STOPPED') {
                 this.simulation.startPaused();
@@ -39,16 +52,21 @@ class Editor {
             }
         };
 
+        // --- Stepping Logic ---
         this.dom.btnStep.onclick = () => this.simulation.step();
+        this.dom.btnReplay.onclick = () => this.simulation.replayStep();
         this.dom.btnStop.onclick = () => this.simulation.stop();
         
-        // Initialize Controls State
+        // Initialize Controls State based on default status
         this.updateControls(this.simulation.status);
         
+        // Context Menu Search Filter
         if(this.dom.contextSearch) {
             this.dom.contextSearch.oninput = (e) => this.interaction.filterContextMenu(e.target.value);
         }
 
+        // --- PERSISTENCE ---
+        // Ctrl+S to Save
         document.addEventListener('keydown', e => {
             if ((e.ctrlKey || e.metaKey) && e.key === 's') {
                 e.preventDefault();
@@ -56,6 +74,7 @@ class Editor {
             }
         });
 
+        // Load saved state or default demo
         const saved = localStorage.getItem('blueprints_save');
         if (saved) {
             this.loadGraph(saved);
@@ -64,9 +83,18 @@ class Editor {
         }
     }
 
+    /**
+     * Updates the Toolbar buttons based on the Simulation State.
+     * Handles enabling/disabling and Icon Swapping.
+     * @param {String} status - 'STOPPED', 'RUNNING', or 'PAUSED'
+     */
     updateControls(status) {
         const d = this.dom;
+        
+        // Icons
+        // Play Triangle + Vertical Bar = "Start Paused"
         const iconStartPaused = `<svg viewBox="0 0 24 24"><path d="M6 5v14l9-7z M17 5v14h2V5z"/></svg>`;
+        // Standard Pause Bars
         const iconPause = `<svg viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>`;
 
         if (status === 'STOPPED') {
@@ -75,21 +103,21 @@ class Editor {
             
             // Enable Pause button as "Start Paused"
             d.btnPause.disabled = false;
-            d.btnPause.innerHTML = iconStartPaused; // Set Icon: Play+Bar
+            d.btnPause.innerHTML = iconStartPaused; 
             d.btnPause.title = "Start Paused"; 
             
-            d.btnStep.disabled = false; 
-            d.btnStep.title = "Start & Step";
-
+            d.btnReplay.disabled = true; // Nothing to replay
+            d.btnStep.disabled = false; // Can step from start
             d.btnStop.disabled = true;
         } 
         else if (status === 'RUNNING') {
             d.btnPlay.disabled = true;
             
             d.btnPause.disabled = false;
-            d.btnPause.innerHTML = iconPause; // Set Icon: Standard Pause
+            d.btnPause.innerHTML = iconPause; // Swap to Pause icon
             d.btnPause.title = "Pause";
             
+            d.btnReplay.disabled = true; 
             d.btnStep.disabled = true; 
             d.btnStop.disabled = false;
         } 
@@ -97,7 +125,10 @@ class Editor {
             d.btnPlay.disabled = false; 
             d.btnPlay.title = "Resume";
             
-            d.btnPause.disabled = true; 
+            d.btnPause.disabled = true; // Already paused
+            
+            // Enable Replay if there is a previous step available
+            d.btnReplay.disabled = !this.simulation.lastProcessedItem;
             
             d.btnStep.disabled = false;
             d.btnStop.disabled = false;
@@ -115,6 +146,8 @@ class Editor {
         }
     }
 
+    // --- SAVE / LOAD ---
+
     saveGraph() {
         const json = JSON.stringify(this.graph.toJSON());
         localStorage.setItem('blueprints_save', json);
@@ -128,17 +161,20 @@ class Editor {
             this.dom.nodesLayer.innerHTML = '';
             this.dom.connectionsLayer.innerHTML = '';
 
+            // Restore Viewport
             if (data.viewport) {
                 this.graph.pan = { x: data.viewport.x, y: data.viewport.y };
                 this.graph.scale = data.viewport.scale;
                 this.renderer.updateTransform();
             }
 
+            // Restore ID Counters to prevent collisions
             if (data.counters) {
                 this.graph.nextId = data.counters.nextId;
                 this.graph.nextConnId = data.counters.nextConnId;
             }
 
+            // Restore Nodes
             data.nodes.forEach(nData => {
                 const template = window.nodeTemplates.find(t => t.name === nData.name);
                 if (!template) return;
@@ -146,6 +182,7 @@ class Editor {
                 const node = this.graph.addNode(template, nData.x, nData.y);
                 node.id = nData.id; 
                 
+                // Restore Widget Values
                 if (nData.inputs) {
                     nData.inputs.forEach(savedPin => {
                         const realPin = node.inputs.find(p => p.name === savedPin.name);
@@ -156,6 +193,7 @@ class Editor {
                     });
                 }
 
+                // Restore Pin Types (Polymorphism)
                 if (nData.pinTypes) {
                     if (nData.pinTypes.inputs) {
                         nData.pinTypes.inputs.forEach((type, idx) => {
@@ -172,6 +210,7 @@ class Editor {
                 this.renderer.createNodeElement(node, (e, nid) => this.interaction.handleNodeDown(e, nid));
             });
 
+            // Restore Connections
             data.connections.forEach(c => {
                 const n1 = this.graph.nodes.find(n => n.id === c.fromNode);
                 const n2 = this.graph.nodes.find(n => n.id === c.toNode);
