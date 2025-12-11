@@ -70,13 +70,7 @@ class Editor {
             }
         });
 
-        // Load saved state or default
-        const saved = localStorage.getItem('blueprints_save');
-        if (saved) {
-            this.loadGraph(saved);
-        } else {
-            this.initDemo();
-        }
+        this.initDemo();
     }
 
     /**
@@ -127,89 +121,6 @@ class Editor {
         window.nodeTemplates = [];
         if (window.globalNodes) {
             window.nodeTemplates = JSON.parse(JSON.stringify(window.globalNodes));
-        }
-    }
-
-    // --- SAVE / LOAD ---
-
-    saveGraph() {
-        const json = JSON.stringify(this.graph.toJSON());
-        localStorage.setItem('blueprints_save', json);
-        console.log("Graph Saved");
-    }
-
-    loadGraph(jsonString) {
-        try {
-            const data = JSON.parse(jsonString);
-            this.graph.clear();
-            this.dom.nodesLayer.innerHTML = '';
-            this.dom.connectionsLayer.innerHTML = '';
-
-            if (data.viewport) {
-                this.graph.pan = { x: data.viewport.x, y: data.viewport.y };
-                this.graph.scale = data.viewport.scale;
-                this.renderer.updateTransform();
-            }
-
-            if (data.counters) {
-                this.graph.nextId = data.counters.nextId;
-                this.graph.nextConnId = data.counters.nextConnId;
-            }
-
-            data.nodes.forEach(nData => {
-                const template = window.nodeTemplates.find(t => t.name === nData.name);
-                if (!template) return;
-
-                const node = this.graph.addNode(template, nData.x, nData.y);
-                node.id = nData.id; 
-                
-                // [FIX 1] Restore Pin Types FIRST
-                if (nData.pinTypes) {
-                    if (nData.pinTypes.inputs) {
-                        nData.pinTypes.inputs.forEach((type, idx) => {
-                            if (node.inputs[idx] && type && node.inputs[idx].type !== type) {
-                                node.inputs[idx].setType(type);
-                            }
-                        });
-                    }
-                    if (nData.pinTypes.outputs) {
-                        nData.pinTypes.outputs.forEach((type, idx) => {
-                            if (node.outputs[idx] && type && node.outputs[idx].type !== type) {
-                                node.outputs[idx].setType(type);
-                            }
-                        });
-                    }
-                }
-
-                // [FIX 2] Restore Widget Values SECOND
-                if (nData.inputs) {
-                    nData.inputs.forEach((savedPin, index) => {
-                        const realPin = node.inputs[index];
-                        if (realPin) {
-                            realPin.value = savedPin.value;
-                            if (realPin.widget) {
-                                realPin.widget.value = savedPin.value;
-                            }
-                        }
-                    });
-                }
-                
-                this.renderer.createNodeElement(node, (e, nid) => this.interaction.handleNodeDown(e, nid));
-            });
-
-            data.connections.forEach(c => {
-                const n1 = this.graph.nodes.find(n => n.id === c.fromNode);
-                const n2 = this.graph.nodes.find(n => n.id === c.toNode);
-                if (n1 && n2) {
-                    this.graph.addConnection(c.fromNode, c.fromPin, c.toNode, c.toPin, c.type);
-                }
-            });
-
-            this.renderer.render();
-
-        } catch(e) {
-            console.error("Failed to load graph", e);
-            this.initDemo();
         }
     }
 
