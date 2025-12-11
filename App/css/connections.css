@@ -20,6 +20,7 @@ path.connection:hover {
     stroke: var(--wire-hover);
 }
 
+/* Default Pulse Animation (for dragging) */
 path.connection.pulse {
     stroke: var(--wire-highlight);
     stroke-width: 4px;
@@ -28,6 +29,49 @@ path.connection.pulse {
     stroke-dasharray: 10, 5;
 }
 
+/* DATA FLOW GLOW: A quick flash on the wire when data is read */
+path.connection.data-flow {
+    animation: data-flash 0.5s ease-out;
+    stroke: white !important;
+    stroke-width: 4px;
+    filter: drop-shadow(0 0 8px white);
+}
+
+@keyframes data-flash {
+    0% { stroke: white; stroke-width: 6px; }
+    100% { stroke: var(--wire-default); stroke-width: 2px; }
+}
+
 @keyframes dash {
     to { stroke-dashoffset: -15; }
+}
+
+/* EXECUTION BALL: The white glowing ball */
+.exec-ball {
+    fill: white;
+    filter: drop-shadow(0 0 6px white);
+    pointer-events: none;
+}
+
+/* DATA LABEL: Floating value above wires */
+.data-value-label {
+    position: absolute;
+    background: rgba(0, 0, 0, 0.8);
+    color: #0f0; /* Matrix green text for visibility */
+    border: 1px solid #0f0;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 10px;
+    pointer-events: none;
+    white-space: nowrap;
+    z-index: 2000;
+    transform: translate(-50%, -100%); /* Center above point */
+    animation: float-up 1.0s forwards;
+}
+
+@keyframes float-up {
+    0% { opacity: 1; transform: translate(-50%, -100%) scale(1); }
+    80% { opacity: 1; transform: translate(-50%, -250%) scale(1); }
+    100% { opacity: 0; transform: translate(-50%, -300%) scale(0.8); }
 }

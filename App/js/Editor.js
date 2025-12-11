@@ -1,6 +1,5 @@
 class Editor {
     constructor() {
-        // 1. Cache DOM elements
         this.dom = {
             container: document.getElementById('graph-container'),
             nodesLayer: document.getElementById('nodes-layer'),
@@ -13,19 +12,16 @@ class Editor {
             nodesInput: document.getElementById('nodes-input')
         };
         
-        // 2. Initialize Logic Systems
         this.graph = new Graph();
         this.renderer = new Renderer(this.graph, this.dom);
         this.interaction = new Interaction(this.graph, this.renderer, this.dom);
-        this.simulation = new Simulation(this.graph);
+        
+        // [UPDATE] Pass renderer to Simulation so it can trigger wire animations
+        this.simulation = new Simulation(this.graph, this.renderer);
 
-        // 3. PHASE 1: Load Data from Files -> Memory
         this.importFileGlobals();
-
-        // 4. PHASE 2: Load Data from Memory -> UI
         this.populateUI();
         
-        // 5. Bind Events
         document.getElementById('simulate-btn').onclick = () => this.simulation.run();
         
         const updateBtn = document.getElementById('update-lib-btn');
@@ -35,7 +31,6 @@ class Editor {
             this.dom.contextSearch.oninput = (e) => this.interaction.filterContextMenu(e.target.value);
         }
 
-        // --- PERSISTENCE ---
         document.addEventListener('keydown', e => {
             if ((e.ctrlKey || e.metaKey) && e.key === 's') {
                 e.preventDefault();
@@ -43,7 +38,6 @@ class Editor {
             }
         });
 
-        // Load saved state or default
         const saved = localStorage.getItem('blueprints_save');
         if (saved) {
             this.loadGraph(saved);
@@ -92,8 +86,6 @@ class Editor {
         }
     }
 
-    // --- SAVE / LOAD ---
-
     saveGraph() {
         const json = JSON.stringify(this.graph.toJSON());
         localStorage.setItem('blueprints_save', json);
@@ -135,7 +127,6 @@ class Editor {
                     });
                 }
 
-                // Restore Pin Types
                 if (nData.pinTypes) {
                     if (nData.pinTypes.inputs) {
                         nData.pinTypes.inputs.forEach((type, idx) => {
@@ -198,11 +189,8 @@ class Editor {
         else buttons[1].classList.add('active');
 
         document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-        
         if(tabName === 'graph') {
             document.getElementById('graph-view').classList.add('active');
-            // [FIX] Force re-render of wires when returning to view.
-            // Using requestAnimationFrame ensures DOM is visible before drawing.
             requestAnimationFrame(() => this.renderer.render()); 
         }
         else {
