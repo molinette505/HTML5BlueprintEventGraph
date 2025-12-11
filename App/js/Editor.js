@@ -98,8 +98,6 @@ class Editor {
         const json = JSON.stringify(this.graph.toJSON());
         localStorage.setItem('blueprints_save', json);
         console.log("Graph Saved");
-        
-        // Visual Feedback could go here
     }
 
     loadGraph(jsonString) {
@@ -200,8 +198,16 @@ class Editor {
         else buttons[1].classList.add('active');
 
         document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-        if(tabName === 'graph') document.getElementById('graph-view').classList.add('active');
-        else document.getElementById('settings-view').classList.add('active');
+        
+        if(tabName === 'graph') {
+            document.getElementById('graph-view').classList.add('active');
+            // [FIX] Force re-render of wires when returning to view.
+            // Using requestAnimationFrame ensures DOM is visible before drawing.
+            requestAnimationFrame(() => this.renderer.render()); 
+        }
+        else {
+            document.getElementById('settings-view').classList.add('active');
+        }
     }
 }
 

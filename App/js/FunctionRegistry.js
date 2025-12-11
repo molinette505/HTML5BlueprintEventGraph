@@ -1,89 +1,97 @@
-/**
- * FunctionRegistry
- * Maps string identifiers (from JSON) to actual JavaScript functions.
- * This is the "Engine" that powers your nodes.
- */
 window.FunctionRegistry = {
     // --- FLOW CONTROL ---
     "Flow.Print": (msg) => {
         console.log("%c[Blueprint Output]:", "color: cyan", msg);
         return msg;
     },
+    "Flow.Branch": (condition) => !!condition,
 
-    // The Branch node helper: returns the boolean value so the Simulation engine
-    // can decide which execution output pin to activate.
-    "Flow.Branch": (condition) => {
-        return !!condition; // Force boolean
-    },
-
-    // --- MATH (Polymorphic) ---
-    
-    // ADD: Vector+Vector, Scalar+Scalar.
+    // --- MATH ---
     "Math.AddGeneric": (a, b) => {
         const isVector = (v) => v && typeof v === 'object' && 'x' in v;
         const isNumber = (v) => typeof v === 'number';
-
         if (isVector(a) && isVector(b)) return { x: a.x + b.x, y: a.y + b.y, z: a.z + b.z };
         if (isNumber(a) && isNumber(b)) return a + b; 
-
         const err = new Error("Addition is not supported between these types.");
         err.isBlueprintError = true; throw err; 
     },
-
-    // SUBTRACT: Vector-Vector, Scalar-Scalar.
     "Math.SubtractGeneric": (a, b) => {
         const isVector = (v) => v && typeof v === 'object' && 'x' in v;
         const isNumber = (v) => typeof v === 'number';
-
         if (isVector(a) && isVector(b)) return { x: a.x - b.x, y: a.y - b.y, z: a.z - b.z };
         if (isNumber(a) && isNumber(b)) return a - b;
-
         const err = new Error("Subtraction is not supported between these types.");
         err.isBlueprintError = true; throw err; 
     },
-
-    // MULTIPLY: Scalar*Scalar, Scalar*Vector, Vector*Scalar.
     "Math.MultiplyGeneric": (a, b) => {
         const isVector = (v) => v && typeof v === 'object' && 'x' in v;
         const isNumber = (v) => typeof v === 'number';
-
         if (isNumber(a) && isNumber(b)) return a * b;
         if (isNumber(a) && isVector(b)) return { x: a * b.x, y: a * b.y, z: a * b.z };
         if (isVector(a) && isNumber(b)) return { x: a.x * b, y: a.y * b, z: a.z * b };
-
         const err = new Error("Multiplication not supported (Cannot multiply Vector by Vector).");
         err.isBlueprintError = true; throw err; 
     },
-
-    // DIVIDE: Scalar/Scalar, Vector/Scalar.
     "Math.DivideGeneric": (a, b) => {
         const isVector = (v) => v && typeof v === 'object' && 'x' in v;
         const isNumber = (v) => typeof v === 'number';
-
         if (isNumber(b) && b === 0) {
             const err = new Error("Division by zero.");
             err.isBlueprintError = true; throw err;
         }
-
         if (isNumber(a) && isNumber(b)) return a / b;
         if (isVector(a) && isNumber(b)) return { x: a.x / b, y: a.y / b, z: a.z / b };
-
         const err = new Error("Invalid Division (Cannot divide Scalar by Vector).");
         err.isBlueprintError = true; throw err; 
     },
 
-    // --- LOGIC / COMPARISONS (Polymorphic) ---
-    // JS weak typing handles numbers and strings automatically (e.g., 5 > 2, "b" > "a")
-    "Logic.Equal": (a, b) => a == b,
-    "Logic.NotEqual": (a, b) => a != b,
-    "Logic.Greater": (a, b) => a > b,
-    "Logic.GreaterEqual": (a, b) => a >= b,
-    "Logic.Less": (a, b) => a < b,
-    "Logic.LessEqual": (a, b) => a <= b,
+    // --- LOGIC / COMPARISONS (Updated) ---
+    "Logic.Equal": (a, b) => {
+        // Handle Vector/Object Deep Equality (simplified via JSON)
+        if (typeof a === 'object' && a !== null && typeof b === 'object' && b !== null) {
+            return JSON.stringify(a) === JSON.stringify(b);
+        }
+        return a == b;
+    },
+    "Logic.NotEqual": (a, b) => {
+        if (typeof a === 'object' && a !== null && typeof b === 'object' && b !== null) {
+            return JSON.stringify(a) !== JSON.stringify(b);
+        }
+        return a != b;
+    },
+    
+    // For Inequalities, ensure we only compare Numbers or Strings
+    "Logic.Greater": (a, b) => {
+        if (typeof a === 'object' || typeof b === 'object') {
+            const err = new Error("Cannot compare Objects/Vectors with '>'");
+            err.isBlueprintError = true; throw err;
+        }
+        return a > b;
+    },
+    "Logic.GreaterEqual": (a, b) => {
+        if (typeof a === 'object' || typeof b === 'object') {
+            const err = new Error("Cannot compare Objects/Vectors with '>='");
+            err.isBlueprintError = true; throw err;
+        }
+        return a >= b;
+    },
+    "Logic.Less": (a, b) => {
+        if (typeof a === 'object' || typeof b === 'object') {
+            const err = new Error("Cannot compare Objects/Vectors with '<'");
+            err.isBlueprintError = true; throw err;
+        }
+        return a < b;
+    },
+    "Logic.LessEqual": (a, b) => {
+        if (typeof a === 'object' || typeof b === 'object') {
+            const err = new Error("Cannot compare Objects/Vectors with '<='");
+            err.isBlueprintError = true; throw err;
+        }
+        return a <= b;
+    },
 
     // --- VECTORS ---
     "Vector.Make": (x, y, z) => ({ x: x||0, y: y||0, z: z||0 }),
-    
     "Vector.Add": (v1, v2) => {
         const a = v1 || {x:0, y:0, z:0};
         const b = v2 || {x:0, y:0, z:0};

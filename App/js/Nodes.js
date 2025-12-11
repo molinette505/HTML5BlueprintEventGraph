@@ -8,15 +8,14 @@ window.globalNodes = [
     },
 
     // --- FLOW CONTROL ---
-    // The Branch node directs execution flow based on a boolean condition.
     {
         "name": "Branch",
         "category": "Flow Control",
-        "color": "var(--n-event)", // Uses a distinct header color typically associated with events/flow
+        "color": "var(--n-event)", 
         "functionId": "Flow.Branch",
         "inputs": [
             { "name": "Exec", "type": "exec" },
-            { "name": "Condition", "type": "boolean", "default": true } // Checked by default
+            { "name": "Condition", "type": "boolean", "default": true }
         ],
         "outputs": [
             { "name": "True", "type": "exec" },
@@ -44,6 +43,7 @@ window.globalNodes = [
         "name": "Add",
         "category": "Math",
         "color": "var(--n-pure)",
+        "hideHeader": true,
         "functionId": "Math.AddGeneric",
         "centerLabel": "+",
         "inputs": [
@@ -56,6 +56,7 @@ window.globalNodes = [
         "name": "Subtract",
         "category": "Math",
         "color": "var(--n-pure)",
+        "hideHeader": true,
         "functionId": "Math.SubtractGeneric",
         "centerLabel": "-",
         "inputs": [
@@ -68,6 +69,7 @@ window.globalNodes = [
         "name": "Multiply",
         "category": "Math",
         "color": "var(--n-pure)",
+        "hideHeader": true,
         "functionId": "Math.MultiplyGeneric",
         "centerLabel": "×",
         "inputs": [
@@ -80,6 +82,7 @@ window.globalNodes = [
         "name": "Divide",
         "category": "Math",
         "color": "var(--n-pure)",
+        "hideHeader": true,
         "functionId": "Math.DivideGeneric",
         "centerLabel": "÷",
         "inputs": [
@@ -90,16 +93,17 @@ window.globalNodes = [
     },
 
     // --- LOGIC / COMPARISON ---
-    // These nodes allow input type switching (Polymorphism) via 'allowedTypes'.
+    // Added "hideHeader": true to all comparison nodes
     {
         "name": "Equal (==)",
         "category": "Logic",
         "color": "var(--n-pure)",
+        "hideHeader": true,
         "functionId": "Logic.Equal",
         "centerLabel": "==",
         "inputs": [
-            { "name": "A", "type": "float", "allowedTypes": ["float", "int", "string", "boolean"] },
-            { "name": "B", "type": "float", "allowedTypes": ["float", "int", "string", "boolean"] }
+            { "name": "A", "type": "float", "allowedTypes": ["float", "int", "string", "boolean", "vector", "class", "object", "transform"] },
+            { "name": "B", "type": "float", "allowedTypes": ["float", "int", "string", "boolean", "vector", "class", "object", "transform"] }
         ],
         "outputs": [{ "name": "Result", "type": "boolean" }]
     },
@@ -107,11 +111,12 @@ window.globalNodes = [
         "name": "Not Equal (!=)",
         "category": "Logic",
         "color": "var(--n-pure)",
+        "hideHeader": true,
         "functionId": "Logic.NotEqual",
         "centerLabel": "!=",
         "inputs": [
-            { "name": "A", "type": "float", "allowedTypes": ["float", "int", "string", "boolean"] },
-            { "name": "B", "type": "float", "allowedTypes": ["float", "int", "string", "boolean"] }
+            { "name": "A", "type": "float", "allowedTypes": ["float", "int", "string", "boolean", "vector", "class", "object", "transform"] },
+            { "name": "B", "type": "float", "allowedTypes": ["float", "int", "string", "boolean", "vector", "class", "object", "transform"] }
         ],
         "outputs": [{ "name": "Result", "type": "boolean" }]
     },
@@ -119,6 +124,7 @@ window.globalNodes = [
         "name": "Greater (>)",
         "category": "Logic",
         "color": "var(--n-pure)",
+        "hideHeader": true,
         "functionId": "Logic.Greater",
         "centerLabel": ">",
         "inputs": [
@@ -131,6 +137,7 @@ window.globalNodes = [
         "name": "Greater Equal (>=)",
         "category": "Logic",
         "color": "var(--n-pure)",
+        "hideHeader": true,
         "functionId": "Logic.GreaterEqual",
         "centerLabel": ">=",
         "inputs": [
@@ -143,6 +150,7 @@ window.globalNodes = [
         "name": "Less (<)",
         "category": "Logic",
         "color": "var(--n-pure)",
+        "hideHeader": true,
         "functionId": "Logic.Less",
         "centerLabel": "<",
         "inputs": [
@@ -155,6 +163,7 @@ window.globalNodes = [
         "name": "Less Equal (<=)",
         "category": "Logic",
         "color": "var(--n-pure)",
+        "hideHeader": true,
         "functionId": "Logic.LessEqual",
         "centerLabel": "<=",
         "inputs": [
