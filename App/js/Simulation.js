@@ -30,27 +30,17 @@ class Simulation {
         });
     }
 
-    /**
-     * Starts execution immediately.
-     */
     start() {
         this.initialize();
         this.setStatus('RUNNING');
         this.tick();
     }
 
-    /**
-     * Initializes the simulation but keeps it paused at the beginning.
-     */
     startPaused() {
         this.initialize();
         this.setStatus('PAUSED');
-        // We don't call tick(), so it waits here.
     }
 
-    /**
-     * Pauses execution after the current step finishes.
-     */
     pause() {
         if (this.status === 'RUNNING') {
             this.setStatus('PAUSED');
@@ -58,9 +48,6 @@ class Simulation {
         }
     }
 
-    /**
-     * Resumes execution from the current queue.
-     */
     resume() {
         if (this.status === 'PAUSED') {
             this.setStatus('RUNNING');
@@ -75,15 +62,9 @@ class Simulation {
         console.log("--- Simulation Stopped ---");
     }
 
-    /**
-     * Executes exactly one step.
-     * Can now start the simulation if it's currently stopped.
-     */
     step() {
         if (this.status === 'STOPPED') {
             this.startPaused();
-            // Allow visual update to settle before processing? 
-            // In this logic, we just process immediately.
             this.processNext(true); 
         } else if (this.status === 'PAUSED') {
             this.processNext(true); 
@@ -115,7 +96,7 @@ class Simulation {
             await new Promise(r => setTimeout(r, 1500));
         }
 
-        // 2. Re-check Pause State (user might have clicked Pause during animation)
+        // 2. Re-check Pause State
         if (this.status === 'PAUSED' && !isSingleStep) {
             this.executionQueue.unshift(item); 
             return;
@@ -177,9 +158,17 @@ class Simulation {
             const conn = this.graph.connections.find(c => c.toNode === node.id && c.toPin === pin.index);
             if (conn) {
                 const sourceNode = this.graph.nodes.find(n => n.id === conn.fromNode);
+                
+                // Pure nodes (Math, Logic) are executed on demand here
                 if (this.isPureNode(sourceNode)) {
                     try {
                         if (sourceNode.executionResult === null) {
+                            
+                            // [FIX] Highlight Pure Node as a "Step"
+                            this.highlightNode(sourceNode.id);
+                            // Short delay to visualize the Pure node doing work
+                            await new Promise(r => setTimeout(r, 600)); 
+
                             const sourceArgs = await this.gatherInputs(sourceNode);
                             if (sourceArgs === null) return null;
                             sourceNode.setError(null);
@@ -190,9 +179,11 @@ class Simulation {
                         return null;
                     }
                 }
+                
                 if (this.renderer) {
                     this.renderer.animateDataWire(conn, sourceNode.executionResult);
-                    await new Promise(r => setTimeout(r, 300)); 
+                    // [FIX] Increased delay to 1000ms to "spend more time" on data flow
+                    await new Promise(r => setTimeout(r, 1000)); 
                 }
                 args.push(sourceNode.executionResult);
             } else {

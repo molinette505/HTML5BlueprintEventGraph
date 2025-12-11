@@ -67,7 +67,8 @@ path.connection.data-flow {
     white-space: nowrap;
     z-index: 2000;
     transform: translate(-50%, -100%); /* Center above point */
-    animation: float-up 1.0s forwards;
+    /* [FIX] Increased duration to 2.0s */
+    animation: float-up 2.0s forwards;
 }
 
 @keyframes float-up {

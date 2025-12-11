@@ -183,8 +183,20 @@ class Renderer {
 
         // Format Value for display
         let displayVal = value;
-        if (typeof value === 'object') displayVal = '{Obj}';
-        if (typeof value === 'boolean') displayVal = value ? 'TRUE' : 'FALSE';
+        
+        // [FIX] Format Objects and Vectors
+        if (typeof value === 'object' && value !== null) {
+            if ('x' in value && 'y' in value && 'z' in value) {
+                // Vector Format
+                displayVal = `X=${value.x.toFixed(1)} Y=${value.y.toFixed(1)} Z=${value.z.toFixed(1)}`;
+            } else {
+                // Generic Object
+                displayVal = '{Obj}';
+            }
+        }
+        else if (typeof value === 'boolean') {
+            displayVal = value ? 'TRUE' : 'FALSE';
+        }
         
         const label = document.createElement('div');
         label.className = 'data-value-label';
@@ -194,11 +206,11 @@ class Renderer {
         label.style.left = `${midPoint.x}px`;
         label.style.top = `${midPoint.y}px`;
         
-        this.dom.nodesLayer.appendChild(label); // Using nodesLayer as it is within the transform group
+        this.dom.nodesLayer.appendChild(label); 
 
-        // CSS Animation handles movement and removal (fade out), 
-        // but we need to remove the DOM element after it finishes.
-        setTimeout(() => label.remove(), 1000); 
+        // CSS Animation handles movement and removal (fade out).
+        // [FIX] Increased timeout to 2000ms to match new CSS duration.
+        setTimeout(() => label.remove(), 2000); 
     }
 
     getPinPos(nid, idx, type) {
