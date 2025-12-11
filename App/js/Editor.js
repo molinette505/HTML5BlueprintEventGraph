@@ -136,6 +136,7 @@ class Editor {
 
         if(!tEvent || !tMakeFloat || !tAdd || !tGeq || !tBranch) return;
 
+        // Position isn't critical here because layoutNodes will override it
         const nEvent = this.graph.addNode(tEvent, 50, 50);
         const nBranch = this.graph.addNode(tBranch, 300, 50);
         
@@ -143,6 +144,11 @@ class Editor {
         if(nFloat.inputs[0].widget) nFloat.inputs[0].widget.value = 5.0; 
 
         const nAdd = this.graph.addNode(tAdd, 250, 200);
+        
+        // [FIX] Explicitly resolve Wildcard -> Float for the demo
+        nAdd.inputs.forEach(p => p.setType('float'));
+        nAdd.outputs.forEach(p => p.setType('float'));
+
         if(nAdd.inputs[1].widget) nAdd.inputs[1].widget.value = 10.0; 
 
         const nGeq = this.graph.addNode(tGeq, 450, 200);
@@ -168,6 +174,10 @@ class Editor {
         this.graph.addConnection(nFloat.id, 0, nAdd.id, 0, 'float');
         this.graph.addConnection(nAdd.id, 0, nGeq.id, 0, 'float');
         this.graph.addConnection(nGeq.id, 0, nBranch.id, 1, 'boolean');
+
+        // [NEW] Auto-layout the demo nodes so they don't step on each other
+        const demoNodes = [nEvent, nBranch, nFloat, nAdd, nGeq, nTrue, nFalse].filter(n => !!n);
+        this.interaction.layoutNodes(demoNodes);
 
         this.renderer.render();
     }
