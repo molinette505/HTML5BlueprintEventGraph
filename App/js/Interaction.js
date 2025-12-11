@@ -7,23 +7,18 @@ class Interaction {
         this.graph = graph;
         this.renderer = renderer;
         this.dom = dom;
-        
         this.mode = 'IDLE'; 
         this.selectedNodes = new Set();
-        
-        this.dragData = {
-            startX: 0, startY: 0,
-            initialPan: {x:0, y:0},
-            nodeOffsets: new Map()
-        };
-
+        this.dragData = { startX: 0, startY: 0, initialPan: {x:0, y:0}, nodeOffsets: new Map() };
         this.lastMousePos = { x: 0, y: 0 };
-
+        
         this.selectionBox = document.createElement('div');
         this.selectionBox.id = 'selection-box';
         this.dom.container.appendChild(this.selectionBox);
-
         this.contextMenuPos = {x:0, y:0};
+        
+        // Track collapsed categories
+        this.collapsedCategories = new Set(); 
 
         this.bindEvents();
         this.bindKeyboardEvents();
@@ -34,26 +29,42 @@ class Interaction {
 
         c.addEventListener('mousedown', e => {
             this.hideContextMenu();
-            if(e.target.classList.contains('pin')) {
-                if (e.altKey) {
-                    this.handlePinBreak(e);
-                } else if (e.button === 0) {
-                    this.handlePinDown(e);
+
+            // 1. PIN INTERACTION
+            if (e.target.classList.contains('pin')) {
+                if (e.button === 2) {
+                    const pin = e.target;
+                    this.showContextMenu(e.clientX, e.clientY, 'pin', parseInt(pin.dataset.node), parseInt(pin.dataset.index), pin.dataset.type);
+                    return;
                 }
+                if (e.altKey) this.handlePinBreak(e);
+                else if (e.button === 0) this.handlePinDown(e);
                 return;
             }
+
+            // 2. NODE INTERACTION
             const nodeEl = e.target.closest('.node');
-            if (nodeEl && e.button === 0) {
+            if (nodeEl) {
                 const nodeId = parseInt(nodeEl.id.replace('node-', ''));
-                this.handleNodeDown(e, nodeId);
-                return;
+                if (e.button === 2) {
+                    this.addSelection(nodeId);
+                    this.showContextMenu(e.clientX, e.clientY, 'node', nodeId);
+                    return;
+                }
+                if (e.button === 0) {
+                    this.handleNodeDown(e, nodeId);
+                    return;
+                }
             }
+
+            // 3. BACKGROUND INTERACTION
             if (e.target === c || e.target === this.dom.transformLayer || e.target.id === 'connections-layer') {
                 if (e.button === 0) this.startBoxSelect(e);
                 else if (e.button === 2) this.startPan(e);
             }
         });
 
+        // Mouse Move (standard logic)
         window.addEventListener('mousemove', e => {
             this.lastMousePos = { x: e.clientX, y: e.clientY };
             switch (this.mode) {
@@ -64,10 +75,15 @@ class Interaction {
             }
         });
 
+        // Mouse Up (Check for context menu on background)
         window.addEventListener('mouseup', e => {
             if (this.mode === 'PANNING') {
                 const dist = Math.hypot(e.clientX - this.dragData.startX, e.clientY - this.dragData.startY);
-                if (dist < 5) this.showContextMenu(e.clientX, e.clientY, 'canvas');
+                if (dist < 5 && e.button === 2) {
+                    if(!e.target.closest('.node') && !e.target.closest('.pin')) {
+                        this.showContextMenu(e.clientX, e.clientY, 'canvas');
+                    }
+                }
             }
             else if (this.mode === 'DRAG_WIRE') {
                 const target = e.target.closest('.pin');
@@ -77,7 +93,6 @@ class Interaction {
             else if (this.mode === 'BOX_SELECT') {
                 this.finishBoxSelect();
             }
-
             this.mode = 'IDLE';
             this.renderer.dom.connectionsLayer.innerHTML = ''; 
             this.renderer.render(); 
@@ -88,99 +103,17 @@ class Interaction {
         c.addEventListener('wheel', e => this.handleZoom(e), { passive: false });
     }
 
+    // ... (Keep bindKeyboardEvents, copy/paste/cut/delete/handlers etc from previous response) ...
+    // ... [Including copySelection, pasteFromClipboard, handleNodeDown, updateNodeDrag etc] ...
+    
     bindKeyboardEvents() {
         document.addEventListener('keydown', async (e) => {
             if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-            if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
-                e.preventDefault();
-                await this.copySelection();
-            }
-            if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
-                e.preventDefault();
-                await this.pasteFromClipboard(this.lastMousePos.x, this.lastMousePos.y);
-            }
-            if (e.key === 'Delete' || e.key === 'Backspace') {
-                if (this.selectedNodes.size > 0) this.deleteSelected();
-            }
+            if ((e.ctrlKey || e.metaKey) && e.key === 'c') { e.preventDefault(); await this.copySelection(); }
+            if ((e.ctrlKey || e.metaKey) && e.key === 'x') { e.preventDefault(); await this.cutSelection(); }
+            if ((e.ctrlKey || e.metaKey) && e.key === 'v') { e.preventDefault(); await this.pasteFromClipboard(this.lastMousePos.x, this.lastMousePos.y); }
+            if (e.key === 'Delete' || e.key === 'Backspace') { if (this.selectedNodes.size > 0) this.deleteSelected(); }
         });
-    }
-
-    // --- LOGIC ---
-
-    finishWireDrag(target) {
-        const s = this.dragWire;
-        const t = {
-            nodeId: parseInt(target.dataset.node),
-            index: parseInt(target.dataset.index),
-            type: target.dataset.type,
-            dataType: target.dataset.dataType
-        };
-
-        // Basic Rules
-        if (s.sourceNode === t.nodeId) return; // Self
-        if (s.sourceType === t.type) return;   // Same IO
-
-        // --- TYPE MISMATCH & AUTO-CONVERSION ---
-        if (s.dataType !== t.dataType) {
-            
-            // 1. Look up conversion rule
-            // We need to know which is Source Type and which is Target Type
-            const srcType = s.sourceType === 'output' ? s.dataType : t.dataType;
-            const tgtType = s.sourceType === 'output' ? t.dataType : s.dataType;
-            
-            const key = `${srcType}->${tgtType}`;
-            const templateName = window.nodeConversions ? window.nodeConversions[key] : null;
-
-            if (templateName) {
-                // 2. Find Conversion Node Template
-                const template = window.nodeTemplates.find(n => n.name === templateName);
-                if (template) {
-                    
-                    // 3. Calculate position (Middle of the two nodes)
-                    const nodeA = this.graph.nodes.find(n => n.id === s.sourceNode);
-                    const nodeB = this.graph.nodes.find(n => n.id === t.nodeId);
-                    
-                    // Simple average position
-                    const midX = (nodeA.x + nodeB.x) / 2;
-                    const midY = (nodeA.y + nodeB.y) / 2;
-
-                    // 4. Create the Conversion Node
-                    const convNode = this.graph.addNode(template, midX, midY);
-                    
-                    // 5. Render it immediately so we can connect to it
-                    this.renderer.createNodeElement(convNode, (e, nid) => this.handleNodeDown(e, nid));
-
-                    // 6. Connect Source -> Conversion -> Target
-                    // The conversion node usually has Input at 0 and Output at 0
-                    
-                    // Determine which endpoint is which
-                    const fromNodeId = s.sourceType === 'output' ? s.sourceNode : t.nodeId;
-                    const fromPinIdx = s.sourceType === 'output' ? s.sourcePin : t.index;
-                    
-                    const toNodeId = s.sourceType === 'output' ? t.nodeId : s.sourceNode;
-                    const toPinIdx = s.sourceType === 'output' ? t.index : s.sourcePin;
-
-                    // Link 1: Original Source -> Conversion Input (0)
-                    this.graph.addConnection(fromNodeId, fromPinIdx, convNode.id, 0, srcType);
-                    
-                    // Link 2: Conversion Output (0) -> Original Target
-                    this.graph.addConnection(convNode.id, 0, toNodeId, toPinIdx, tgtType);
-                    
-                    // Success
-                    return;
-                }
-            }
-            // If no conversion found, fail silently (standard behavior)
-            return; 
-        }
-
-        // Standard Connection (Types Match)
-        const fromNode = s.sourceType === 'output' ? s.sourceNode : t.nodeId;
-        const fromPin = s.sourceType === 'output' ? s.sourcePin : t.index;
-        const toNode = s.sourceType === 'output' ? t.nodeId : s.sourceNode;
-        const toPin = s.sourceType === 'output' ? t.index : s.sourcePin;
-
-        this.graph.addConnection(fromNode, fromPin, toNode, toPin, s.dataType);
     }
     
     async copySelection() {
@@ -191,15 +124,11 @@ class Interaction {
             const node = this.graph.nodes.find(n => n.id === id);
             if (node) nodesToCopy.push(node.toJSON());
         });
-        const connectionsToCopy = this.graph.connections.filter(c => 
-            idsToCopy.has(c.fromNode) && idsToCopy.has(c.toNode)
-        );
+        const connectionsToCopy = this.graph.connections.filter(c => idsToCopy.has(c.fromNode) && idsToCopy.has(c.toNode));
         const clipboardData = { nodes: nodesToCopy, connections: connectionsToCopy };
-        try {
-            await navigator.clipboard.writeText(JSON.stringify(clipboardData, null, 2));
-        } catch (err) { console.error('Failed to copy: ', err); }
+        try { await navigator.clipboard.writeText(JSON.stringify(clipboardData, null, 2)); } catch (err) { console.error(err); }
     }
-
+    async cutSelection() { await this.copySelection(); this.deleteSelected(); }
     async pasteFromClipboard(screenX, screenY) {
         try {
             const text = await navigator.clipboard.readText();
@@ -225,11 +154,12 @@ class Interaction {
                 if (nodeData.inputs) {
                     nodeData.inputs.forEach(savedPin => {
                         const realPin = newNode.inputs.find(p => p.name === savedPin.name);
-                        if (realPin) {
-                            realPin.value = savedPin.value;
-                            if (realPin.widget) realPin.widget.value = savedPin.value;
-                        }
+                        if (realPin) { realPin.value = savedPin.value; if (realPin.widget) realPin.widget.value = savedPin.value; }
                     });
+                }
+                if (nodeData.pinTypes) {
+                    if (nodeData.pinTypes.inputs) { nodeData.pinTypes.inputs.forEach((type, idx) => { if (newNode.inputs[idx] && type) newNode.inputs[idx].setType(type); }); }
+                    if (nodeData.pinTypes.outputs) { nodeData.pinTypes.outputs.forEach((type, idx) => { if (newNode.outputs[idx] && type) newNode.outputs[idx].setType(type); }); }
                 }
                 this.renderer.createNodeElement(newNode, (e, nid) => this.handleNodeDown(e, nid));
                 this.addSelection(newNode.id);
@@ -237,14 +167,11 @@ class Interaction {
             connections.forEach(c => {
                 const newFrom = idMap.get(c.fromNode);
                 const newTo = idMap.get(c.toNode);
-                if (newFrom && newTo) {
-                    this.graph.addConnection(newFrom, c.fromPin, newTo, c.toPin, c.type);
-                }
+                if (newFrom && newTo) this.graph.addConnection(newFrom, c.fromPin, newTo, c.toPin, c.type);
             });
             this.renderer.render();
-        } catch (err) { console.error('Failed to paste: ', err); }
+        } catch (err) { console.error(err); }
     }
-
     deleteSelected() {
         this.selectedNodes.forEach(id => {
             this.graph.removeNode(id);
@@ -254,12 +181,9 @@ class Interaction {
         this.selectedNodes.clear();
         this.renderer.render();
     }
-
     handleNodeDown(e, nodeId) {
         e.stopPropagation();
-        if (!e.ctrlKey && !e.shiftKey && !this.selectedNodes.has(nodeId)) {
-            this.clearSelection();
-        }
+        if (!e.ctrlKey && !e.shiftKey && !this.selectedNodes.has(nodeId)) { this.clearSelection(); }
         this.addSelection(nodeId);
         this.mode = 'DRAG_NODES';
         this.dragData.startX = e.clientX;
@@ -270,7 +194,6 @@ class Interaction {
             if (node) this.dragData.nodeOffsets.set(id, { x: node.x, y: node.y });
         });
     }
-
     updateNodeDrag(e) {
         const dx = (e.clientX - this.dragData.startX) / this.graph.scale;
         const dy = (e.clientY - this.dragData.startY) / this.graph.scale;
@@ -285,13 +208,11 @@ class Interaction {
         });
         this.renderer.render();
     }
-
     addSelection(id) {
         this.selectedNodes.add(id);
         const el = document.getElementById(`node-${id}`);
         if(el) el.classList.add('selected');
     }
-
     clearSelection() {
         this.selectedNodes.forEach(id => {
             const el = document.getElementById(`node-${id}`);
@@ -299,7 +220,6 @@ class Interaction {
         });
         this.selectedNodes.clear();
     }
-
     startBoxSelect(e) {
         if (!e.ctrlKey && !e.shiftKey) this.clearSelection();
         this.mode = 'BOX_SELECT';
@@ -311,7 +231,6 @@ class Interaction {
         this.selectionBox.style.height = '0px';
         this.selectionBox.style.display = 'block';
     }
-
     updateBoxSelect(e) {
         const x = Math.min(e.clientX, this.dragData.startX);
         const y = Math.min(e.clientY, this.dragData.startY);
@@ -334,28 +253,23 @@ class Interaction {
             }
         });
     }
-
     finishBoxSelect() { this.selectionBox.style.display = 'none'; }
-
     startPan(e) {
         this.mode = 'PANNING';
         this.dragData.startX = e.clientX;
         this.dragData.startY = e.clientY;
         this.dragData.initialPan = { ...this.graph.pan };
     }
-
     updatePan(e) {
         this.graph.pan.x = this.dragData.initialPan.x + (e.clientX - this.dragData.startX);
         this.graph.pan.y = this.dragData.initialPan.y + (e.clientY - this.dragData.startY);
         this.renderer.updateTransform();
     }
-
     handlePinBreak(e) {
         const pin = e.target;
         this.graph.disconnectPin(parseInt(pin.dataset.node), parseInt(pin.dataset.index), pin.dataset.type);
         this.renderer.render();
     }
-
     handlePinDown(e) {
         e.stopPropagation();
         const pin = e.target;
@@ -387,7 +301,6 @@ class Interaction {
         };
         this.mode = 'DRAG_WIRE';
     }
-
     updateWireDrag(e) {
         const rect = this.dom.container.getBoundingClientRect();
         const mx = (e.clientX - rect.left - this.graph.pan.x)/this.graph.scale;
@@ -399,7 +312,43 @@ class Interaction {
         if(this.dragWire.sourceType === 'output') this.renderer.drawCurve(p1, p2, this.dragWire.dataType, true);
         else this.renderer.drawCurve(p2, p1, this.dragWire.dataType, true);
     }
-
+    finishWireDrag(target) {
+        const s = this.dragWire;
+        const t = { nodeId: parseInt(target.dataset.node), index: parseInt(target.dataset.index), type: target.dataset.type, dataType: target.dataset.dataType };
+        
+        // Auto-Conversion Logic
+        if (s.dataType !== t.dataType) {
+            const srcType = s.sourceType === 'output' ? s.dataType : t.dataType;
+            const tgtType = s.sourceType === 'output' ? t.dataType : s.dataType;
+            const key = `${srcType}->${tgtType}`;
+            const templateName = window.nodeConversions ? window.nodeConversions[key] : null;
+            if (templateName) {
+                const template = window.nodeTemplates.find(n => n.name === templateName);
+                if (template) {
+                    const nodeA = this.graph.nodes.find(n => n.id === s.sourceNode);
+                    const nodeB = this.graph.nodes.find(n => n.id === t.nodeId);
+                    const midX = (nodeA.x + nodeB.x) / 2;
+                    const midY = (nodeA.y + nodeB.y) / 2;
+                    const convNode = this.graph.addNode(template, midX, midY);
+                    this.renderer.createNodeElement(convNode, (e, nid) => this.handleNodeDown(e, nid));
+                    const fromNodeId = s.sourceType === 'output' ? s.sourceNode : t.nodeId;
+                    const fromPinIdx = s.sourceType === 'output' ? s.sourcePin : t.index;
+                    const toNodeId = s.sourceType === 'output' ? t.nodeId : s.sourceNode;
+                    const toPinIdx = s.sourceType === 'output' ? t.index : s.sourcePin;
+                    this.graph.addConnection(fromNodeId, fromPinIdx, convNode.id, 0, srcType);
+                    this.graph.addConnection(convNode.id, 0, toNodeId, toPinIdx, tgtType);
+                    return;
+                }
+            }
+            return; 
+        }
+        
+        const fromNode = s.sourceType === 'output' ? s.sourceNode : t.nodeId;
+        const fromPin = s.sourceType === 'output' ? s.sourcePin : t.index;
+        const toNode = s.sourceType === 'output' ? t.nodeId : s.sourceNode;
+        const toPin = s.sourceType === 'output' ? t.index : s.sourcePin;
+        this.graph.addConnection(fromNode, fromPin, toNode, toPin, s.dataType);
+    }
     handleZoom(e) {
         e.preventDefault();
         const rect = this.dom.container.getBoundingClientRect();
@@ -415,42 +364,80 @@ class Interaction {
         this.hideContextMenu();
     }
 
-    showContextMenu(x, y, type, targetId) {
+    // --- CONTEXT MENU IMPLEMENTATION (with Categories) ---
+    showContextMenu(x, y, type, targetId, pinIndex, pinDir) {
         const menu = this.dom.contextMenu;
         const list = this.dom.contextList;
         const search = this.dom.contextSearch;
+        
         let drawX = x; let drawY = y;
         if(x + 200 > window.innerWidth) drawX -= 200;
         if(y + 300 > window.innerHeight) drawY -= 300;
         menu.style.left = drawX + 'px'; menu.style.top = drawY + 'px';
         menu.classList.add('visible');
-        const rect = this.dom.container.getBoundingClientRect();
-        this.contextMenuPos = {
-            x: (x - rect.left - this.graph.pan.x)/this.graph.scale,
-            y: (y - rect.top - this.graph.pan.y)/this.graph.scale
-        };
         list.innerHTML = '';
-        if (type === 'node') {
+
+        if (type === 'pin') {
             search.style.display = 'none';
-            if (this.selectedNodes.size > 0) {
-                const liCopy = document.createElement('li');
-                liCopy.className = 'ctx-item';
-                liCopy.innerHTML = `<span>Copy</span>`;
-                liCopy.onclick = () => { this.copySelection(); this.hideContextMenu(); };
-                list.appendChild(liCopy);
-            }
+            const node = this.graph.nodes.find(n => n.id === targetId);
+            if (!node) return;
+            const pin = (pinDir === 'input') ? node.inputs[pinIndex] : node.outputs[pinIndex];
+            if (pin && pin.allowedTypes) {
+                const head = document.createElement('li');
+                head.className = 'ctx-item';
+                head.style.fontWeight = 'bold';
+                head.style.cursor = 'default';
+                head.innerHTML = `<span>Change Pin Type</span>`;
+                list.appendChild(head);
+                pin.allowedTypes.forEach(t => {
+                    const li = document.createElement('li');
+                    li.className = 'ctx-item';
+                    const check = (t === pin.type) ? "✓ " : "";
+                    const typeDef = window.globalDataTypes.find(g => g.name === t);
+                    const colorVar = typeDef ? typeDef.color : '#fff';
+                    li.innerHTML = `<span style="color:${colorVar}">${check}${t.toUpperCase()}</span>`;
+                    li.onclick = () => {
+                        pin.setType(t);
+                        this.graph.disconnectPin(node.id, pinIndex, pinDir);
+                        this.renderer.refreshNode(node); 
+                        this.hideContextMenu();
+                    };
+                    list.appendChild(li);
+                });
+            } else { this.hideContextMenu(); }
+        }
+        else if (type === 'node') {
+            search.style.display = 'none';
+            const liCopy = document.createElement('li');
+            liCopy.className = 'ctx-item';
+            liCopy.innerHTML = `<span>Copy</span>`;
+            liCopy.onclick = () => { this.copySelection(); this.hideContextMenu(); };
+            list.appendChild(liCopy);
+            
+            const liCut = document.createElement('li');
+            liCut.className = 'ctx-item';
+            liCut.innerHTML = `<span>Cut</span>`;
+            liCut.onclick = () => { this.cutSelection(); this.hideContextMenu(); };
+            list.appendChild(liCut);
+
             const count = this.selectedNodes.size > 1 && this.selectedNodes.has(targetId) ? this.selectedNodes.size : 1;
             const liDelete = document.createElement('li');
             liDelete.className = 'ctx-item';
-            liDelete.innerHTML = `<span style="color:var(--danger-color)">Delete ${count > 1 ? count+' Nodes' : 'Node'}</span>`;
+            liDelete.innerHTML = `<span style="color:var(--danger-color)">Delete ${count > 1 ? count + ' Nodes' : 'Node'}</span>`;
             liDelete.onclick = () => { this.deleteSelected(); this.hideContextMenu(); };
             list.appendChild(liDelete);
-        } else {
+        } 
+        else {
             search.style.display = 'block';
+            this.contextMenuPos = {
+                x: (x - this.dom.container.getBoundingClientRect().left - this.graph.pan.x)/this.graph.scale,
+                y: (y - this.dom.container.getBoundingClientRect().top - this.graph.pan.y)/this.graph.scale
+            };
             const liPaste = document.createElement('li');
             liPaste.className = 'ctx-item';
             liPaste.innerHTML = `<span>Paste</span>`;
             liPaste.style.borderBottom = '1px solid #444';
+            liPaste.style.marginBottom = '5px';
             liPaste.onclick = () => { this.pasteFromClipboard(x, y); this.hideContextMenu(); };
             list.appendChild(liPaste);
             search.value = '';
@@ -463,23 +450,58 @@ class Interaction {
 
     filterContextMenu(q) {
         const lower = q.toLowerCase();
-        this.renderNodeList((window.nodeTemplates||[]).filter(n => n.name.toLowerCase().includes(lower)));
+        // If searching, ignore categories and show flat list
+        const filtered = (window.nodeTemplates||[]).filter(n => n.name.toLowerCase().includes(lower));
+        this.renderNodeList(filtered, !!q);
     }
 
-    renderNodeList(items) {
+    renderNodeList(items, isSearching = false) {
         const list = this.dom.contextList;
         if (this.dom.contextSearch.value !== '') list.innerHTML = '';
-        items.forEach(tmpl => {
-            const li = document.createElement('li');
-            li.className = 'ctx-item';
-            const isFlow = (tmpl.outputs||[]).some(o=>o.type==='exec');
-            li.innerHTML = `<span>${tmpl.name}</span> <span style="font-size:10px; opacity:0.5">${isFlow?'Flow':'Data'}</span>`;
-            li.onclick = () => {
-                const n = this.graph.addNode(tmpl, this.contextMenuPos.x, this.contextMenuPos.y);
-                this.renderer.createNodeElement(n, (e, nid) => this.handleNodeDown(e, nid));
-                this.hideContextMenu();
-            };
-            list.appendChild(li);
-        });
+        
+        // Group by Category
+        if (!isSearching) {
+            const grouped = {};
+            items.forEach(tmpl => {
+                const cat = tmpl.category || "General";
+                if (!grouped[cat]) grouped[cat] = [];
+                grouped[cat].push(tmpl);
+            });
+
+            Object.keys(grouped).sort().forEach(cat => {
+                const header = document.createElement('li');
+                header.className = `ctx-category ${this.collapsedCategories.has(cat) ? 'collapsed' : ''}`;
+                header.innerText = cat;
+                header.onclick = (e) => {
+                    e.stopPropagation();
+                    if (this.collapsedCategories.has(cat)) this.collapsedCategories.delete(cat);
+                    else this.collapsedCategories.add(cat);
+                    this.renderNodeList(items, false); // Re-render to update collapse state
+                };
+                list.appendChild(header);
+
+                if (!this.collapsedCategories.has(cat)) {
+                    grouped[cat].forEach(tmpl => {
+                        this.createMenuItem(tmpl, list, true);
+                    });
+                }
+            });
+        } else {
+            // Flat list for search
+            items.forEach(tmpl => this.createMenuItem(tmpl, list, false));
+        }
+    }
+
+    createMenuItem(tmpl, list, isIndent) {
+        const li = document.createElement('li');
+        li.className = `ctx-item ${isIndent ? 'ctx-folder' : ''}`;
+        const isFlow = (tmpl.outputs||[]).some(o=>o.type==='exec');
+        li.innerHTML = `<span>${tmpl.name}</span> <span style="font-size:10px; opacity:0.5">${isFlow?'Flow':'Data'}</span>`;
+        li.onclick = () => {
+            const n = this.graph.addNode(tmpl, this.contextMenuPos.x, this.contextMenuPos.y);
+            this.renderer.createNodeElement(n, (e, nid) => this.handleNodeDown(e, nid));
+            this.hideContextMenu();
+        };
+        list.appendChild(li);
     }
 }

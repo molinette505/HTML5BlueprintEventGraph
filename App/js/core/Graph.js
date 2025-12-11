@@ -26,7 +26,7 @@ class Graph {
      */
     addNode(template, x, y) {
         // Node constructor implicitly clones properties from the template
-        const node = new Node(this.nextId++, template, x, y);
+        const node = new GraphNode(this.nextId++, template, x, y);
         this.nodes.push(node);
         return node;
     }
@@ -89,5 +89,28 @@ class Graph {
         const conn = new Connection(this.nextConnId++, fromNode, fromPin, toNode, toPin, type);
         this.connections.push(conn);
         return conn;
+    }
+
+    /**
+     * Serializes the entire graph state (nodes, connections, viewport).
+     * @returns {Object} 
+     */
+    toJSON() {
+        return {
+            nodes: this.nodes.map(n => n.toJSON()),
+            connections: this.connections,
+            viewport: { x: this.pan.x, y: this.pan.y, scale: this.scale },
+            counters: { nextId: this.nextId, nextConnId: this.nextConnId }
+        };
+    }
+
+    /**
+     * Clears the graph state.
+     */
+    clear() {
+        this.nodes = [];
+        this.connections = [];
+        this.nextId = 1;
+        this.nextConnId = 1;
     }
 }

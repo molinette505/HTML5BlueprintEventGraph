@@ -1,6 +1,7 @@
 /**
  * FunctionRegistry
  * Maps string identifiers (from JSON) to actual JavaScript functions.
+ * This is the "Engine" that powers your nodes.
  */
 window.FunctionRegistry = {
     // --- FLOW CONTROL ---
@@ -8,33 +9,79 @@ window.FunctionRegistry = {
         console.log("%c[Blueprint Output]:", "color: cyan", msg);
     },
 
-    // --- MATH ---
-    "Math.Add": (a, b) => a + b,
-    "Math.Subtract": (a, b) => a - b,
-    "Math.Multiply": (a, b) => a * b,
+    // --- MATH (Polymorphic) ---
+    
+    // ADD: Vector+Vector, Scalar+Scalar.
+    "Math.AddGeneric": (a, b) => {
+        const isVector = (v) => v && typeof v === 'object' && 'x' in v;
+        const isNumber = (v) => typeof v === 'number';
+
+        if (isVector(a) && isVector(b)) return { x: a.x + b.x, y: a.y + b.y, z: a.z + b.z };
+        if (isNumber(a) && isNumber(b)) return a + b; 
+
+        const err = new Error("Addition is not supported between these types.");
+        err.isBlueprintError = true; throw err; 
+    },
+
+    // SUBTRACT: Vector-Vector, Scalar-Scalar.
+    "Math.SubtractGeneric": (a, b) => {
+        const isVector = (v) => v && typeof v === 'object' && 'x' in v;
+        const isNumber = (v) => typeof v === 'number';
+
+        if (isVector(a) && isVector(b)) return { x: a.x - b.x, y: a.y - b.y, z: a.z - b.z };
+        if (isNumber(a) && isNumber(b)) return a - b;
+
+        const err = new Error("Subtraction is not supported between these types.");
+        err.isBlueprintError = true; throw err; 
+    },
+
+    // MULTIPLY: Scalar*Scalar, Scalar*Vector, Vector*Scalar.
+    "Math.MultiplyGeneric": (a, b) => {
+        const isVector = (v) => v && typeof v === 'object' && 'x' in v;
+        const isNumber = (v) => typeof v === 'number';
+
+        if (isNumber(a) && isNumber(b)) return a * b;
+        if (isNumber(a) && isVector(b)) return { x: a * b.x, y: a * b.y, z: a * b.z };
+        if (isVector(a) && isNumber(b)) return { x: a.x * b, y: a.y * b, z: a.z * b };
+
+        const err = new Error("Multiplication not supported (Cannot multiply Vector by Vector).");
+        err.isBlueprintError = true; throw err; 
+    },
+
+    // DIVIDE: Scalar/Scalar, Vector/Scalar.
+    "Math.DivideGeneric": (a, b) => {
+        const isVector = (v) => v && typeof v === 'object' && 'x' in v;
+        const isNumber = (v) => typeof v === 'number';
+
+        if (isNumber(b) && b === 0) {
+            const err = new Error("Division by zero.");
+            err.isBlueprintError = true; throw err;
+        }
+
+        if (isNumber(a) && isNumber(b)) return a / b;
+        if (isVector(a) && isNumber(b)) return { x: a.x / b, y: a.y / b, z: a.z / b };
+
+        const err = new Error("Invalid Division (Cannot divide Scalar by Vector).");
+        err.isBlueprintError = true; throw err; 
+    },
     
     // --- VECTORS ---
-    "Vector.Make": (x, y, z) => ({ x, y, z }),
+    "Vector.Make": (x, y, z) => ({ x: x||0, y: y||0, z: z||0 }),
     
     "Vector.Add": (v1, v2) => {
         const a = v1 || {x:0, y:0, z:0};
         const b = v2 || {x:0, y:0, z:0};
-        return {
-            x: a.x + b.x,
-            y: a.y + b.y,
-            z: a.z + b.z
-        };
+        return { x: a.x + b.x, y: a.y + b.y, z: a.z + b.z };
     },
 
     // --- MAKE LITERALS ---
-    // Essentially identity functions that pass the input widget value to the output
     "Make.Float": (val) => parseFloat(val),
     "Make.Int": (val) => parseInt(val),
     "Make.String": (val) => String(val),
 
     // --- CONVERSIONS ---
-    "Conv.IntToFloat": (val) => val, // JS numbers are floats anyway, but acts as cast
-    "Conv.FloatToInt": (val) => Math.trunc(val), // Unreal Truncates
+    "Conv.IntToFloat": (val) => val, 
+    "Conv.FloatToInt": (val) => Math.trunc(val), 
     "Conv.FloatToString": (val) => (val !== undefined ? val.toString() : "0.0"),
     "Conv.IntToString": (val) => (val !== undefined ? val.toString() : "0"),
     "Conv.VectorToString": (v) => {

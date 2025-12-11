@@ -13,39 +13,53 @@ class Pin {
      */
     constructor(node, index, direction, template) {
         this.node = node;
-        this.nodeId = node.id;      // Cached ID for easier DOM/Interaction lookups
+        this.nodeId = node.id;
         this.index = index;
-        this.direction = direction; // 'input' or 'output'
+        this.direction = direction;
         
-        // Pin Metadata
         this.name = template.name;
-        this.type = template.type;      // e.g., 'exec', 'string', 'vector'
-        this.dataType = template.type;  // Alias used for compatibility checking
-        this.advanced = template.advanced || false; // If true, pin is hidden inside "Advanced" fold
+        this.type = template.type;
+        this.dataType = template.type;
+        this.advanced = template.advanced || false;
+        this.allowedTypes = template.allowedTypes || null; 
         
-        // --- Widget Initialization ---
         this.widget = null;
-        this.value = null; // Stores the local value (used when not connected)
+        this.value = null; 
 
-        // Only Input pins can have widgets (controls like textboxes/checkboxes)
         if (direction === 'input') {
-            // 1. Lookup Global Type Definition (for default colors/widgets)
-            const typeDef = window.typeDefinitions ? window.typeDefinitions[this.type] : null;
-            
-            // 2. Determine Widget Type
-            // Priority: Explicit 'widget' in Node JSON > Default 'widget' in DataTypes.js > 'none'
-            const widgetType = template.widget || (typeDef ? typeDef.widget : 'none');
+            this.initWidget(template);
+        }
+    }
 
-            // 3. Instantiate Widget Model if valid
-            if (widgetType && widgetType !== 'none') {
-                const defaultValue = this.getDefaultValue(this.type, template.default);
-                
-                // Create the Widget Model (holds options for dropdowns, current value, etc.)
-                this.widget = new Widget(widgetType, defaultValue, template.options);
-                
-                // Sync Pin value with Widget value immediately
-                this.value = defaultValue;
-            }
+    initWidget(template) {
+        const typeDef = window.typeDefinitions ? window.typeDefinitions[this.type] : null;
+        // Priority: Explicit widget > Type Default widget > None
+        const widgetType = template ? (template.widget || (typeDef ? typeDef.widget : 'none')) : (typeDef ? typeDef.widget : 'none');
+
+        if (widgetType && widgetType !== 'none') {
+            const defVal = template ? template.default : undefined;
+            const defaultValue = this.getDefaultValue(this.type, defVal);
+            this.widget = new Widget(widgetType, defaultValue, template ? template.options : []);
+            this.value = defaultValue;
+        } else {
+            this.widget = null;
+        }
+    }
+
+    /**
+     * Changes the pin type and resets its value to the new type's default.
+     * Re-initializes the widget model if the type implies a different widget (e.g. float -> vector).
+     * @param {String} newType - The new data type identifier.
+     */
+    setType(newType) {
+        this.type = newType;
+        this.dataType = newType;
+        
+        if (this.direction === 'input') {
+            // Re-run widget initialization with null template to force type-based defaults
+            this.initWidget(null);
+        } else {
+            this.value = this.getDefaultValue(newType);
         }
     }
 
@@ -56,10 +70,7 @@ class Pin {
      * @returns {any} The resolved default value.
      */
     getDefaultValue(type, manualDefault) {
-        // If the JSON explicitly defines a default, use it.
         if (manualDefault !== undefined) return manualDefault;
-
-        // Otherwise, return a sensible default based on the Data Type
         switch (type) {
             case 'string': return "Hello World";
             case 'float': return 0.0;

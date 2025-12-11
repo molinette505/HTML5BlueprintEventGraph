@@ -1,13 +1,15 @@
 window.globalNodes = [
     {
         "name": "Event BeginPlay",
+        "category": "Events",
         "color": "var(--n-event)",
         "outputs": [{"name": "Out", "type": "exec"}]
     },
     {
         "name": "Print String",
+        "category": "String",
         "color": "var(--n-func)",
-        "functionId": "Flow.Print", 
+        "functionId": "Flow.Print",
         "inputs": [
             {"name": "In", "type": "exec"},
             {"name": "String", "type": "string"},
@@ -16,9 +18,84 @@ window.globalNodes = [
         ],
         "outputs": [{"name": "Out", "type": "exec"}]
     },
-    // --- MAKE LITERALS ---
+    // --- GENERIC MATH ---
+    {
+        "name": "Add",
+        "category": "Math",
+        "color": "var(--n-pure)",
+        "functionId": "Math.AddGeneric",
+        "centerLabel": "+",
+        "inputs": [
+            { "name": "A", "type": "float", "allowedTypes": ["float", "int", "vector"] },
+            { "name": "B", "type": "float", "allowedTypes": ["float", "int", "vector"] }
+        ],
+        "outputs": [{ "name": "Result", "type": "float", "allowedTypes": ["float", "int", "vector"] }]
+    },
+    {
+        "name": "Subtract",
+        "category": "Math",
+        "color": "var(--n-pure)",
+        "functionId": "Math.SubtractGeneric",
+        "centerLabel": "-",
+        "inputs": [
+            { "name": "A", "type": "float", "allowedTypes": ["float", "int", "vector"] },
+            { "name": "B", "type": "float", "allowedTypes": ["float", "int", "vector"] }
+        ],
+        "outputs": [{ "name": "Result", "type": "float", "allowedTypes": ["float", "int", "vector"] }]
+    },
+    {
+        "name": "Multiply",
+        "category": "Math",
+        "color": "var(--n-pure)",
+        "functionId": "Math.MultiplyGeneric",
+        "centerLabel": "×",
+        "inputs": [
+            { "name": "A", "type": "float", "allowedTypes": ["float", "int", "vector"] },
+            { "name": "B", "type": "float", "allowedTypes": ["float", "int", "vector"] }
+        ],
+        "outputs": [{ "name": "Result", "type": "float", "allowedTypes": ["float", "int", "vector"] }]
+    },
+    {
+        "name": "Divide",
+        "category": "Math",
+        "color": "var(--n-pure)",
+        "functionId": "Math.DivideGeneric",
+        "centerLabel": "÷",
+        "inputs": [
+            { "name": "A", "type": "float", "allowedTypes": ["float", "int", "vector"] },
+            { "name": "B", "type": "float", "allowedTypes": ["float", "int", "vector"] }
+        ],
+        "outputs": [{ "name": "Result", "type": "float", "allowedTypes": ["float", "int", "vector"] }]
+    },
+    // --- SPECIFIC MATH ---
+    {
+        "name": "Add (Integer)",
+        "category": "Math|Integer",
+        "color": "var(--n-pure)",
+        "functionId": "Math.AddGeneric",
+        "centerLabel": "+",
+        "inputs": [
+            { "name": "A", "type": "int", "allowedTypes": ["float", "int", "vector"] },
+            { "name": "B", "type": "int", "allowedTypes": ["float", "int", "vector"] }
+        ],
+        "outputs": [{ "name": "Result", "type": "int", "allowedTypes": ["float", "int", "vector"] }]
+    },
+    {
+        "name": "Add (Vector)",
+        "category": "Math|Vector",
+        "color": "var(--n-pure)",
+        "functionId": "Math.AddGeneric",
+        "centerLabel": "+",
+        "inputs": [
+            { "name": "A", "type": "vector", "allowedTypes": ["float", "int", "vector"] },
+            { "name": "B", "type": "vector", "allowedTypes": ["float", "int", "vector"] }
+        ],
+        "outputs": [{ "name": "Result", "type": "vector", "allowedTypes": ["float", "int", "vector"] }]
+    },
+    // --- LITERALS ---
     {
         "name": "Make Float",
+        "category": "Variables",
         "color": "var(--n-pure)",
         "functionId": "Make.Float",
         "inputs": [{"name": "Value", "type": "float", "default": 0.0}],
@@ -26,6 +103,7 @@ window.globalNodes = [
     },
     {
         "name": "Make Integer",
+        "category": "Variables",
         "color": "var(--n-pure)",
         "functionId": "Make.Int",
         "inputs": [{"name": "Value", "type": "int", "default": 0}],
@@ -33,14 +111,26 @@ window.globalNodes = [
     },
     {
         "name": "Make String",
+        "category": "Variables",
         "color": "var(--n-pure)",
         "functionId": "Make.String",
         "inputs": [{"name": "Value", "type": "string", "default": "Hello"}],
         "outputs": [{"name": "Return Value", "type": "string"}]
     },
+    {
+        "name": "Make Vector",
+        "category": "Math|Vector",
+        "color": "var(--n-pure)",
+        "functionId": "Vector.Make",
+        "inputs": [
+            {"name": "X", "type": "float"}, {"name": "Y", "type": "float"}, {"name": "Z", "type": "float"}
+        ],
+        "outputs": [{"name": "Vec", "type": "vector"}]
+    },
     // --- CONVERSIONS ---
     {
         "name": "Int to Float",
+        "category": "Conversion",
         "color": "var(--n-pure)",
         "functionId": "Conv.IntToFloat",
         "inputs": [{"name": "Int", "type": "int"}],
@@ -48,6 +138,7 @@ window.globalNodes = [
     },
     {
         "name": "Float to Int",
+        "category": "Conversion",
         "color": "var(--n-pure)",
         "functionId": "Conv.FloatToInt",
         "inputs": [{"name": "Float", "type": "float"}],
@@ -55,87 +146,35 @@ window.globalNodes = [
     },
     {
         "name": "Float to String",
+        "category": "Conversion",
         "color": "var(--n-pure)",
         "functionId": "Conv.FloatToString",
         "inputs": [{"name": "Float", "type": "float"}],
         "outputs": [{"name": "String", "type": "string"}]
     },
     {
-        "name": "Int to String",
-        "color": "var(--n-pure)",
-        "functionId": "Conv.IntToString",
-        "inputs": [{"name": "Int", "type": "int"}],
-        "outputs": [{"name": "String", "type": "string"}]
-    },
-    {
         "name": "Vector to String",
+        "category": "Conversion",
         "color": "var(--n-pure)",
         "functionId": "Conv.VectorToString",
         "inputs": [{"name": "Vec", "type": "vector"}],
         "outputs": [{"name": "String", "type": "string"}]
     },
-    // --- EXISTING NODES ---
-    {
-        "name": "Make Vector",
-        "color": "var(--n-pure)",
-        "functionId": "Vector.Make", 
-        "inputs": [
-            {"name": "X", "type": "float"},
-            {"name": "Y", "type": "float"},
-            {"name": "Z", "type": "float"}
-        ],
-        "outputs": [{"name": "Vec", "type": "vector"}]
-    },
+    // --- GAMEPLAY ---
     {
         "name": "Spawn Actor From Class",
+        "category": "Game",
         "color": "var(--n-func)",
         "inputs": [
             {"name": "Exec", "type": "exec"},
-            {
-                "name": "Class", "type": "class", 
-                "options": ["BP_Button", "BP_Door", "BP_Button1", "BP_Door1", "BP_Door2"], 
-                "default": "BP_Button"
-            },
+            { "name": "Class", "type": "class", "default": "BP_Button" },
             {"name": "Spawn Transform", "type": "transform"},
-            {
-                "name": "Collision Handling Override", "type": "string", "widget": "dropdown",
-                "options": ["Default", "Always Spawn", "Try To Adjust"],
-                "default": "Default"
-            },
-            {
-                "name": "Owner", "type": "object", "advanced": true,
-                "options": ["Self", "Player", "Level"], "default": "Self"
-            },
-            {
-                "name": "Instigator", "type": "object", "advanced": true,
-                "options": ["Self", "Player", "Level"], "default": "Self"
-            }
+            { "name": "Collision", "type": "string", "widget": "dropdown", "options": ["Default", "Always"] }
         ],
-        "outputs": [
-            {"name": "Out", "type": "exec"},
-            {"name": "Return Value", "type": "object"}
-        ]
-    },
-    {
-        "name": "Vector + Vector",
-        "hideHeader": true,
-        "centerLabel": "+",
-        "functionId": "Vector.Add", 
-        "inputs": [{"name": "", "type": "vector"}, {"name": "", "type": "vector"}],
-        "outputs": [{"name": "", "type": "vector"}]
-    },
-    {
-        "name": "Int + Int",
-        "hideHeader": true,
-        "centerLabel": "+",
-        "functionId": "Math.Add", 
-        "inputs": [{"name": "", "type": "int"}, {"name": "", "type": "int"}],
-        "outputs": [{"name": "", "type": "int"}]
+        "outputs": [{"name": "Out", "type": "exec"}, {"name": "Return Value", "type": "object"}]
     }
 ];
 
-// --- AUTO CONVERSION MAP ---
-// Key: "SourceType->TargetType", Value: "Node Template Name"
 window.nodeConversions = {
     "int->float": "Int to Float",
     "float->int": "Float to Int",

@@ -65,7 +65,7 @@ class Renderer {
     }
 
     /**
-     * Creates the DOM element for a new node and adds it to the screen.
+     * Creates the DOM element for a new Node and adds it to the screen.
      * @param {Node} node - The Node Model object.
      * @param {Function} onDragCallback - Function to call when user tries to drag this node.
      */

@@ -17,8 +17,7 @@ class WidgetRenderer {
 
         switch (widget.type) {
             case 'text': return this.createInput(widget, 'text', '60px', onUpdate);
-            case 'number': return this.createInput(widget, 'number', '40px', onUpdate);
-            // Color: Pass null width so CSS handles the square aspect ratio
+            case 'number': return this.createInput(widget, 'number', '40px', onUpdate, true);
             case 'color': return this.createInput(widget, 'color', null, onUpdate); 
             case 'checkbox': return this.createCheckbox(widget, onUpdate);
             case 'dropdown': return this.createDropdown(widget, onUpdate);
@@ -30,25 +29,25 @@ class WidgetRenderer {
     /**
      * Creates standard HTML inputs (text, number, color).
      */
-    createInput(widget, type, width, onUpdate) {
+    createInput(widget, type, width, onUpdate, isNumber = false) {
         const input = document.createElement('input');
         input.type = type;
         input.className = 'node-widget';
-        
-        // Only override CSS width if a specific width is provided (e.g. for text inputs)
         if (width) input.style.width = width;
+        if (isNumber) input.step = "any"; // Allow floats
         
         input.value = widget.value;
-        
-        // Color inputs use 'change' (on close), others use 'input' (live typing)
         const evt = type === 'color' ? 'change' : 'input';
         
         input.addEventListener(evt, (e) => {
-            widget.value = e.target.value;
+            let val = e.target.value;
+            // Parse numbers immediately to ensure math operations work
+            if (isNumber) val = (val === '' || val === '-') ? 0 : parseFloat(val);
+            
+            widget.value = val;
             if(onUpdate) onUpdate(widget.value);
         });
         
-        // Prevent Graph panning when clicking/dragging inside the input
         this.stopDrag(input);
         return input;
     }
@@ -77,8 +76,6 @@ class WidgetRenderer {
     createDropdown(widget, onUpdate) {
         const select = document.createElement('select');
         select.className = 'node-widget';
-        // Note: Width is handled by CSS (auto/max-width) to fit long options
-        
         (widget.options || []).forEach(opt => {
             const option = document.createElement('option');
             option.value = opt;
@@ -102,19 +99,19 @@ class WidgetRenderer {
     createVector(widget, onUpdate) {
         const div = document.createElement('div');
         div.className = 'widget-vec3';
-        
-        // Ensure value is an object, default to 0,0,0
         const val = widget.value || {x:0, y:0, z:0};
         
         ['x', 'y', 'z'].forEach(axis => {
             const i = document.createElement('input');
-            i.type = 'number';
+            i.type = 'number'; 
+            i.step = 'any';
             i.placeholder = axis.toUpperCase();
             i.value = val[axis];
             
             i.addEventListener('input', (e) => {
-                val[axis] = parseFloat(e.target.value);
-                widget.value = val; // Update Model reference
+                const num = parseFloat(e.target.value);
+                val[axis] = isNaN(num) ? 0 : num;
+                widget.value = val; 
                 if(onUpdate) onUpdate(val);
             });
             
