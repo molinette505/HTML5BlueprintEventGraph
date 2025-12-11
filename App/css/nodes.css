@@ -1,6 +1,6 @@
 .node {
     position: absolute;
-    width: max-content;    /* [FIX] Prevents squashing when dragged near edges */
+    width: max-content;    
     min-width: 140px;      
     background: var(--node-bg);
     border-radius: 8px;

@@ -20,11 +20,11 @@ class GraphNode {
         // Node Configuration
         this.name = template.name;
         this.color = template.color || "var(--header-bg)";
-        this.width = template.width; // Optional override for node width
+        this.width = template.width; 
         
         // Layout Flags
-        this.hideHeader = template.hideHeader || false; // Used for "Compact" nodes (like Math)
-        this.centerLabel = template.centerLabel || null; // Used for Math symbols (+, -, etc)
+        this.hideHeader = template.hideHeader || false; 
+        this.centerLabel = template.centerLabel || null; 
         
         // State: Tracks if "Advanced" pins are currently visible
         this.showAdvanced = false;
@@ -94,8 +94,8 @@ class GraphNode {
      */
     toJSON() {
         return {
-            id: this.id, // Needed for connection mapping during full save
-            name: this.name, // Template Name identifier
+            id: this.id, 
+            name: this.name, 
             x: this.x,
             y: this.y,
             // Persist current pin types to restore polymorphic state
@@ -104,9 +104,10 @@ class GraphNode {
                 outputs: this.outputs.map(p => p.type)
             },
             // Save Input values (widgets)
+            // [FIX] Priority to widget.value to ensure current user input is saved
             inputs: this.inputs.map(p => ({
                 name: p.name,
-                value: p.value 
+                value: p.widget ? p.widget.value : p.value 
             }))
         };
     }

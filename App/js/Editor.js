@@ -35,15 +35,12 @@ class Editor {
         // 4. Bind Events
         
         // --- Play Button Logic ---
-        // Toggles between "Start" (from stopped) and "Resume" (from paused)
         this.dom.btnPlay.onclick = () => {
             if(this.simulation.status === 'PAUSED') this.simulation.resume();
             else this.simulation.start();
         };
         
         // --- Pause / Start Paused Logic ---
-        // If Stopped: Starts the simulation but immediately pauses (Start Paused).
-        // If Running: Pauses the simulation.
         this.dom.btnPause.onclick = () => {
             if (this.simulation.status === 'STOPPED') {
                 this.simulation.startPaused();
@@ -57,7 +54,7 @@ class Editor {
         this.dom.btnReplay.onclick = () => this.simulation.replayStep();
         this.dom.btnStop.onclick = () => this.simulation.stop();
         
-        // Initialize Controls State based on default status
+        // Initialize Controls State
         this.updateControls(this.simulation.status);
         
         // Context Menu Search Filter
@@ -66,7 +63,6 @@ class Editor {
         }
 
         // --- PERSISTENCE ---
-        // Ctrl+S to Save
         document.addEventListener('keydown', e => {
             if ((e.ctrlKey || e.metaKey) && e.key === 's') {
                 e.preventDefault();
@@ -74,7 +70,7 @@ class Editor {
             }
         });
 
-        // Load saved state or default demo
+        // Load saved state or default
         const saved = localStorage.getItem('blueprints_save');
         if (saved) {
             this.loadGraph(saved);
@@ -85,36 +81,28 @@ class Editor {
 
     /**
      * Updates the Toolbar buttons based on the Simulation State.
-     * Handles enabling/disabling and Icon Swapping.
-     * @param {String} status - 'STOPPED', 'RUNNING', or 'PAUSED'
      */
     updateControls(status) {
         const d = this.dom;
-        
-        // Icons
-        // Play Triangle + Vertical Bar = "Start Paused"
         const iconStartPaused = `<svg viewBox="0 0 24 24"><path d="M6 5v14l9-7z M17 5v14h2V5z"/></svg>`;
-        // Standard Pause Bars
         const iconPause = `<svg viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>`;
 
         if (status === 'STOPPED') {
             d.btnPlay.disabled = false;
             d.btnPlay.title = "Play";
             
-            // Enable Pause button as "Start Paused"
             d.btnPause.disabled = false;
             d.btnPause.innerHTML = iconStartPaused; 
             d.btnPause.title = "Start Paused"; 
             
-            d.btnReplay.disabled = true; // Nothing to replay
-            d.btnStep.disabled = false; // Can step from start
+            d.btnReplay.disabled = true; 
+            d.btnStep.disabled = false; 
             d.btnStop.disabled = true;
         } 
         else if (status === 'RUNNING') {
             d.btnPlay.disabled = true;
-            
             d.btnPause.disabled = false;
-            d.btnPause.innerHTML = iconPause; // Swap to Pause icon
+            d.btnPause.innerHTML = iconPause; 
             d.btnPause.title = "Pause";
             
             d.btnReplay.disabled = true; 
@@ -124,12 +112,8 @@ class Editor {
         else if (status === 'PAUSED') {
             d.btnPlay.disabled = false; 
             d.btnPlay.title = "Resume";
-            
-            d.btnPause.disabled = true; // Already paused
-            
-            // Enable Replay if there is a previous step available
+            d.btnPause.disabled = true; 
             d.btnReplay.disabled = !this.simulation.lastProcessedItem;
-            
             d.btnStep.disabled = false;
             d.btnStop.disabled = false;
         }
@@ -161,20 +145,17 @@ class Editor {
             this.dom.nodesLayer.innerHTML = '';
             this.dom.connectionsLayer.innerHTML = '';
 
-            // Restore Viewport
             if (data.viewport) {
                 this.graph.pan = { x: data.viewport.x, y: data.viewport.y };
                 this.graph.scale = data.viewport.scale;
                 this.renderer.updateTransform();
             }
 
-            // Restore ID Counters to prevent collisions
             if (data.counters) {
                 this.graph.nextId = data.counters.nextId;
                 this.graph.nextConnId = data.counters.nextConnId;
             }
 
-            // Restore Nodes
             data.nodes.forEach(nData => {
                 const template = window.nodeTemplates.find(t => t.name === nData.name);
                 if (!template) return;
@@ -182,35 +163,40 @@ class Editor {
                 const node = this.graph.addNode(template, nData.x, nData.y);
                 node.id = nData.id; 
                 
-                // Restore Widget Values
-                if (nData.inputs) {
-                    nData.inputs.forEach(savedPin => {
-                        const realPin = node.inputs.find(p => p.name === savedPin.name);
-                        if (realPin) {
-                            realPin.value = savedPin.value;
-                            if (realPin.widget) realPin.widget.value = savedPin.value;
-                        }
-                    });
-                }
-
-                // Restore Pin Types (Polymorphism)
+                // [FIX 1] Restore Pin Types FIRST
                 if (nData.pinTypes) {
                     if (nData.pinTypes.inputs) {
                         nData.pinTypes.inputs.forEach((type, idx) => {
-                            if (node.inputs[idx] && type) node.inputs[idx].setType(type);
+                            if (node.inputs[idx] && type && node.inputs[idx].type !== type) {
+                                node.inputs[idx].setType(type);
+                            }
                         });
                     }
                     if (nData.pinTypes.outputs) {
                         nData.pinTypes.outputs.forEach((type, idx) => {
-                            if (node.outputs[idx] && type) node.outputs[idx].setType(type);
+                            if (node.outputs[idx] && type && node.outputs[idx].type !== type) {
+                                node.outputs[idx].setType(type);
+                            }
                         });
                     }
+                }
+
+                // [FIX 2] Restore Widget Values SECOND
+                if (nData.inputs) {
+                    nData.inputs.forEach((savedPin, index) => {
+                        const realPin = node.inputs[index];
+                        if (realPin) {
+                            realPin.value = savedPin.value;
+                            if (realPin.widget) {
+                                realPin.widget.value = savedPin.value;
+                            }
+                        }
+                    });
                 }
                 
                 this.renderer.createNodeElement(node, (e, nid) => this.interaction.handleNodeDown(e, nid));
             });
 
-            // Restore Connections
             data.connections.forEach(c => {
                 const n1 = this.graph.nodes.find(n => n.id === c.fromNode);
                 const n2 = this.graph.nodes.find(n => n.id === c.toNode);
@@ -229,25 +215,50 @@ class Editor {
 
     initDemo() {
         if(!window.nodeTemplates) return;
-        const t1 = window.nodeTemplates.find(n => n.name === "Event BeginPlay");
-        const t2 = window.nodeTemplates.find(n => n.name === "Print String");
-        const t3 = window.nodeTemplates.find(n => n.name === "Spawn Actor From Class");
         
-        if(t1 && t2) {
-            const n1 = this.graph.addNode(t1, 100, 150);
-            const n2 = this.graph.addNode(t2, 450, 150);
-            
-            if(t3) {
-                 const n3 = this.graph.addNode(t3, 100, 350);
-                 this.renderer.createNodeElement(n3, (e,id) => this.interaction.handleNodeDown(e,id));
-            }
+        const tEvent = window.nodeTemplates.find(n => n.name === "Event BeginPlay");
+        const tMakeFloat = window.nodeTemplates.find(n => n.name === "Make Float");
+        const tAdd = window.nodeTemplates.find(n => n.name === "Add");
+        const tGeq = window.nodeTemplates.find(n => n.name === "Greater Equal (>=)");
+        const tBranch = window.nodeTemplates.find(n => n.name === "Branch");
+        const tPrint = window.nodeTemplates.find(n => n.name === "Print String");
 
-            this.renderer.createNodeElement(n1, (e,id) => this.interaction.handleNodeDown(e,id));
-            this.renderer.createNodeElement(n2, (e,id) => this.interaction.handleNodeDown(e,id));
+        if(!tEvent || !tMakeFloat || !tAdd || !tGeq || !tBranch) return;
+
+        const nEvent = this.graph.addNode(tEvent, 50, 50);
+        const nBranch = this.graph.addNode(tBranch, 300, 50);
+        
+        const nFloat = this.graph.addNode(tMakeFloat, 50, 200);
+        if(nFloat.inputs[0].widget) nFloat.inputs[0].widget.value = 5.0; 
+
+        const nAdd = this.graph.addNode(tAdd, 250, 200);
+        if(nAdd.inputs[1].widget) nAdd.inputs[1].widget.value = 10.0; 
+
+        const nGeq = this.graph.addNode(tGeq, 450, 200);
+        if(nGeq.inputs[1].widget) nGeq.inputs[1].widget.value = 12.0; 
+
+        let nTrue, nFalse;
+        if(tPrint) {
+            nTrue = this.graph.addNode(tPrint, 550, 20);
+            if(nTrue.inputs[1].widget) nTrue.inputs[1].widget.value = "True: >= 12";
             
-            this.graph.addConnection(n1.id, 0, n2.id, 0, 'exec');
-            this.renderer.render();
+            nFalse = this.graph.addNode(tPrint, 550, 150);
+            if(nFalse.inputs[1].widget) nFalse.inputs[1].widget.value = "False: < 12";
         }
+
+        [nEvent, nBranch, nFloat, nAdd, nGeq, nTrue, nFalse].forEach(n => {
+            if(n) this.renderer.createNodeElement(n, (e,id) => this.interaction.handleNodeDown(e,id));
+        });
+
+        this.graph.addConnection(nEvent.id, 0, nBranch.id, 0, 'exec');
+        if(nTrue) this.graph.addConnection(nBranch.id, 0, nTrue.id, 0, 'exec'); 
+        if(nFalse) this.graph.addConnection(nBranch.id, 1, nFalse.id, 0, 'exec'); 
+
+        this.graph.addConnection(nFloat.id, 0, nAdd.id, 0, 'float');
+        this.graph.addConnection(nAdd.id, 0, nGeq.id, 0, 'float');
+        this.graph.addConnection(nGeq.id, 0, nBranch.id, 1, 'boolean');
+
+        this.renderer.render();
     }
 }
 
