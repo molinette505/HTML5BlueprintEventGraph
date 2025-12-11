@@ -17,13 +17,13 @@ path.connection {
 
 path.connection:hover {
     stroke-width: 4px;
-    stroke: var(--danger-color);
+    stroke: var(--wire-hover);
 }
 
 path.connection.pulse {
     stroke: var(--wire-highlight);
     stroke-width: 4px;
-    filter: drop-shadow(0 0 5px orange);
+    filter: drop-shadow(0 0 5px var(--wire-glow));
     animation: dash 0.5s linear infinite;
     stroke-dasharray: 10, 5;
 }

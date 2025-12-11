@@ -1,22 +1,51 @@
 :root {
-    /* --- UI THEME --- */
+    /* --- GENERAL UI --- */
     --bg-color: #1a1a1a;
     --grid-line: #252525;
     --grid-major: #303030;
-    --node-bg: rgba(30, 30, 30, 0.95);
-    --header-default: #444;
     
     --text-main: #e0e0e0;
     --text-dim: #888;
+    --text-shadow: rgba(0, 0, 0, 0.8);
     
     --accent-color: #007acc;
     --danger-color: #d9534f;
-    
-    /* --- WIRE STYLES --- */
-    --wire-default: #fff;
-    --wire-highlight: #ff9900;
 
-    /* --- DATA TYPES (Pins & Wires) --- */
+    /* --- NODE STYLING --- */
+    --node-bg: rgba(30, 30, 30, 0.95);
+    --node-shadow: rgba(0, 0, 0, 0.5);
+    --node-border: rgba(0, 0, 0, 0.4);
+    
+    --node-shadow-hover: rgba(0, 0, 0, 0.6);
+    --node-border-hover: rgba(255, 255, 255, 0.2);
+    
+    /* Header Gradients */
+    --header-default: #444;
+    --header-grad-top: rgba(255, 255, 255, 0.1);
+    --header-grad-bot: rgba(255, 255, 255, 0);
+    --header-border: rgba(0, 0, 0, 0.3);
+
+    /* Advanced Arrow */
+    --arrow-bg: rgba(255, 255, 255, 0.05);
+    --arrow-bg-hover: rgba(255, 255, 255, 0.1);
+    --arrow-color: #aaa;
+
+    /* --- PINS & WIDGETS --- */
+    --pin-hover: rgba(255, 255, 255, 0.3);
+    --pin-snap: #ffffff;
+    --pin-exec-inner: #ffffff;
+    
+    --widget-bg: #111;
+    --widget-border: #333;
+    --widget-text: #ffffff;
+
+    /* --- WIRES --- */
+    --wire-default: #fff;
+    --wire-hover: #d9534f; /* Matches danger */
+    --wire-highlight: #ff9900;
+    --wire-glow: orange;
+
+    /* --- DATA TYPES --- */
     --c-exec:      #FFFFFF;
     --c-boolean:   #8c0000;
     --c-float:     #96ce02;
