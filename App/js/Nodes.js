@@ -1,10 +1,30 @@
 window.globalNodes = [
+    // --- EVENTS ---
     {
         "name": "Event BeginPlay",
         "category": "Events",
         "color": "var(--n-event)",
         "outputs": [{"name": "Out", "type": "exec"}]
     },
+
+    // --- FLOW CONTROL ---
+    // The Branch node directs execution flow based on a boolean condition.
+    {
+        "name": "Branch",
+        "category": "Flow Control",
+        "color": "var(--n-event)", // Uses a distinct header color typically associated with events/flow
+        "functionId": "Flow.Branch",
+        "inputs": [
+            { "name": "Exec", "type": "exec" },
+            { "name": "Condition", "type": "boolean", "default": true } // Checked by default
+        ],
+        "outputs": [
+            { "name": "True", "type": "exec" },
+            { "name": "False", "type": "exec" }
+        ]
+    },
+
+    // --- DEBUGGING ---
     {
         "name": "Print String",
         "category": "String",
@@ -18,6 +38,7 @@ window.globalNodes = [
         ],
         "outputs": [{"name": "Out", "type": "exec"}]
     },
+
     // --- GENERIC MATH ---
     {
         "name": "Add",
@@ -67,32 +88,91 @@ window.globalNodes = [
         ],
         "outputs": [{ "name": "Result", "type": "float", "allowedTypes": ["float", "int", "vector"] }]
     },
-    // --- SPECIFIC MATH ---
+
+    // --- LOGIC / COMPARISON ---
+    // These nodes allow input type switching (Polymorphism) via 'allowedTypes'.
     {
-        "name": "Add (Integer)",
-        "category": "Math|Integer",
+        "name": "Equal (==)",
+        "category": "Logic",
         "color": "var(--n-pure)",
-        "functionId": "Math.AddGeneric",
-        "centerLabel": "+",
+        "functionId": "Logic.Equal",
+        "centerLabel": "==",
         "inputs": [
-            { "name": "A", "type": "int", "allowedTypes": ["float", "int", "vector"] },
-            { "name": "B", "type": "int", "allowedTypes": ["float", "int", "vector"] }
+            { "name": "A", "type": "float", "allowedTypes": ["float", "int", "string", "boolean"] },
+            { "name": "B", "type": "float", "allowedTypes": ["float", "int", "string", "boolean"] }
         ],
-        "outputs": [{ "name": "Result", "type": "int", "allowedTypes": ["float", "int", "vector"] }]
+        "outputs": [{ "name": "Result", "type": "boolean" }]
     },
     {
-        "name": "Add (Vector)",
-        "category": "Math|Vector",
+        "name": "Not Equal (!=)",
+        "category": "Logic",
         "color": "var(--n-pure)",
-        "functionId": "Math.AddGeneric",
-        "centerLabel": "+",
+        "functionId": "Logic.NotEqual",
+        "centerLabel": "!=",
         "inputs": [
-            { "name": "A", "type": "vector", "allowedTypes": ["float", "int", "vector"] },
-            { "name": "B", "type": "vector", "allowedTypes": ["float", "int", "vector"] }
+            { "name": "A", "type": "float", "allowedTypes": ["float", "int", "string", "boolean"] },
+            { "name": "B", "type": "float", "allowedTypes": ["float", "int", "string", "boolean"] }
         ],
-        "outputs": [{ "name": "Result", "type": "vector", "allowedTypes": ["float", "int", "vector"] }]
+        "outputs": [{ "name": "Result", "type": "boolean" }]
     },
-    // --- LITERALS ---
+    {
+        "name": "Greater (>)",
+        "category": "Logic",
+        "color": "var(--n-pure)",
+        "functionId": "Logic.Greater",
+        "centerLabel": ">",
+        "inputs": [
+            { "name": "A", "type": "float", "allowedTypes": ["float", "int", "string"] },
+            { "name": "B", "type": "float", "allowedTypes": ["float", "int", "string"] }
+        ],
+        "outputs": [{ "name": "Result", "type": "boolean" }]
+    },
+    {
+        "name": "Greater Equal (>=)",
+        "category": "Logic",
+        "color": "var(--n-pure)",
+        "functionId": "Logic.GreaterEqual",
+        "centerLabel": ">=",
+        "inputs": [
+            { "name": "A", "type": "float", "allowedTypes": ["float", "int", "string"] },
+            { "name": "B", "type": "float", "allowedTypes": ["float", "int", "string"] }
+        ],
+        "outputs": [{ "name": "Result", "type": "boolean" }]
+    },
+    {
+        "name": "Less (<)",
+        "category": "Logic",
+        "color": "var(--n-pure)",
+        "functionId": "Logic.Less",
+        "centerLabel": "<",
+        "inputs": [
+            { "name": "A", "type": "float", "allowedTypes": ["float", "int", "string"] },
+            { "name": "B", "type": "float", "allowedTypes": ["float", "int", "string"] }
+        ],
+        "outputs": [{ "name": "Result", "type": "boolean" }]
+    },
+    {
+        "name": "Less Equal (<=)",
+        "category": "Logic",
+        "color": "var(--n-pure)",
+        "functionId": "Logic.LessEqual",
+        "centerLabel": "<=",
+        "inputs": [
+            { "name": "A", "type": "float", "allowedTypes": ["float", "int", "string"] },
+            { "name": "B", "type": "float", "allowedTypes": ["float", "int", "string"] }
+        ],
+        "outputs": [{ "name": "Result", "type": "boolean" }]
+    },
+
+    // --- VARIABLES / LITERALS ---
+    {
+        "name": "Make Boolean",
+        "category": "Variables",
+        "color": "var(--n-pure)",
+        "functionId": "Make.Bool",
+        "inputs": [{ "name": "Value", "type": "boolean", "default": true }],
+        "outputs": [{ "name": "Val", "type": "boolean" }]
+    },
     {
         "name": "Make Float",
         "category": "Variables",
@@ -127,6 +207,7 @@ window.globalNodes = [
         ],
         "outputs": [{"name": "Vec", "type": "vector"}]
     },
+
     // --- CONVERSIONS ---
     {
         "name": "Int to Float",
@@ -153,6 +234,22 @@ window.globalNodes = [
         "outputs": [{"name": "String", "type": "string"}]
     },
     {
+        "name": "Int to String",
+        "category": "Conversion",
+        "color": "var(--n-pure)",
+        "functionId": "Conv.IntToString",
+        "inputs": [{"name": "Int", "type": "int"}],
+        "outputs": [{"name": "String", "type": "string"}]
+    },
+    {
+        "name": "Bool to String",
+        "category": "Conversion",
+        "color": "var(--n-pure)",
+        "functionId": "Conv.BoolToString",
+        "inputs": [{"name": "Bool", "type": "boolean"}],
+        "outputs": [{"name": "String", "type": "string"}]
+    },
+    {
         "name": "Vector to String",
         "category": "Conversion",
         "color": "var(--n-pure)",
@@ -160,7 +257,8 @@ window.globalNodes = [
         "inputs": [{"name": "Vec", "type": "vector"}],
         "outputs": [{"name": "String", "type": "string"}]
     },
-    // --- GAMEPLAY ---
+
+    // --- GAMEPLAY EXAMPLES ---
     {
         "name": "Spawn Actor From Class",
         "category": "Game",
@@ -180,5 +278,6 @@ window.nodeConversions = {
     "float->int": "Float to Int",
     "float->string": "Float to String",
     "int->string": "Int to String",
+    "boolean->string": "Bool to String",
     "vector->string": "Vector to String"
 };

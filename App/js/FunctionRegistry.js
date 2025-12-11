@@ -7,6 +7,13 @@ window.FunctionRegistry = {
     // --- FLOW CONTROL ---
     "Flow.Print": (msg) => {
         console.log("%c[Blueprint Output]:", "color: cyan", msg);
+        return msg;
+    },
+
+    // The Branch node helper: returns the boolean value so the Simulation engine
+    // can decide which execution output pin to activate.
+    "Flow.Branch": (condition) => {
+        return !!condition; // Force boolean
     },
 
     // --- MATH (Polymorphic) ---
@@ -64,7 +71,16 @@ window.FunctionRegistry = {
         const err = new Error("Invalid Division (Cannot divide Scalar by Vector).");
         err.isBlueprintError = true; throw err; 
     },
-    
+
+    // --- LOGIC / COMPARISONS (Polymorphic) ---
+    // JS weak typing handles numbers and strings automatically (e.g., 5 > 2, "b" > "a")
+    "Logic.Equal": (a, b) => a == b,
+    "Logic.NotEqual": (a, b) => a != b,
+    "Logic.Greater": (a, b) => a > b,
+    "Logic.GreaterEqual": (a, b) => a >= b,
+    "Logic.Less": (a, b) => a < b,
+    "Logic.LessEqual": (a, b) => a <= b,
+
     // --- VECTORS ---
     "Vector.Make": (x, y, z) => ({ x: x||0, y: y||0, z: z||0 }),
     
@@ -75,6 +91,7 @@ window.FunctionRegistry = {
     },
 
     // --- MAKE LITERALS ---
+    "Make.Bool": (val) => val === true,
     "Make.Float": (val) => parseFloat(val),
     "Make.Int": (val) => parseInt(val),
     "Make.String": (val) => String(val),
@@ -84,6 +101,7 @@ window.FunctionRegistry = {
     "Conv.FloatToInt": (val) => Math.trunc(val), 
     "Conv.FloatToString": (val) => (val !== undefined ? val.toString() : "0.0"),
     "Conv.IntToString": (val) => (val !== undefined ? val.toString() : "0"),
+    "Conv.BoolToString": (val) => (val ? "true" : "false"),
     "Conv.VectorToString": (v) => {
         if (!v) return "X=0.000 Y=0.000 Z=0.000";
         return `X=${v.x.toFixed(3)} Y=${v.y.toFixed(3)} Z=${v.z.toFixed(3)}`;
