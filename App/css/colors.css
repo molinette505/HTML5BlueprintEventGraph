@@ -51,11 +51,13 @@
     --c-float:     #96ce02;
     --c-string:    #d800ff;
     --c-vector:    #ffcc00;
+    --c-rotator:   #99ccff; /* Light Purple / Periwinkle */
     --c-color:     #00aaff;
     --c-int:       #1ee6aa;
     --c-class:     #5500FF;
     --c-object:    #00A8FF;
     --c-transform: #FF6600;
+    --c-wildcard:  #888888; /* Grey for undefined/generic */
 
     /* --- NODE HEADERS --- */
     --n-event: #8b0000;

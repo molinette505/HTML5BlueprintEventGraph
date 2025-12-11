@@ -8,9 +8,6 @@ class WidgetRenderer {
     
     /**
      * Factory method to generate the appropriate DOM element for a widget.
-     * @param {Widget} widget - The Widget Model containing type, value, and options.
-     * @param {Function} onUpdate - Callback function (val) => {} to sync changes back to the Model.
-     * @returns {HTMLElement|null} The created input element or container.
      */
     render(widget, onUpdate) {
         if (!widget) return null;
@@ -22,6 +19,7 @@ class WidgetRenderer {
             case 'checkbox': return this.createCheckbox(widget, onUpdate);
             case 'dropdown': return this.createDropdown(widget, onUpdate);
             case 'vector3': return this.createVector(widget, onUpdate);
+            case 'rotator': return this.createRotator(widget, onUpdate);
             default: return null;
         }
     }
@@ -104,6 +102,43 @@ class WidgetRenderer {
                 const num = parseFloat(e.target.value);
                 val[axis] = isNaN(num) ? 0 : num;
                 i.setAttribute('value', val[axis]);
+                
+                widget.value = val; 
+                if(onUpdate) onUpdate(val);
+            });
+            
+            this.stopDrag(i);
+            div.appendChild(i);
+        });
+        return div;
+    }
+
+    // [NEW] Rotator Widget (Roll, Pitch, Yaw)
+    createRotator(widget, onUpdate) {
+        const div = document.createElement('div');
+        div.className = 'widget-vec3'; // Reuse layout
+        // Data format: {roll:0, pitch:0, yaw:0}
+        const val = widget.value || {roll:0, pitch:0, yaw:0};
+        
+        // Map keys to labels: Roll->R, Pitch->P, Yaw->Y
+        const mapping = [
+            { key: 'roll', label: 'R' },
+            { key: 'pitch', label: 'P' },
+            { key: 'yaw', label: 'Y' }
+        ];
+
+        mapping.forEach(m => {
+            const i = document.createElement('input');
+            i.type = 'number'; 
+            i.step = 'any';
+            i.placeholder = m.label; // R, P, Y
+            i.value = val[m.key];
+            i.setAttribute('value', val[m.key]);
+
+            i.addEventListener('input', (e) => {
+                const num = parseFloat(e.target.value);
+                val[m.key] = isNaN(num) ? 0 : num;
+                i.setAttribute('value', val[m.key]);
                 
                 widget.value = val; 
                 if(onUpdate) onUpdate(val);

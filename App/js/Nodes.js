@@ -38,7 +38,7 @@ window.globalNodes = [
         "outputs": [{"name": "Out", "type": "exec"}]
     },
 
-    // --- GENERIC MATH ---
+    // --- GENERIC MATH (Wildcard Start) ---
     {
         "name": "Add",
         "category": "Math",
@@ -47,10 +47,10 @@ window.globalNodes = [
         "functionId": "Math.AddGeneric",
         "centerLabel": "+",
         "inputs": [
-            { "name": "A", "type": "float", "allowedTypes": ["float", "int", "vector"] },
-            { "name": "B", "type": "float", "allowedTypes": ["float", "int", "vector"] }
+            { "name": "A", "type": "wildcard", "allowedTypes": ["float", "int", "vector"] },
+            { "name": "B", "type": "wildcard", "allowedTypes": ["float", "int", "vector"] }
         ],
-        "outputs": [{ "name": "Result", "type": "float", "allowedTypes": ["float", "int", "vector"] }]
+        "outputs": [{ "name": "Result", "type": "wildcard", "allowedTypes": ["float", "int", "vector"] }]
     },
     {
         "name": "Subtract",
@@ -60,10 +60,10 @@ window.globalNodes = [
         "functionId": "Math.SubtractGeneric",
         "centerLabel": "-",
         "inputs": [
-            { "name": "A", "type": "float", "allowedTypes": ["float", "int", "vector"] },
-            { "name": "B", "type": "float", "allowedTypes": ["float", "int", "vector"] }
+            { "name": "A", "type": "wildcard", "allowedTypes": ["float", "int", "vector"] },
+            { "name": "B", "type": "wildcard", "allowedTypes": ["float", "int", "vector"] }
         ],
-        "outputs": [{ "name": "Result", "type": "float", "allowedTypes": ["float", "int", "vector"] }]
+        "outputs": [{ "name": "Result", "type": "wildcard", "allowedTypes": ["float", "int", "vector"] }]
     },
     {
         "name": "Multiply",
@@ -73,10 +73,10 @@ window.globalNodes = [
         "functionId": "Math.MultiplyGeneric",
         "centerLabel": "×",
         "inputs": [
-            { "name": "A", "type": "float", "allowedTypes": ["float", "int", "vector"] },
-            { "name": "B", "type": "float", "allowedTypes": ["float", "int", "vector"] }
+            { "name": "A", "type": "wildcard", "allowedTypes": ["float", "int", "vector"] },
+            { "name": "B", "type": "wildcard", "allowedTypes": ["float", "int", "vector"] }
         ],
-        "outputs": [{ "name": "Result", "type": "float", "allowedTypes": ["float", "int", "vector"] }]
+        "outputs": [{ "name": "Result", "type": "wildcard", "allowedTypes": ["float", "int", "vector"] }]
     },
     {
         "name": "Divide",
@@ -86,14 +86,13 @@ window.globalNodes = [
         "functionId": "Math.DivideGeneric",
         "centerLabel": "÷",
         "inputs": [
-            { "name": "A", "type": "float", "allowedTypes": ["float", "int", "vector"] },
-            { "name": "B", "type": "float", "allowedTypes": ["float", "int", "vector"] }
+            { "name": "A", "type": "wildcard", "allowedTypes": ["float", "int", "vector"] },
+            { "name": "B", "type": "wildcard", "allowedTypes": ["float", "int", "vector"] }
         ],
-        "outputs": [{ "name": "Result", "type": "float", "allowedTypes": ["float", "int", "vector"] }]
+        "outputs": [{ "name": "Result", "type": "wildcard", "allowedTypes": ["float", "int", "vector"] }]
     },
 
     // --- LOGIC / COMPARISON ---
-    // Added "hideHeader": true to all comparison nodes
     {
         "name": "Equal (==)",
         "category": "Logic",
@@ -208,13 +207,53 @@ window.globalNodes = [
     },
     {
         "name": "Make Vector",
-        "category": "Math|Vector",
+        "category": "Variables",
         "color": "var(--n-pure)",
         "functionId": "Vector.Make",
         "inputs": [
             {"name": "X", "type": "float"}, {"name": "Y", "type": "float"}, {"name": "Z", "type": "float"}
         ],
         "outputs": [{"name": "Vec", "type": "vector"}]
+    },
+    {
+        "name": "Make Rotator",
+        "category": "Variables",
+        "color": "var(--n-pure)",
+        "functionId": "Rotator.Make",
+        "inputs": [
+            {"name": "Roll", "type": "float"}, {"name": "Pitch", "type": "float"}, {"name": "Yaw", "type": "float"}
+        ],
+        "outputs": [{"name": "Rot", "type": "rotator"}]
+    },
+    {
+        "name": "Make Transform",
+        "category": "Variables",
+        "color": "var(--n-pure)",
+        "functionId": "Transform.Make",
+        "inputs": [
+            {"name": "Location", "type": "vector"}, 
+            {"name": "Rotation", "type": "rotator"}, 
+            {"name": "Scale", "type": "vector", "default": {x:1, y:1, z:1}}
+        ],
+        "outputs": [{"name": "Transform", "type": "transform"}]
+    },
+
+    // --- VECTOR MATH ---
+    {
+        "name": "Vector Length",
+        "category": "Math|Vector",
+        "color": "var(--n-pure)",
+        "functionId": "Vector.Length",
+        "inputs": [{"name": "A", "type": "vector"}],
+        "outputs": [{"name": "Length", "type": "float"}]
+    },
+    {
+        "name": "Vector Normalize",
+        "category": "Math|Vector",
+        "color": "var(--n-pure)",
+        "functionId": "Vector.Normalize",
+        "inputs": [{"name": "A", "type": "vector"}],
+        "outputs": [{"name": "Result", "type": "vector"}]
     },
 
     // --- CONVERSIONS ---
