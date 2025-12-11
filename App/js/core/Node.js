@@ -29,6 +29,14 @@ class Node {
         // State: Tracks if "Advanced" pins are currently visible
         this.showAdvanced = false;
 
+        // Function binding
+        this.functionId = template.functionId || null;
+        // Look up the real function or null if none exists
+        this.jsFunctionRef = window.FunctionRegistry ? window.FunctionRegistry[this.functionId] : null;
+        
+        // Cache for the result of the calculation (for Pure nodes)
+        this.executionResult = null;
+
         // Instantiate Pin Models
         this.inputs = (template.inputs || []).map((p, i) => new Pin(this, i, 'input', p));
         this.outputs = (template.outputs || []).map((p, i) => new Pin(this, i, 'output', p));
@@ -58,5 +66,24 @@ class Node {
      */
     hasAdvancedPins() {
         return this.inputs.some(p => p.advanced) || this.outputs.some(p => p.advanced);
+    }
+
+    /**
+     * Serializes the node state for Copy/Paste or Saving.
+     * Captures position, template identifier, and current input widget values.
+     * @returns {Object} JSON-safe object.
+     */
+    toJSON() {
+        return {
+            id: this.id, // Needed for connection mapping during full save
+            name: this.name, // Template Name identifier
+            x: this.x,
+            y: this.y,
+            // We only need to save Input values (widgets). Outputs are computed.
+            inputs: this.inputs.map(p => ({
+                name: p.name,
+                value: p.value // The current value from the widget
+            }))
+        };
     }
 }

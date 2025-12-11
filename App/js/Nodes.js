@@ -7,6 +7,7 @@ window.globalNodes = [
     {
         "name": "Print String",
         "color": "var(--n-func)",
+        "functionId": "Flow.Print", // <--- NEW BINDING
         "inputs": [
             {"name": "In", "type": "exec"},
             {"name": "String", "type": "string"},
@@ -18,6 +19,7 @@ window.globalNodes = [
     {
         "name": "Make Vector",
         "color": "var(--n-pure)",
+        "functionId": "Vector.Make", // <--- NEW BINDING
         "inputs": [
             {"name": "X", "type": "float"},
             {"name": "Y", "type": "float"},
@@ -28,6 +30,7 @@ window.globalNodes = [
     {
         "name": "Spawn Actor From Class",
         "color": "var(--n-func)",
+        // No functionId yet, as this requires a game engine backend
         "inputs": [
             {"name": "Exec", "type": "exec"},
             {
@@ -60,6 +63,7 @@ window.globalNodes = [
         "name": "Vector + Vector",
         "hideHeader": true,
         "centerLabel": "+",
+        "functionId": "Vector.Add", // <--- NEW BINDING
         "inputs": [{"name": "", "type": "vector"}, {"name": "", "type": "vector"}],
         "outputs": [{"name": "", "type": "vector"}]
     },
@@ -67,6 +71,7 @@ window.globalNodes = [
         "name": "Int + Int",
         "hideHeader": true,
         "centerLabel": "+",
+        "functionId": "Math.Add", // <--- NEW BINDING
         "inputs": [{"name": "", "type": "int"}, {"name": "", "type": "int"}],
         "outputs": [{"name": "", "type": "int"}]
     }

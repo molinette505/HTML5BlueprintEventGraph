@@ -28,6 +28,9 @@ class Interaction {
             nodeOffsets: new Map()      // Map<NodeId, {x, y}> (Initial positions for multi-drag)
         };
 
+        // Track mouse for Paste positioning
+        this.lastMousePos = { x: 0, y: 0 };
+
         // Create the Selection Box DOM element (hidden by default)
         this.selectionBox = document.createElement('div');
         this.selectionBox.id = 'selection-box';
@@ -37,6 +40,7 @@ class Interaction {
         this.contextMenuPos = {x:0, y:0};
 
         this.bindEvents();
+        this.bindKeyboardEvents();
     }
 
     /**
@@ -81,6 +85,9 @@ class Interaction {
 
         // --- MOUSE MOVE: Update state based on current Mode ---
         window.addEventListener('mousemove', e => {
+            // Track globally for Paste operations
+            this.lastMousePos = { x: e.clientX, y: e.clientY };
+
             switch (this.mode) {
                 case 'PANNING':
                     this.updatePan(e);
@@ -128,6 +135,162 @@ class Interaction {
 
         // Zoom Handling
         c.addEventListener('wheel', e => this.handleZoom(e), { passive: false });
+    }
+
+    // --- KEYBOARD SHORTCUTS ---
+    bindKeyboardEvents() {
+        document.addEventListener('keydown', async (e) => {
+            // Ignore if typing in an input
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+            // Copy: Ctrl/Cmd + C
+            if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
+                e.preventDefault();
+                await this.copySelection();
+            }
+
+            // Paste: Ctrl/Cmd + V
+            if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
+                e.preventDefault();
+                // Paste at mouse location
+                await this.pasteFromClipboard(this.lastMousePos.x, this.lastMousePos.y);
+            }
+            
+            // Delete: Delete / Backspace
+            if (e.key === 'Delete' || e.key === 'Backspace') {
+                if (this.selectedNodes.size > 0) {
+                    this.deleteSelected();
+                }
+            }
+        });
+    }
+
+    // ==========================================
+    // COPY / PASTE LOGIC
+    // ==========================================
+    
+    async copySelection() {
+        if (this.selectedNodes.size === 0) return;
+
+        const nodesToCopy = [];
+        const idsToCopy = new Set(this.selectedNodes);
+
+        // 1. Serialize Nodes
+        this.selectedNodes.forEach(id => {
+            const node = this.graph.nodes.find(n => n.id === id);
+            if (node) nodesToCopy.push(node.toJSON());
+        });
+
+        // 2. Serialize Internal Connections (Wires between selected nodes)
+        const connectionsToCopy = this.graph.connections.filter(c => 
+            idsToCopy.has(c.fromNode) && idsToCopy.has(c.toNode)
+        );
+
+        const clipboardData = {
+            nodes: nodesToCopy,
+            connections: connectionsToCopy
+        };
+
+        try {
+            await navigator.clipboard.writeText(JSON.stringify(clipboardData, null, 2));
+            console.log(`Copied ${nodesToCopy.length} nodes and ${connectionsToCopy.length} connections.`);
+        } catch (err) {
+            console.error('Failed to copy: ', err);
+        }
+    }
+
+    async pasteFromClipboard(screenX, screenY) {
+        try {
+            const text = await navigator.clipboard.readText();
+            if (!text) return;
+            
+            let data;
+            try { data = JSON.parse(text); } catch(e) { return; } 
+            
+            // Validate Format (Support both old array format and new object format)
+            const nodes = Array.isArray(data) ? data : data.nodes;
+            const connections = Array.isArray(data) ? [] : (data.connections || []);
+            
+            if (!nodes) return;
+
+            this.clearSelection();
+
+            // Calculate center of mass of copied nodes
+            let minX = Infinity, minY = Infinity;
+            nodes.forEach(n => {
+                if (n.x < minX) minX = n.x;
+                if (n.y < minY) minY = n.y;
+            });
+
+            // Calculate Paste Origin (Graph Coordinates)
+            const rect = this.dom.container.getBoundingClientRect();
+            const pasteX = (screenX - rect.left - this.graph.pan.x) / this.graph.scale;
+            const pasteY = (screenY - rect.top - this.graph.pan.y) / this.graph.scale;
+
+            // Map Old IDs to New IDs for connection reconstruction
+            const idMap = new Map();
+
+            // 1. Instantiate Nodes
+            nodes.forEach(nodeData => {
+                const template = window.nodeTemplates.find(t => t.name === nodeData.name);
+                if (!template) {
+                    console.warn(`Template '${nodeData.name}' not found.`);
+                    return;
+                }
+
+                // Calculate relative offset from the "top-left" of the group
+                const offsetX = nodeData.x - minX;
+                const offsetY = nodeData.y - minY;
+
+                // Create Node
+                const newNode = this.graph.addNode(template, pasteX + offsetX, pasteY + offsetY);
+                
+                // Map ID for connections
+                idMap.set(nodeData.id, newNode.id);
+
+                // Restore Pin Values
+                if (nodeData.inputs) {
+                    nodeData.inputs.forEach(savedPin => {
+                        const realPin = newNode.inputs.find(p => p.name === savedPin.name);
+                        if (realPin) {
+                            realPin.value = savedPin.value;
+                            if (realPin.widget) realPin.widget.value = savedPin.value;
+                        }
+                    });
+                }
+
+                // Render and Select
+                this.renderer.createNodeElement(newNode, (e, nid) => this.handleNodeDown(e, nid));
+                this.addSelection(newNode.id);
+            });
+
+            // 2. Restore Internal Connections
+            connections.forEach(c => {
+                const newFrom = idMap.get(c.fromNode);
+                const newTo = idMap.get(c.toNode);
+
+                if (newFrom && newTo) {
+                    this.graph.addConnection(newFrom, c.fromPin, newTo, c.toPin, c.type);
+                }
+            });
+
+            // Redraw wires
+            this.renderer.render();
+
+        } catch (err) {
+            console.error('Failed to paste: ', err);
+        }
+    }
+
+    // --- HELPER: DELETE ---
+    deleteSelected() {
+        this.selectedNodes.forEach(id => {
+            this.graph.removeNode(id);
+            const el = document.getElementById(`node-${id}`);
+            if (el) el.remove();
+        });
+        this.selectedNodes.clear();
+        this.renderer.render();
     }
 
     // ==========================================
@@ -446,7 +609,19 @@ class Interaction {
             // Node Context Menu
             search.style.display = 'none';
             
-            // "Selection Aware" Delete Text
+            // 1. Copy Option
+            if (this.selectedNodes.size > 0) {
+                const liCopy = document.createElement('li');
+                liCopy.className = 'ctx-item';
+                liCopy.innerHTML = `<span>Copy</span>`;
+                liCopy.onclick = () => {
+                    this.copySelection();
+                    this.hideContextMenu();
+                };
+                list.appendChild(liCopy);
+            }
+
+            // 2. Delete Option
             const count = this.selectedNodes.size > 1 && this.selectedNodes.has(targetId) ? this.selectedNodes.size : 1;
             const label = count > 1 ? `Delete ${count} Nodes` : `Delete Node`;
             
@@ -455,20 +630,25 @@ class Interaction {
             li.innerHTML = `<span style="color:var(--danger-color)">${label}</span>`;
             li.onclick = () => {
                 // Delete logic
-                const nodesToDelete = count > 1 ? Array.from(this.selectedNodes) : [targetId];
-                nodesToDelete.forEach(id => {
-                    this.graph.removeNode(id);
-                    const el = document.getElementById(`node-${id}`);
-                    if(el) el.remove();
-                });
-                this.selectedNodes.clear();
-                this.renderer.render(); // Redraw wires
+                this.deleteSelected();
                 this.hideContextMenu();
             };
             list.appendChild(li);
         } else {
             // Background Context Menu (Spawn Node)
             search.style.display = 'block';
+            
+            // Paste Option (Always visible)
+            const liPaste = document.createElement('li');
+            liPaste.className = 'ctx-item';
+            liPaste.innerHTML = `<span>Paste</span>`;
+            liPaste.style.borderBottom = '1px solid #444';
+            liPaste.onclick = () => {
+                this.pasteFromClipboard(x, y); // Use Context Menu coords
+                this.hideContextMenu();
+            };
+            list.appendChild(liPaste);
+
             search.value = '';
             setTimeout(() => search.focus(), 50); // Auto-focus search input
             this.renderNodeList(window.nodeTemplates || []);
@@ -488,7 +668,10 @@ class Interaction {
 
     renderNodeList(items) {
         const list = this.dom.contextList;
-        list.innerHTML = '';
+        
+        // Simple logic: If we are searching, clear list. If not, we might have prepended "Paste".
+        if (this.dom.contextSearch.value !== '') list.innerHTML = '';
+        
         items.forEach(tmpl => {
             const li = document.createElement('li');
             li.className = 'ctx-item';
