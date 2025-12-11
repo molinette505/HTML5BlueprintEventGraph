@@ -50,4 +50,44 @@ class Graph {
     }
 
     /**
-     * Helper used for the Alt+Click interaction
+     * Helper used for the Alt+Click interaction: removes all links associated with a single pin.
+     * @param {Number} nodeId - The ID of the pin's parent node.
+     * @param {Number} pinIndex - The index of the pin on the node.
+     * @param {String} type - The direction of the pin ('input' or 'output').
+     */
+    disconnectPin(nodeId, pinIndex, type) {
+        if (type === 'input') {
+            // Remove connections coming TO this specific input pin
+            this.connections = this.connections.filter(c => !(c.toNode === nodeId && c.toPin === pinIndex));
+        } else {
+            // Remove connections going FROM this specific output pin
+            this.connections = this.connections.filter(c => !(c.fromNode === nodeId && c.fromPin === pinIndex));
+        }
+    }
+
+    /**
+     * Creates a new connection, applying single-wire rules (replacement).
+     * @param {Number} fromNode - Source node ID.
+     * @param {Number} fromPin - Source pin index.
+     * @param {Number} toNode - Target node ID.
+     * @param {Number} toPin - Target pin index.
+     * @param {String} type - Data type of the connection ('exec' or data type).
+     * @returns {Connection} The new connection object.
+     */
+    addConnection(fromNode, fromPin, toNode, toPin, type) {
+        // RULE 1: Exec Outputs are Single-Wire. Remove existing connection FROM the source pin.
+        if (type === 'exec') {
+            this.connections = this.connections.filter(c => !(c.fromNode === fromNode && c.fromPin === fromPin));
+        } 
+        
+        // RULE 2: Data Inputs are Single-Wire. Remove existing connection TO the target pin.
+        else {
+            this.connections = this.connections.filter(c => !(c.toNode === toNode && c.toPin === toPin));
+        }
+        
+        // Create and add the new connection
+        const conn = new Connection(this.nextConnId++, fromNode, fromPin, toNode, toPin, type);
+        this.connections.push(conn);
+        return conn;
+    }
+}
