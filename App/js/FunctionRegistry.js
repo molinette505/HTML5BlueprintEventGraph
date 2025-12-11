@@ -5,7 +5,8 @@
 window.FunctionRegistry = {
     // --- HELPERS FOR VISUALIZATION ---
     getVisualDebug: (node, inputs, result) => {
-        const visualizer = window.FunctionRegistry.Visualizers[node.name];
+        // [MODIFIED] Use functionId instead of node.name for robust lookup
+        const visualizer = window.FunctionRegistry.Visualizers[node.functionId];
         if (visualizer) {
             try { return visualizer(inputs, result); } 
             catch(e) { console.error("Visualizer Error", e); }
@@ -22,29 +23,34 @@ window.FunctionRegistry = {
 
     // Custom Formatters: (inputs, result) => string
     Visualizers: {
-        "Add": (inps, res) => `${fmt(inps[0])} + ${fmt(inps[1])} = ${fmt(res)}`,
-        "Subtract": (inps, res) => `${fmt(inps[0])} - ${fmt(inps[1])} = ${fmt(res)}`,
-        "Multiply": (inps, res) => `${fmt(inps[0])} × ${fmt(inps[1])} = ${fmt(res)}`,
-        "Divide": (inps, res) => `${fmt(inps[0])} ÷ ${fmt(inps[1])} = ${fmt(res)}`,
+        // [MODIFIED] Keys updated to match functionId from Nodes.js
+        "Math.AddGeneric": (inps, res) => `${fmt(inps[0])} + ${fmt(inps[1])} = ${fmt(res)}`,
+        "Math.SubtractGeneric": (inps, res) => `${fmt(inps[0])} - ${fmt(inps[1])} = ${fmt(res)}`,
+        "Math.MultiplyGeneric": (inps, res) => `${fmt(inps[0])} × ${fmt(inps[1])} = ${fmt(res)}`,
+        "Math.DivideGeneric": (inps, res) => `${fmt(inps[0])} ÷ ${fmt(inps[1])} = ${fmt(res)}`,
         
-        // [UPDATE] Comparison Equations
-        "Greater (>)": (inps, res) => `(${fmt(inps[0])} > ${fmt(inps[1])}) = ${res}`,
-        "Less (<)": (inps, res) => `(${fmt(inps[0])} < ${fmt(inps[1])}) = ${res}`,
-        "Greater Equal (>=)": (inps, res) => `(${fmt(inps[0])} >= ${fmt(inps[1])}) = ${res}`,
-        "Less Equal (<=)": (inps, res) => `(${fmt(inps[0])} <= ${fmt(inps[1])}) = ${res}`,
-        "Equal (==)": (inps, res) => `(${fmt(inps[0])} == ${fmt(inps[1])}) = ${res}`,
-        "Not Equal (!=)": (inps, res) => `(${fmt(inps[0])} != ${fmt(inps[1])}) = ${res}`,
+        // Logic Equations
+        "Logic.Greater": (inps, res) => `(${fmt(inps[0])} > ${fmt(inps[1])}) = ${res}`,
+        "Logic.Less": (inps, res) => `(${fmt(inps[0])} < ${fmt(inps[1])}) = ${res}`,
+        "Logic.GreaterEqual": (inps, res) => `(${fmt(inps[0])} >= ${fmt(inps[1])}) = ${res}`,
+        "Logic.LessEqual": (inps, res) => `(${fmt(inps[0])} <= ${fmt(inps[1])}) = ${res}`,
+        "Logic.Equal": (inps, res) => `(${fmt(inps[0])} == ${fmt(inps[1])}) = ${res}`,
+        "Logic.NotEqual": (inps, res) => `(${fmt(inps[0])} != ${fmt(inps[1])}) = ${res}`,
         
-        "Make Vector": (inps, res) => `Vec(${inps[0]}, ${inps[1]}, ${inps[2]})`,
+        "Vector.Make": (inps, res) => `Vec(${inps[0]}, ${inps[1]}, ${inps[2]})`,
         
-        // [UPDATE] Vector Length Equation
-        "Vector Length": (inps, res) => {
+        "Vector.Length": (inps, res) => {
             const v = inps[0] || {x:0, y:0, z:0};
-            // Display sqrt(x^2 + y^2 + z^2) = result
             return `sqrt(${v.x.toFixed(1)}^2 + ${v.y.toFixed(1)}^2 + ${v.z.toFixed(1)}^2) = ${fmt(res)}`;
         },
         
-        "Vector to String": (inps, res) => `"${res}"`
+        // [NEW] Conversion Visualizers (Input ➞ Output)
+        "Conv.FloatToInt": (inps, res) => `${inps[0]} ➞ ${res}`,
+        "Conv.IntToFloat": (inps, res) => `${inps[0]} ➞ ${fmt(res)}`,
+        "Conv.FloatToString": (inps, res) => `${inps[0]} ➞ "${res}"`,
+        "Conv.IntToString": (inps, res) => `${inps[0]} ➞ "${res}"`,
+        "Conv.BoolToString": (inps, res) => `${inps[0]} ➞ "${res}"`,
+        "Conv.VectorToString": (inps, res) => `Vec ➞ "${res}"`
     },
 
     "Flow.Print": (msg) => { console.log("%c[Blueprint Output]:", "color: cyan", msg); return msg; },
@@ -99,7 +105,8 @@ window.FunctionRegistry = {
 
     // --- CONVERSIONS ---
     "Conv.IntToFloat": (val) => val, 
-    "Conv.FloatToInt": (val) => Math.trunc(val), 
+    // [MODIFIED] Changed from Math.trunc to Math.floor
+    "Conv.FloatToInt": (val) => Math.floor(val), 
     "Conv.FloatToString": (val) => (val !== undefined ? val.toString() : "0.0"),
     "Conv.IntToString": (val) => (val !== undefined ? val.toString() : "0"),
     "Conv.BoolToString": (val) => (val ? "true" : "false"),
@@ -112,6 +119,7 @@ window.FunctionRegistry = {
 function fmt(val) {
     if (typeof val === 'object' && val !== null && 'x' in val) 
         return `(${val.x.toFixed(1)}, ${val.y.toFixed(1)}, ${val.z.toFixed(1)})`;
+    if (typeof val === 'number') return parseFloat(val.toFixed(2));
     return String(val);
 }
 

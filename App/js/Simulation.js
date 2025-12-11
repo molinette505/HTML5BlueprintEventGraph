@@ -1,39 +1,22 @@
 /**
  * Simulation Class
  * Manages the execution flow of the blueprint graph.
- * Handles the "Game Loop", node execution logic, data flow calculation,
- * and visual feedback (highlighting, wire animations).
  */
 class Simulation {
-    /**
-     * @param {Graph} graph - The data model.
-     * @param {Renderer} renderer - The view component (used for wire animations).
-     */
     constructor(graph, renderer) { 
         this.graph = graph; 
         this.renderer = renderer;
-        
-        // --- State Management ---
         this.status = 'STOPPED'; 
         this.executionQueue = []; 
         this.timer = null;
-        
-        // --- Concurrency Control ---
         this.runInstanceId = 0;
-
-        // --- Replay Support ---
         this.lastProcessedItem = null;
-        
         this.onStateChange = null; 
     }
     
-    /**
-     * Resets the graph state and finds all Entry Points (Events).
-     */
     initialize() {
         this.stop(); 
         this.status = 'STOPPED'; 
-        
         this.runInstanceId++; 
         console.clear();
         console.log(`--- Simulation Initialized (Run ${this.runInstanceId}) ---`);
@@ -48,54 +31,27 @@ class Simulation {
         });
     }
 
-    start() {
-        this.initialize();
-        this.setStatus('RUNNING');
-        this.tick();
-    }
-
-    startPaused() {
-        this.initialize();
-        this.setStatus('PAUSED');
-    }
-
-    pause() {
-        if (this.status === 'RUNNING') {
-            this.setStatus('PAUSED');
-            if(this.timer) clearTimeout(this.timer);
-        }
-    }
-
-    resume() {
-        if (this.status === 'PAUSED') {
-            this.setStatus('RUNNING');
-            this.tick();
-        }
-    }
+    start() { this.initialize(); this.setStatus('RUNNING'); this.tick(); }
+    startPaused() { this.initialize(); this.setStatus('PAUSED'); }
+    pause() { if (this.status === 'RUNNING') { this.setStatus('PAUSED'); if(this.timer) clearTimeout(this.timer); } }
+    resume() { if (this.status === 'PAUSED') { this.setStatus('RUNNING'); this.tick(); } }
 
     stop() {
         this.setStatus('STOPPED');
         this.executionQueue = [];
         this.lastProcessedItem = null;
         if(this.timer) clearTimeout(this.timer);
-        
         this.runInstanceId++; 
-        
         this.graph.nodes.forEach(n => {
             const el = document.getElementById(`node-${n.id}`);
             if(el) el.style.boxShadow = "";
         });
-        
         console.log("--- Simulation Stopped ---");
     }
 
     step() {
-        if (this.status === 'STOPPED') {
-            this.startPaused();
-            this.processNext(true); 
-        } else if (this.status === 'PAUSED') {
-            this.processNext(true); 
-        }
+        if (this.status === 'STOPPED') { this.startPaused(); this.processNext(true); }
+        else if (this.status === 'PAUSED') { this.processNext(true); }
     }
 
     replayStep() {
@@ -132,7 +88,6 @@ class Simulation {
 
     async processNext(isSingleStep) {
         const currentRunId = this.runInstanceId;
-
         if (this.executionQueue.length === 0) {
             if (this.status === 'RUNNING') this.stop();
             return;
@@ -140,25 +95,24 @@ class Simulation {
 
         const item = this.executionQueue.shift();
         this.lastProcessedItem = item; 
-        
         if (this.onStateChange) this.onStateChange(this.status);
 
         const { node, conn } = item;
 
-        // --- 1. WIRE ANIMATION ---
+        // Wire Animation
         if (conn && this.renderer) {
             this.renderer.animateExecWire(conn);
             await new Promise(r => setTimeout(r, 1500));
             if (this.runInstanceId !== currentRunId) return;
         }
 
-        // --- 2. PAUSE CHECK ---
+        // Pause Check
         if (this.status === 'PAUSED' && !isSingleStep) {
             this.executionQueue.unshift(item); 
             return;
         }
 
-        // --- 3. EVALUATION PHASE (White) ---
+        // Evaluation Phase (White)
         this.highlightNode(node.id, '#ffffff'); 
         node.setError(null);
 
@@ -168,7 +122,7 @@ class Simulation {
                 if (this.runInstanceId !== currentRunId) return;
 
                 if (args !== null) {
-                    // --- 4. EXECUTION PHASE (Orange) ---
+                    // Execution Phase (Orange)
                     this.highlightNode(node.id, '#ff9900'); 
                     node.executionResult = node.jsFunctionRef(...args);
                 }
@@ -182,7 +136,7 @@ class Simulation {
             this.highlightNode(node.id, '#ff9900');
         }
 
-        // --- 5. FLOW CONTROL ---
+        // Flow Control
         let targetPinName = null;
         if (node.name === "Branch") {
             targetPinName = node.executionResult ? "True" : "False";
@@ -205,7 +159,7 @@ class Simulation {
             }
         }
 
-        // --- 6. SCHEDULE NEXT ---
+        // Schedule Next
         if (this.status === 'RUNNING' && !isSingleStep) {
             this.timer = setTimeout(() => this.tick(), 100);
         }
@@ -219,7 +173,8 @@ class Simulation {
             if (pin.type === 'exec') continue; 
 
             const conn = this.graph.connections.find(c => c.toNode === node.id && c.toPin === pin.index);
-            
+            let val = null;
+
             if (conn) {
                 const sourceNode = this.graph.nodes.find(n => n.id === conn.fromNode);
                 
@@ -227,7 +182,7 @@ class Simulation {
                     try {
                         if (sourceNode.executionResult === null) {
                             
-                            // [VISUAL] Highlight Pure Node (White)
+                            // Highlight Pure Node
                             this.highlightNode(sourceNode.id, '#ffffff'); 
                             await new Promise(r => setTimeout(r, 600)); 
                             if (this.runInstanceId !== runId) return null;
@@ -237,9 +192,14 @@ class Simulation {
                             if (this.runInstanceId !== runId) return null;
 
                             sourceNode.setError(null);
-                            sourceNode.executionResult = sourceNode.jsFunctionRef(...sourceArgs);
                             
-                            // [VISUAL] Highlight Pure Node (Orange)
+                            // Execute Logic
+                            const rawRes = sourceNode.jsFunctionRef(...sourceArgs);
+                            
+                            // [FIX] Enforce Output Pin Type (e.g. if Add is Cyan, force Int)
+                            const outPin = sourceNode.outputs[0];
+                            sourceNode.executionResult = this.castValue(rawRes, outPin ? outPin.type : 'wildcard');
+                            
                             this.highlightNode(sourceNode.id, '#ff9900'); 
                         }
                     } catch (err) {
@@ -248,6 +208,8 @@ class Simulation {
                     }
                 }
                 
+                val = sourceNode.executionResult;
+
                 if (this.renderer) {
                     let debugInputs = [];
                     for(let k=0; k<sourceNode.inputs.length; k++) {
@@ -260,24 +222,53 @@ class Simulation {
                         }
                     }
 
-                    const debugLabel = window.FunctionRegistry.getVisualDebug(sourceNode, debugInputs, sourceNode.executionResult);
+                    const debugLabel = window.FunctionRegistry.getVisualDebug(sourceNode, debugInputs, val);
                     this.renderer.animateDataWire(conn, debugLabel);
                     
                     await new Promise(r => setTimeout(r, 1000)); 
                     if (this.runInstanceId !== runId) return null;
                 }
-                
-                args.push(sourceNode.executionResult);
             } else {
-                args.push(node.getInputValue(i));
+                val = node.getInputValue(i);
             }
+
+            // [FIX] Enforce Input Pin Type (e.g. entering Int Pin = Floor)
+            args.push(this.castValue(val, pin.type));
         }
         return args;
     }
 
-    isPureNode(node) {
-        return !node.inputs.some(p => p.type === 'exec');
+    /**
+     * Type Enforcement Helper
+     * Ensures strict strict typing for connections.
+     */
+    castValue(val, type) {
+        if (val === null || val === undefined) return val;
+        if (type === 'wildcard') return val;
+
+        switch (type) {
+            case 'int':
+                // Floor floats when converting to Int
+                if (typeof val === 'number') return Math.floor(val);
+                return parseInt(val) || 0;
+            case 'float':
+                if (typeof val === 'number') return val;
+                return parseFloat(val) || 0.0;
+            case 'string':
+                 if (typeof val === 'object') {
+                    if ('x' in val && 'y' in val && 'z' in val) 
+                        return `X=${val.x.toFixed(3)} Y=${val.y.toFixed(3)} Z=${val.z.toFixed(3)}`;
+                    return JSON.stringify(val);
+                }
+                return String(val);
+            case 'boolean':
+                return Boolean(val);
+            default:
+                return val;
+        }
     }
+
+    isPureNode(node) { return !node.inputs.some(p => p.type === 'exec'); }
 
     highlightNode(id, color = '#ff9900') {
         const el = document.getElementById(`node-${id}`);
@@ -285,9 +276,7 @@ class Simulation {
             el.style.transition = "box-shadow 0.2s ease-out";
             el.style.boxShadow = `0 0 0 4px ${color}`;
             setTimeout(() => {
-                if (this.status !== 'STOPPED') { 
-                    el.style.boxShadow = ""; 
-                }
+                if (this.status !== 'STOPPED') el.style.boxShadow = ""; 
             }, 800);
         }
     }
