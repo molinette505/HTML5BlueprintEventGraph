@@ -17,16 +17,15 @@
 <div id="app">
     <div id="toolbar">
         <div class="tab-group">
-            <button class="tab active" onclick="window.App.switchTab('graph')">Graph Editor</button>
-            <button class="tab" onclick="window.App.switchTab('library')">Library</button>
+            <div class="tab active" style="cursor: default;">Graph Editor</div>
         </div>
         
         <div class="controls">
-            <button class="btn-control" id="btn-play" title="Play / Resume">
+            <button class="btn-control" id="btn-play" title="Play">
                 <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
             </button>
-            <button class="btn-control" id="btn-pause" title="Pause" disabled>
-                <svg viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+            <button class="btn-control" id="btn-pause" title="Start Paused">
+                <svg viewBox="0 0 24 24"><path d="M6 5v14l9-7z M17 5v14h2V5z"/></svg>
             </button>
             <button class="btn-control" id="btn-step" title="Step Forward" disabled>
                 <svg viewBox="0 0 24 24"><path d="M16 18l2.29-2.29-4.88-4.88-4 4L2 7.41 3.41 6l6 6 4-4 6.3 6.29L22 12v6h-6z"/></svg>
@@ -50,16 +49,7 @@
                 <ul id="context-list"></ul>
             </div>
         </div>
-
-        <div id="settings-view" class="view">
-            <h3>Data Types Definition</h3>
-            <textarea id="types-input" class="code-editor"></textarea>
-            <h3>Node Library Definition</h3>
-            <textarea id="nodes-input" class="code-editor"></textarea>
-            <br>
-            <button class="btn-action" id="update-lib-btn" style="width:100%; justify-content:center;">Apply Changes</button>
         </div>
-    </div>
 </div>
 
 <div id="notification"></div>

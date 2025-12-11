@@ -8,8 +8,6 @@ class Editor {
             contextMenu: document.getElementById('context-menu'),
             contextList: document.getElementById('context-list'),
             contextSearch: document.getElementById('context-search'),
-            typesInput: document.getElementById('types-input'),
-            nodesInput: document.getElementById('nodes-input'),
             
             // Buttons
             btnPlay: document.getElementById('btn-play'),
@@ -26,7 +24,6 @@ class Editor {
         this.simulation.onStateChange = (status) => this.updateControls(status);
 
         this.importFileGlobals();
-        this.populateUI();
         
         // Bind Controls
         this.dom.btnPlay.onclick = () => {
@@ -34,7 +31,6 @@ class Editor {
             else this.simulation.start();
         };
         
-        // [UPDATE] "Start Paused" logic
         this.dom.btnPause.onclick = () => {
             if (this.simulation.status === 'STOPPED') {
                 this.simulation.startPaused();
@@ -48,9 +44,6 @@ class Editor {
         
         // Initialize Controls State
         this.updateControls(this.simulation.status);
-
-        const updateBtn = document.getElementById('update-lib-btn');
-        if (updateBtn) updateBtn.onclick = () => this.applyFromUI();
         
         if(this.dom.contextSearch) {
             this.dom.contextSearch.oninput = (e) => this.interaction.filterContextMenu(e.target.value);
@@ -73,16 +66,18 @@ class Editor {
 
     updateControls(status) {
         const d = this.dom;
-        
+        const iconStartPaused = `<svg viewBox="0 0 24 24"><path d="M6 5v14l9-7z M17 5v14h2V5z"/></svg>`;
+        const iconPause = `<svg viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>`;
+
         if (status === 'STOPPED') {
             d.btnPlay.disabled = false;
             d.btnPlay.title = "Play";
             
             // Enable Pause button as "Start Paused"
             d.btnPause.disabled = false;
+            d.btnPause.innerHTML = iconStartPaused; // Set Icon: Play+Bar
             d.btnPause.title = "Start Paused"; 
             
-            // Allow stepping from start
             d.btnStep.disabled = false; 
             d.btnStep.title = "Start & Step";
 
@@ -90,15 +85,20 @@ class Editor {
         } 
         else if (status === 'RUNNING') {
             d.btnPlay.disabled = true;
+            
             d.btnPause.disabled = false;
+            d.btnPause.innerHTML = iconPause; // Set Icon: Standard Pause
             d.btnPause.title = "Pause";
-            d.btnStep.disabled = true; // Can't step while running
+            
+            d.btnStep.disabled = true; 
             d.btnStop.disabled = false;
         } 
         else if (status === 'PAUSED') {
             d.btnPlay.disabled = false; 
             d.btnPlay.title = "Resume";
-            d.btnPause.disabled = true; // Already paused
+            
+            d.btnPause.disabled = true; 
+            
             d.btnStep.disabled = false;
             d.btnStop.disabled = false;
         }
@@ -112,35 +112,6 @@ class Editor {
         window.nodeTemplates = [];
         if (window.globalNodes) {
             window.nodeTemplates = JSON.parse(JSON.stringify(window.globalNodes));
-        }
-    }
-
-    populateUI() {
-        if (this.dom.typesInput && window.globalDataTypes) {
-            this.dom.typesInput.value = JSON.stringify(window.globalDataTypes, null, 4);
-        }
-        if (this.dom.nodesInput && window.globalNodes) {
-            this.dom.nodesInput.value = JSON.stringify(window.globalNodes, null, 4);
-        }
-    }
-
-    applyFromUI() {
-        if (!this.dom.typesInput || !this.dom.nodesInput) return;
-        try {
-            const rawTypes = this.dom.typesInput.value;
-            const parsedTypes = JSON.parse(rawTypes);
-            window.typeDefinitions = {};
-            parsedTypes.forEach(t => window.typeDefinitions[t.name] = t);
-
-            const rawNodes = this.dom.nodesInput.value;
-            window.nodeTemplates = JSON.parse(rawNodes);
-            
-            const btn = document.getElementById('update-lib-btn');
-            const originalText = btn.innerText;
-            btn.innerText = "Saved!";
-            setTimeout(() => btn.innerText = originalText, 1000);
-        } catch(e) {
-            alert("JSON Syntax Error: " + e.message);
         }
     }
 
@@ -237,22 +208,6 @@ class Editor {
             
             this.graph.addConnection(n1.id, 0, n2.id, 0, 'exec');
             this.renderer.render();
-        }
-    }
-    
-    switchTab(tabName) {
-        const buttons = document.querySelectorAll('.tab');
-        buttons.forEach(b => b.classList.remove('active'));
-        if(tabName === 'graph') buttons[0].classList.add('active');
-        else buttons[1].classList.add('active');
-
-        document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-        if(tabName === 'graph') {
-            document.getElementById('graph-view').classList.add('active');
-            requestAnimationFrame(() => this.renderer.render()); 
-        }
-        else {
-            document.getElementById('settings-view').classList.add('active');
         }
     }
 }
