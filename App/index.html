@@ -20,9 +20,21 @@
             <button class="tab active" onclick="window.App.switchTab('graph')">Graph Editor</button>
             <button class="tab" onclick="window.App.switchTab('library')">Library</button>
         </div>
-        <button class="btn-action" id="simulate-btn">
-            <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg> Simulate
-        </button>
+        
+        <div class="controls">
+            <button class="btn-control" id="btn-play" title="Play / Resume">
+                <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+            </button>
+            <button class="btn-control" id="btn-pause" title="Pause" disabled>
+                <svg viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+            </button>
+            <button class="btn-control" id="btn-step" title="Step Forward" disabled>
+                <svg viewBox="0 0 24 24"><path d="M16 18l2.29-2.29-4.88-4.88-4 4L2 7.41 3.41 6l6 6 4-4 6.3 6.29L22 12v6h-6z"/></svg>
+            </button>
+            <button class="btn-control" id="btn-stop" title="Stop & Reset" disabled>
+                <svg viewBox="0 0 24 24"><path d="M6 6h12v12H6z"/></svg>
+            </button>
+        </div>
     </div>
 
     <div id="main-content">
@@ -52,7 +64,6 @@
 
 <div id="notification"></div>
 
-<script src="js/FunctionRegistry.js"></script>
 <script src="js/DataTypes.js"></script>
 <script src="js/Nodes.js"></script>
 
@@ -61,6 +72,7 @@
 <script src="js/core/Connection.js"></script>
 <script src="js/core/Node.js"></script>
 <script src="js/core/Graph.js"></script>
+<script src="js/FunctionRegistry.js"></script>
 
 <script src="js/view/WidgetRenderer.js"></script>
 <script src="js/view/NodeRenderer.js"></script>
@@ -68,7 +80,6 @@
 <script src="js/Interaction.js"></script>
 <script src="js/Simulation.js"></script>
 <script src="js/Editor.js"></script>
-
 
 </body>
 </html>

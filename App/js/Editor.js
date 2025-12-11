@@ -9,21 +9,46 @@ class Editor {
             contextList: document.getElementById('context-list'),
             contextSearch: document.getElementById('context-search'),
             typesInput: document.getElementById('types-input'),
-            nodesInput: document.getElementById('nodes-input')
+            nodesInput: document.getElementById('nodes-input'),
+            
+            // Buttons
+            btnPlay: document.getElementById('btn-play'),
+            btnPause: document.getElementById('btn-pause'),
+            btnStep: document.getElementById('btn-step'),
+            btnStop: document.getElementById('btn-stop')
         };
         
         this.graph = new Graph();
         this.renderer = new Renderer(this.graph, this.dom);
         this.interaction = new Interaction(this.graph, this.renderer, this.dom);
-        
-        // [UPDATE] Pass renderer to Simulation so it can trigger wire animations
         this.simulation = new Simulation(this.graph, this.renderer);
+
+        this.simulation.onStateChange = (status) => this.updateControls(status);
 
         this.importFileGlobals();
         this.populateUI();
         
-        document.getElementById('simulate-btn').onclick = () => this.simulation.run();
+        // Bind Controls
+        this.dom.btnPlay.onclick = () => {
+            if(this.simulation.status === 'PAUSED') this.simulation.resume();
+            else this.simulation.start();
+        };
         
+        // [UPDATE] "Start Paused" logic
+        this.dom.btnPause.onclick = () => {
+            if (this.simulation.status === 'STOPPED') {
+                this.simulation.startPaused();
+            } else {
+                this.simulation.pause();
+            }
+        };
+
+        this.dom.btnStep.onclick = () => this.simulation.step();
+        this.dom.btnStop.onclick = () => this.simulation.stop();
+        
+        // Initialize Controls State
+        this.updateControls(this.simulation.status);
+
         const updateBtn = document.getElementById('update-lib-btn');
         if (updateBtn) updateBtn.onclick = () => this.applyFromUI();
         
@@ -43,6 +68,39 @@ class Editor {
             this.loadGraph(saved);
         } else {
             this.initDemo();
+        }
+    }
+
+    updateControls(status) {
+        const d = this.dom;
+        
+        if (status === 'STOPPED') {
+            d.btnPlay.disabled = false;
+            d.btnPlay.title = "Play";
+            
+            // Enable Pause button as "Start Paused"
+            d.btnPause.disabled = false;
+            d.btnPause.title = "Start Paused"; 
+            
+            // Allow stepping from start
+            d.btnStep.disabled = false; 
+            d.btnStep.title = "Start & Step";
+
+            d.btnStop.disabled = true;
+        } 
+        else if (status === 'RUNNING') {
+            d.btnPlay.disabled = true;
+            d.btnPause.disabled = false;
+            d.btnPause.title = "Pause";
+            d.btnStep.disabled = true; // Can't step while running
+            d.btnStop.disabled = false;
+        } 
+        else if (status === 'PAUSED') {
+            d.btnPlay.disabled = false; 
+            d.btnPlay.title = "Resume";
+            d.btnPause.disabled = true; // Already paused
+            d.btnStep.disabled = false;
+            d.btnStop.disabled = false;
         }
     }
 

@@ -1,51 +1,150 @@
 class Simulation {
-    // [UPDATE] Accept renderer in constructor
     constructor(graph, renderer) { 
         this.graph = graph; 
         this.renderer = renderer;
+        
+        // State Machine: STOPPED -> RUNNING <-> PAUSED
+        this.status = 'STOPPED'; 
+        this.executionQueue = []; 
+        this.timer = null;
+        
+        this.onStateChange = null; 
     }
     
-    async run() {
+    /**
+     * Prepares the simulation state but does not trigger the loop.
+     */
+    initialize() {
+        if (this.status !== 'STOPPED') this.stop();
+        
         console.clear();
-        console.log("--- Simulation Started ---");
+        console.log("--- Simulation Initialized ---");
         
         this.graph.nodes.forEach(n => n.executionResult = null);
+        this.executionQueue = [];
 
+        // Find Entry Points
         const starts = this.graph.nodes.filter(n => n.name === "Event BeginPlay");
-        for(const n of starts) {
-            await this.executeFlow(n);
+        starts.forEach(n => {
+            this.executionQueue.push({ node: n, conn: null });
+        });
+    }
+
+    /**
+     * Starts execution immediately.
+     */
+    start() {
+        this.initialize();
+        this.setStatus('RUNNING');
+        this.tick();
+    }
+
+    /**
+     * Initializes the simulation but keeps it paused at the beginning.
+     */
+    startPaused() {
+        this.initialize();
+        this.setStatus('PAUSED');
+        // We don't call tick(), so it waits here.
+    }
+
+    /**
+     * Pauses execution after the current step finishes.
+     */
+    pause() {
+        if (this.status === 'RUNNING') {
+            this.setStatus('PAUSED');
+            if(this.timer) clearTimeout(this.timer);
         }
     }
 
-    async executeFlow(node) {
-        this.highlightNode(node.id);
-        node.setError(null); 
+    /**
+     * Resumes execution from the current queue.
+     */
+    resume() {
+        if (this.status === 'PAUSED') {
+            this.setStatus('RUNNING');
+            this.tick();
+        }
+    }
 
-        // 1. Run Node Logic
+    stop() {
+        this.setStatus('STOPPED');
+        this.executionQueue = [];
+        if(this.timer) clearTimeout(this.timer);
+        console.log("--- Simulation Stopped ---");
+    }
+
+    /**
+     * Executes exactly one step.
+     * Can now start the simulation if it's currently stopped.
+     */
+    step() {
+        if (this.status === 'STOPPED') {
+            this.startPaused();
+            // Allow visual update to settle before processing? 
+            // In this logic, we just process immediately.
+            this.processNext(true); 
+        } else if (this.status === 'PAUSED') {
+            this.processNext(true); 
+        }
+    }
+
+    setStatus(s) {
+        this.status = s;
+        if (this.onStateChange) this.onStateChange(s);
+    }
+
+    tick() {
+        if (this.status !== 'RUNNING') return;
+        this.processNext(false);
+    }
+
+    async processNext(isSingleStep) {
+        if (this.executionQueue.length === 0) {
+            this.stop();
+            return;
+        }
+
+        const item = this.executionQueue.shift();
+        const { node, conn } = item;
+
+        // 1. Animate Wire
+        if (conn && this.renderer) {
+            this.renderer.animateExecWire(conn);
+            await new Promise(r => setTimeout(r, 1500));
+        }
+
+        // 2. Re-check Pause State (user might have clicked Pause during animation)
+        if (this.status === 'PAUSED' && !isSingleStep) {
+            this.executionQueue.unshift(item); 
+            return;
+        }
+
+        // 3. Execute Node Logic
+        this.highlightNode(node.id);
+        node.setError(null);
+
         if (node.jsFunctionRef) {
             try {
                 const args = await this.gatherInputs(node);
-                if (args === null) return; 
-
-                node.executionResult = node.jsFunctionRef(...args);
-            } catch (err) {
-                if (err.isBlueprintError) {
-                    node.setError(err.message);
-                    return; 
-                } else {
-                    console.error(err);
+                if (args !== null) {
+                    node.executionResult = node.jsFunctionRef(...args);
                 }
+            } catch (err) {
+                if (err.isBlueprintError) node.setError(err.message);
+                else console.error(err);
+                this.stop(); 
+                return;
             }
         }
 
-        // 2. Pick Next Pin (Branch Logic)
+        // 4. Find Next Node(s)
         let targetPinName = null;
         if (node.name === "Branch") {
-            const condition = node.executionResult; 
-            targetPinName = condition ? "True" : "False";
+            targetPinName = node.executionResult ? "True" : "False";
         }
 
-        // 3. Find Output Pin
         let outExecPin = null;
         if (targetPinName) {
             outExecPin = node.outputs.find(p => p.type === 'exec' && p.name === targetPinName);
@@ -53,62 +152,48 @@ class Simulation {
             outExecPin = node.outputs.find(p => p.type === 'exec');
         }
 
-        // 4. Move to Next Node with Animation
         if (outExecPin) {
-            const conn = this.graph.connections.find(c => c.fromNode === node.id && c.fromPin === outExecPin.index);
-            if (conn) {
-                const nextNode = this.graph.nodes.find(n => n.id === conn.toNode);
+            const nextConn = this.graph.connections.find(c => c.fromNode === node.id && c.fromPin === outExecPin.index);
+            if (nextConn) {
+                const nextNode = this.graph.nodes.find(n => n.id === nextConn.toNode);
                 if (nextNode) {
-                    // [VISUAL] Trigger the 1.5s white ball animation
-                    if(this.renderer) this.renderer.animateExecWire(conn);
-                    
-                    // [DELAY] Wait for the animation to travel before executing the next node.
-                    await new Promise(r => setTimeout(r, 1500)); 
-
-                    await this.executeFlow(nextNode);
+                    this.executionQueue.push({ node: nextNode, conn: nextConn });
                 }
             }
+        }
+
+        // 5. Schedule Next Tick
+        if (this.status === 'RUNNING' && !isSingleStep) {
+            this.timer = setTimeout(() => this.tick(), 100);
         }
     }
 
     async gatherInputs(node) {
         const args = [];
-        
         for(let i = 0; i < node.inputs.length; i++) {
             const pin = node.inputs[i];
             if (pin.type === 'exec') continue;
 
             const conn = this.graph.connections.find(c => c.toNode === node.id && c.toPin === pin.index);
-            
             if (conn) {
                 const sourceNode = this.graph.nodes.find(n => n.id === conn.fromNode);
-                
-                // If pure, calculate now
                 if (this.isPureNode(sourceNode)) {
                     try {
                         if (sourceNode.executionResult === null) {
                             const sourceArgs = await this.gatherInputs(sourceNode);
                             if (sourceArgs === null) return null;
-
                             sourceNode.setError(null);
                             sourceNode.executionResult = sourceNode.jsFunctionRef(...sourceArgs);
                         }
                     } catch (err) {
-                        if (err.isBlueprintError) {
-                            sourceNode.setError(err.message);
-                            return null; 
-                        }
-                        throw err; 
+                        sourceNode.setError(err.message || "Error");
+                        return null;
                     }
                 }
-
-                // [VISUAL] Trigger Data Animation (Glow + Floating Value)
                 if (this.renderer) {
                     this.renderer.animateDataWire(conn, sourceNode.executionResult);
-                    // Slight delay for visual effect so it's not instant
-                    await new Promise(r => setTimeout(r, 300));
+                    await new Promise(r => setTimeout(r, 300)); 
                 }
-
                 args.push(sourceNode.executionResult);
             } else {
                 args.push(node.getInputValue(i));
