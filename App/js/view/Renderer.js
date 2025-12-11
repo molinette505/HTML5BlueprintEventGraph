@@ -1,28 +1,61 @@
+/**
+ * Renderer Class
+ * Responsible for the "View" layer.
+ * Handles DOM manipulation, SVG drawing for wires, and updating CSS transforms for Pan/Zoom.
+ * It delegates specific Node HTML creation to the NodeRenderer helper.
+ */
 class Renderer {
+    /**
+     * @param {Graph} graph - The data model to render.
+     * @param {Object} dom - Cache of DOM elements (container, layers, etc).
+     */
     constructor(graph, dom) {
         this.graph = graph;
         this.dom = dom;
+        
+        // Helper class to build the actual HTML for a node
         this.nodeRenderer = new NodeRenderer();
+        
+        // Store the drag callback so we can re-attach it when refreshing nodes
         this.dragCallback = null;
 
+        // Listen for requests to redraw a specific node (e.g., expanding advanced pins)
         window.addEventListener('node-refresh', (e) => {
             const node = this.graph.nodes.find(n => n.id === e.detail.nodeId);
             if (node) this.refreshNode(node);
         });
     }
 
+    /**
+     * Main Render Loop.
+     * 1. Updates Pan/Zoom CSS.
+     * 2. Clears and Redraws all wires (SVG).
+     * 3. Updates Pin visual states (connected style).
+     * Note: It does NOT redraw nodes every frame (performance optimization). Nodes are DOM elements.
+     */
     render() {
         this.updateTransform();
+        
+        // Clear existing wires
         this.dom.connectionsLayer.innerHTML = ''; 
         
+        // Reset pin visual states
         const pins = document.querySelectorAll('.pin');
         pins.forEach(p => p.classList.remove('connected', 'snapped'));
         document.querySelectorAll('.pin-row').forEach(r => r.classList.remove('has-connection'));
 
+        // Draw every active connection in the graph
         this.graph.connections.forEach(c => {
             this.drawConnection(c);
-            const outPin = this.dom.nodesLayer.querySelector(`.pin[data-node="${c.fromNode}"][data-index="${c.fromPin}"][data-type="output"]`);
-            const inPin = this.dom.nodesLayer.querySelector(`.pin[data-node="${c.toNode}"][data-index="${c.toPin}"][data-type="input"]`);
+            
+            // Find the specific DOM elements for the From/To pins
+            const outSelector = `.pin[data-node="${c.fromNode}"][data-index="${c.fromPin}"][data-type="output"]`;
+            const inSelector = `.pin[data-node="${c.toNode}"][data-index="${c.toPin}"][data-type="input"]`;
+            
+            const outPin = this.dom.nodesLayer.querySelector(outSelector);
+            const inPin = this.dom.nodesLayer.querySelector(inSelector);
+            
+            // Apply CSS classes to hide widgets or change color
             if(outPin) outPin.classList.add('connected');
             if(inPin) {
                 inPin.classList.add('connected');
@@ -31,62 +64,123 @@ class Renderer {
         });
     }
 
+    /**
+     * Creates the DOM element for a new node and adds it to the screen.
+     * @param {Node} node - The Node Model object.
+     * @param {Function} onDragCallback - Function to call when user tries to drag this node.
+     */
     createNodeElement(node, onDragCallback) {
-        this.dragCallback = onDragCallback;
+        this.dragCallback = onDragCallback; // Cache for later use
         const el = this.nodeRenderer.createElement(node);
         this.attachEvents(el, node);
         this.dom.nodesLayer.appendChild(el);
     }
 
+    /**
+     * Re-renders a specific node in place.
+     * Used when node state changes (e.g., expanding Advanced Pins).
+     */
     refreshNode(node) {
         const oldEl = document.getElementById(`node-${node.id}`);
         if (!oldEl) return;
+        
+        // Create new HTML structure
         const newEl = this.nodeRenderer.createElement(node);
+        
+        // Re-attach listeners
         this.attachEvents(newEl, node);
+        
+        // Swap in DOM
         this.dom.nodesLayer.replaceChild(newEl, oldEl);
+        
+        // Trigger full render to update wire positions attached to this node
         this.render();
     }
 
+    /**
+     * Attaches the MouseDown event for node dragging.
+     * Includes logic to preventing dragging if clicking on a Pin, Input, or Arrow.
+     */
     attachEvents(el, node) {
         el.addEventListener('mousedown', (e) => {
+            // Stop drag if clicking interactive elements
             if(e.target.closest('.pin') || e.target.closest('input') || 
                e.target.closest('.node-widget') || e.target.closest('.advanced-arrow')) return;
+            
             if(this.dragCallback) this.dragCallback(e, node.id);
         });
     }
 
+    /**
+     * Calculates positions and draws a wire for a Connection object.
+     */
     drawConnection(c) {
         const p1 = this.getPinPos(c.fromNode, c.fromPin, 'output');
         const p2 = this.getPinPos(c.toNode, c.toPin, 'input');
+        
+        // Only draw if both endpoints exist in the DOM
         if(p1 && p2) this.drawCurve(p1, p2, c.type);
     }
 
+    /**
+     * Generates and appends the SVG Path for a wire.
+     * @param {Object} p1 - Start {x,y}
+     * @param {Object} p2 - End {x,y}
+     * @param {String} type - Data Type (for color)
+     * @param {Boolean} isDrag - If true, adds special styling
+     */
     drawCurve(p1, p2, type, isDrag) {
         const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        
+        // Bezier Curve Logic
         const dist = Math.abs(p2.x - p1.x);
-        const cp = Math.max(dist * 0.5, 50);
+        // Control Point Offset: Smoothness based on distance
+        const cp = Math.max(dist * 0.5, 50); 
+        
+        // SVG Path Command (M = Move, C = Cubic Bezier)
         const d = `M ${p1.x} ${p1.y} C ${p1.x+cp} ${p1.y}, ${p2.x-cp} ${p2.y}, ${p2.x} ${p2.y}`;
+        
         path.setAttribute('d', d); 
         path.setAttribute('class', `connection ${type==='exec'?'exec':''} ${isDrag?'dragging':''}`);
+        
+        // Set Color
         const col = (window.typeDefinitions[type]||{}).color || '#fff';
         path.style.stroke = col;
+        
         this.dom.connectionsLayer.appendChild(path);
     }
 
+    /**
+     * Calculates the exact center of a pin in "Graph Space".
+     * Converts DOM Client Rect (Screen Pixels) -> Graph Coordinates (Pan/Zoom adjusted).
+     */
     getPinPos(nid, idx, type) {
-        const el = this.dom.nodesLayer.querySelector(`.pin[data-node="${nid}"][data-index="${idx}"][data-type="${type}"]`);
+        const selector = `.pin[data-node="${nid}"][data-index="${idx}"][data-type="${type}"]`;
+        const el = this.dom.nodesLayer.querySelector(selector);
+        
         if(!el) return null;
+        
         const r = el.getBoundingClientRect();
         const c = this.dom.container.getBoundingClientRect();
+        
         return { 
-            x: (r.left+r.width/2 - c.left - this.graph.pan.x)/this.graph.scale, 
-            y: (r.top+r.height/2 - c.top - this.graph.pan.y)/this.graph.scale 
+            // Formula: (PinScreenPos - ContainerPos - PanOffset) / ZoomScale
+            x: (r.left + r.width/2 - c.left - this.graph.pan.x) / this.graph.scale, 
+            y: (r.top + r.height/2 - c.top - this.graph.pan.y) / this.graph.scale 
         };
     }
 
+    /**
+     * Updates the CSS Transform of the main layers to reflect Pan/Zoom state.
+     */
     updateTransform() {
+        // Move the layer holding Nodes and Wires
         this.dom.transformLayer.style.transform = `translate(${this.graph.pan.x}px, ${this.graph.pan.y}px) scale(${this.graph.scale})`;
+        
+        // Move the background grid (Parallax or static depending on preference, here it moves with content)
         this.dom.container.style.backgroundPosition = `${this.graph.pan.x}px ${this.graph.pan.y}px`;
+        
+        // Scale the grid size
         const s = this.graph.scale * 100;
         this.dom.container.style.backgroundSize = `${s}px ${s}px`;
     }
