@@ -419,7 +419,7 @@ class Interaction {
     }
 
     // ==========================================
-    // UTILS (From Previous)
+    // UTILS
     // ==========================================
 
     hideContextMenu() { 
@@ -433,7 +433,7 @@ class Interaction {
     }
 
     // ==========================================
-    // NODE DRAG & SELECTION (Standard)
+    // NODE DRAG & SELECTION
     // ==========================================
 
     handleNodeDown(e, nodeId) {
@@ -493,8 +493,6 @@ class Interaction {
         const rect = this.dom.container.getBoundingClientRect();
         const container = this.dom.container;
 
-        // [FIX] Calculate relative position accounting for Border and Scroll
-        // clientLeft/clientTop is the width of the border
         const relX = e.clientX - rect.left - container.clientLeft + container.scrollLeft;
         const relY = e.clientY - rect.top - container.clientTop + container.scrollTop;
 
@@ -506,7 +504,6 @@ class Interaction {
     }
 
     updateBoxSelect(e) {
-        // Calculate dimensions in Screen Space first
         const x = Math.min(e.clientX, this.dragData.startX);
         const y = Math.min(e.clientY, this.dragData.startY);
         const w = Math.abs(e.clientX - this.dragData.startX);
@@ -515,7 +512,6 @@ class Interaction {
         const rect = this.dom.container.getBoundingClientRect();
         const container = this.dom.container;
 
-        // [FIX] Convert Screen Space -> Container Relative Space
         const relX = x - rect.left - container.clientLeft + container.scrollLeft;
         const relY = y - rect.top - container.clientTop + container.scrollTop;
 
@@ -524,7 +520,6 @@ class Interaction {
         this.selectionBox.style.width = w + 'px';
         this.selectionBox.style.height = h + 'px';
 
-        // Collision Detection uses Screen Coordinates (Client Space), so 'x' and 'y' are correct here
         const boxRect = { left: x, top: y, right: x+w, bottom: y+h };
 
         this.graph.nodes.forEach(node => {
@@ -532,7 +527,6 @@ class Interaction {
             if (!el) return;
             const r = el.getBoundingClientRect();
             
-            // Standard AABB Intersection test
             const intersect = !(boxRect.left > r.right || 
                                 boxRect.right < r.left || 
                                 boxRect.top > r.bottom || 
@@ -629,26 +623,31 @@ class Interaction {
         else this.renderer.drawCurve(p2, p1, this.dragWire.dataType, true);
     }
 
-    // [RESTORED] POLYTYPE / WILDCARD LOGIC
+    // ==========================================
+    // FINISH WIRE DRAG (AUTO-CONVERT / WILDCARD)
+    // ==========================================
+
     finishWireDrag(target) {
         const s = this.dragWire;
-        const t = { nodeId: parseInt(target.dataset.node), index: parseInt(target.dataset.index), type: target.dataset.type, dataType: target.dataset.dataType };
+        const t = { 
+            nodeId: parseInt(target.dataset.node), 
+            index: parseInt(target.dataset.index), 
+            type: target.dataset.type, 
+            dataType: target.dataset.dataType 
+        };
         
         // 1. Basic Validation
-        if (s.sourceNode === t.nodeId) return; 
-        if (s.sourceType === t.type) return;   
+        if (s.sourceNode === t.nodeId) return; // Self-connection check
+        if (s.sourceType === t.type) return;   // Direction check (Input->Input)
         
         // 2. Wildcard Logic (Polytype)
         // If connecting Specific -> Wildcard, update the Wildcard Node
         if (s.dataType !== 'wildcard' && t.dataType === 'wildcard') {
             const targetNode = this.graph.nodes.find(n => n.id === t.nodeId);
             if (targetNode) {
-                // Update all pins on this node to the new specific type
                 targetNode.inputs.forEach(p => p.setType(s.dataType));
                 targetNode.outputs.forEach(p => p.setType(s.dataType));
-                // Update our target reference to match the new type
-                t.dataType = s.dataType;
-                // Redraw node to show new colors
+                t.dataType = s.dataType; // Update local ref
                 this.renderer.refreshNode(targetNode);
             }
         }
@@ -658,18 +657,57 @@ class Interaction {
             if (sourceNode) {
                 sourceNode.inputs.forEach(p => p.setType(t.dataType));
                 sourceNode.outputs.forEach(p => p.setType(t.dataType));
-                s.dataType = t.dataType;
+                s.dataType = t.dataType; // Update local ref
                 this.renderer.refreshNode(sourceNode);
             }
         }
         
-        // 3. Final Type Check (block if still mismatched)
-        if (s.dataType !== t.dataType && s.dataType !== 'wildcard' && t.dataType !== 'wildcard') {
-            // Optional: You could add "Auto Convert" logic here later
+        // 3. Resolve Flow Direction to check for Conversion
+        const fromInfo = s.sourceType === 'output' ? s : t;
+        const toInfo = s.sourceType === 'output' ? t : s;
+        
+        // Check for Type Mismatch
+        if (fromInfo.dataType !== toInfo.dataType) {
+            
+            // 4. Automatic Conversion Injection
+            const convKey = `${fromInfo.dataType}->${toInfo.dataType}`;
+            const convNodeName = window.nodeConversions ? window.nodeConversions[convKey] : null;
+            
+            if (convNodeName && window.nodeTemplates) {
+                const tmpl = window.nodeTemplates.find(n => n.name === convNodeName);
+                if (tmpl) {
+                    // Calculate Midpoint for the new node
+                    const tPos = this.renderer.getPinPos(t.nodeId, t.index, t.type);
+                    if (!tPos) return; 
+                    
+                    const midX = (s.startX + tPos.x) / 2 - 50; 
+                    const midY = (s.startY + tPos.y) / 2;
+
+                    // Create Conversion Node
+                    const convNode = this.graph.addNode(tmpl, midX, midY);
+                    this.renderer.createNodeElement(convNode, (e, nid) => this.handleNodeDown(e, nid));
+
+                    // Normalize IDs for connection call
+                    const srcId = s.sourceType === 'output' ? s.sourceNode : t.nodeId;
+                    const srcPin = s.sourceType === 'output' ? s.sourcePin : t.index;
+                    const dstId = s.sourceType === 'output' ? t.nodeId : s.sourceNode;
+                    const dstPin = s.sourceType === 'output' ? t.index : s.sourcePin;
+
+                    // Connect Source -> Conv -> Target
+                    // We assume conversion nodes always have Input[0] and Output[0]
+                    this.graph.addConnection(srcId, srcPin, convNode.id, 0, fromInfo.dataType);
+                    this.graph.addConnection(convNode.id, 0, dstId, dstPin, toInfo.dataType);
+                    
+                    this.renderer.render();
+                    return; // Successfully injected conversion, stop processing
+                }
+            }
+
+            // If no conversion found, block the connection
             return;
         }
 
-        // 4. Create Connection
+        // 5. Create Standard Connection
         const fromNode = s.sourceType === 'output' ? s.sourceNode : t.nodeId;
         const fromPin = s.sourceType === 'output' ? s.sourcePin : t.index;
         const toNode = s.sourceType === 'output' ? t.nodeId : s.sourceNode;
