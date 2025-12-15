@@ -15,7 +15,11 @@ class Editor {
             btnPause: document.getElementById('btn-pause'),
             btnStep: document.getElementById('btn-step'),
             btnReplay: document.getElementById('btn-replay'),
-            btnStop: document.getElementById('btn-stop')
+            btnStop: document.getElementById('btn-stop'),
+            
+            // Developer Mode Inputs (Safety check in case elements are missing)
+            typesInput: document.getElementById('types-input'),
+            nodesInput: document.getElementById('nodes-input')
         };
         
         // 2. Initialize Logic Systems
@@ -31,28 +35,35 @@ class Editor {
 
         // 3. PHASE 1: Load Data from Files -> Memory
         this.importFileGlobals();
+
+        // 4. PHASE 2: Load Data from Memory -> UI (Developer Mode)
+        this.populateUI();
         
-        // 4. Bind Events
+        // 5. Bind Events
         
         // --- Play Button Logic ---
-        this.dom.btnPlay.onclick = () => {
-            if(this.simulation.status === 'PAUSED') this.simulation.resume();
-            else this.simulation.start();
-        };
+        if (this.dom.btnPlay) {
+            this.dom.btnPlay.onclick = () => {
+                if(this.simulation.status === 'PAUSED') this.simulation.resume();
+                else this.simulation.start();
+            };
+        }
         
         // --- Pause / Start Paused Logic ---
-        this.dom.btnPause.onclick = () => {
-            if (this.simulation.status === 'STOPPED') {
-                this.simulation.startPaused();
-            } else {
-                this.simulation.pause();
-            }
-        };
+        if (this.dom.btnPause) {
+            this.dom.btnPause.onclick = () => {
+                if (this.simulation.status === 'STOPPED') {
+                    this.simulation.startPaused();
+                } else {
+                    this.simulation.pause();
+                }
+            };
+        }
 
         // --- Stepping Logic ---
-        this.dom.btnStep.onclick = () => this.simulation.step();
-        this.dom.btnReplay.onclick = () => this.simulation.replayStep();
-        this.dom.btnStop.onclick = () => this.simulation.stop();
+        if (this.dom.btnStep) this.dom.btnStep.onclick = () => this.simulation.step();
+        if (this.dom.btnReplay) this.dom.btnReplay.onclick = () => this.simulation.replayStep();
+        if (this.dom.btnStop) this.dom.btnStop.onclick = () => this.simulation.stop();
         
         // Initialize Controls State
         this.updateControls(this.simulation.status);
@@ -78,6 +89,8 @@ class Editor {
      */
     updateControls(status) {
         const d = this.dom;
+        if (!d.btnPlay) return; // Guard against missing DOM
+
         const iconStartPaused = `<svg viewBox="0 0 24 24"><path d="M6 5v14l9-7z M17 5v14h2V5z"/></svg>`;
         const iconPause = `<svg viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>`;
 
@@ -124,6 +137,15 @@ class Editor {
         }
     }
 
+    populateUI() {
+        if (this.dom.typesInput && window.globalDataTypes) {
+            this.dom.typesInput.value = JSON.stringify(window.globalDataTypes, null, 4);
+        }
+        if (this.dom.nodesInput && window.globalNodes) {
+            this.dom.nodesInput.value = JSON.stringify(window.globalNodes, null, 4);
+        }
+    }
+
     initDemo() {
         if(!window.nodeTemplates) return;
         
@@ -164,6 +186,7 @@ class Editor {
         }
 
         [nEvent, nBranch, nFloat, nAdd, nGeq, nTrue, nFalse].forEach(n => {
+            // [FIX] Using the correct interaction method: handleNodeDown
             if(n) this.renderer.createNodeElement(n, (e,id) => this.interaction.handleNodeDown(e,id));
         });
 
@@ -175,11 +198,16 @@ class Editor {
         this.graph.addConnection(nAdd.id, 0, nGeq.id, 0, 'float');
         this.graph.addConnection(nGeq.id, 0, nBranch.id, 1, 'boolean');
 
-        // [NEW] Auto-layout the demo nodes so they don't step on each other
-        const demoNodes = [nEvent, nBranch, nFloat, nAdd, nGeq, nTrue, nFalse].filter(n => !!n);
-        this.interaction.layoutNodes(demoNodes);
+        // [CRITICAL FIX] 
+        // 1. Commented out layoutNodes because it does NOT exist in Interaction.js and was causing a crash.
+        // const demoNodes = [nEvent, nBranch, nFloat, nAdd, nGeq, nTrue, nFalse].filter(n => !!n);
+        // this.interaction.layoutNodes(demoNodes);
 
-        this.renderer.render();
+        // 2. Added setTimeout. This ensures the DOM elements are painted 
+        //    before we try to calculate wire positions. Without this, wires are invisible (0,0).
+        setTimeout(() => {
+            this.renderer.render();
+        }, 50);
     }
 }
 
