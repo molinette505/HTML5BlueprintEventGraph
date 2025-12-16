@@ -1,3 +1,7 @@
+/**
+ * Simulation Class
+ * Manages the execution flow of the blueprint graph.
+ */
 class Simulation {
     constructor(graph, renderer) { 
         this.graph = graph; 
@@ -17,6 +21,7 @@ class Simulation {
         console.clear();
         console.log(`--- Simulation Initialized (Run ${this.runInstanceId}) ---`);
         
+        // Reset Variables to their Default Values
         if (window.App.variableManager) {
             window.App.variableManager.resetRuntime();
         }
@@ -99,6 +104,7 @@ class Simulation {
 
         const { node, conn } = item;
 
+        // Animate Wire
         if (conn && this.renderer) {
             this.renderer.animateExecWire(conn);
             await new Promise(r => setTimeout(r, 1500));
@@ -120,7 +126,7 @@ class Simulation {
 
                 if (args !== null) {
                     this.highlightNode(node.id, '#ff9900'); 
-                    // CRITICAL CHANGE: Use .apply to pass 'node' as context
+                    // Execution Phase
                     node.executionResult = node.jsFunctionRef.apply(node, args);
                 }
             } catch (err) {
@@ -133,6 +139,7 @@ class Simulation {
             this.highlightNode(node.id, '#ff9900');
         }
 
+        // Branching Logic
         let targetPinName = null;
         if (node.name === "Branch") {
             targetPinName = node.executionResult ? "True" : "False";
@@ -175,8 +182,13 @@ class Simulation {
                 
                 if (this.isPureNode(sourceNode)) {
                     try {
-                        if (sourceNode.executionResult === null) {
+                        // FORCE RE-EVALUATION if it is a Variable.Get node
+                        // This ensures we always get the latest variable value.
+                        const isVariableGet = sourceNode.functionId === 'Variable.Get';
+
+                        if (sourceNode.executionResult === null || isVariableGet) {
                             
+                            // Visual Debugging for Pure Nodes
                             this.highlightNode(sourceNode.id, '#ffffff'); 
                             await new Promise(r => setTimeout(r, 600)); 
                             if (this.runInstanceId !== runId) return null;
@@ -187,7 +199,7 @@ class Simulation {
 
                             sourceNode.setError(null);
                             
-                            // CRITICAL CHANGE: Use .apply here too for Pure nodes
+                            // Calculate
                             const rawRes = sourceNode.jsFunctionRef.apply(sourceNode, sourceArgs);
                             
                             const outPin = sourceNode.outputs[0];
@@ -215,7 +227,6 @@ class Simulation {
                         }
                     }
 
-                    // Pass node to visualizer to support variables
                     const debugLabel = window.FunctionRegistry.getVisualDebug(sourceNode, debugInputs, val);
                     this.renderer.animateDataWire(conn, debugLabel);
                     

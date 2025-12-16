@@ -53,6 +53,8 @@ class VariableManager {
         if(!v) return;
 
         v[key] = value;
+        
+        // If type changed, reset default value
         if (key === 'type') {
             v.defaultValue = this.getTypeDefault(value);
         }
@@ -71,10 +73,6 @@ class VariableManager {
         }
     }
 
-    /**
-     * Helper to get the CSS variable for a given type's color.
-     * Matches definitions in App/css/colors.css
-     */
     getTypeColor(type) {
         switch(type) {
             case 'boolean': return 'var(--c-boolean)'; 
@@ -94,11 +92,14 @@ class VariableManager {
             const row = document.createElement('div');
             row.className = 'var-row';
             
+            // 1. Name Input
             const nameInput = document.createElement('input');
             nameInput.value = v.name;
             nameInput.className = 'var-name';
+            nameInput.title = "Variable Name";
             nameInput.onchange = (e) => this.updateVariable(v.name, 'name', e.target.value);
             
+            // Drag Events
             row.draggable = true;
             row.ondragstart = (e) => {
                 e.dataTransfer.setData('application/json', JSON.stringify({
@@ -108,6 +109,7 @@ class VariableManager {
                 }));
             };
 
+            // 2. Type Dropdown
             const typeSelect = document.createElement('select');
             typeSelect.className = 'var-type';
             ['boolean', 'int', 'float', 'string', 'vector'].forEach(t => {
@@ -119,53 +121,100 @@ class VariableManager {
             });
             typeSelect.onchange = (e) => this.updateVariable(v.name, 'type', e.target.value);
 
+            // 3. Default Value Input (Dynamic based on type)
+            const defContainer = document.createElement('div');
+            defContainer.className = 'var-default';
+            defContainer.style.flexGrow = '1';
+            defContainer.style.marginLeft = '5px';
+            
+            const defInput = this.createDefaultInput(v);
+            defContainer.appendChild(defInput);
+
+            // 4. Delete Button
             const delBtn = document.createElement('button');
             delBtn.innerText = '×';
             delBtn.className = 'var-del';
             delBtn.onclick = () => this.deleteVariable(v.name);
 
-            row.append(nameInput, typeSelect, delBtn);
+            row.append(nameInput, typeSelect, defContainer, delBtn);
             this.ui.list.appendChild(row);
         });
+    }
+
+    createDefaultInput(v) {
+        let input;
+        
+        if (v.type === 'boolean') {
+            input = document.createElement('input');
+            input.type = 'checkbox';
+            input.checked = v.defaultValue;
+            input.onchange = (e) => this.updateVariable(v.name, 'defaultValue', e.target.checked);
+        } 
+        else if (v.type === 'int' || v.type === 'float') {
+            input = document.createElement('input');
+            input.type = 'number';
+            input.value = v.defaultValue;
+            input.style.width = '50px';
+            input.style.background = '#111';
+            input.style.border = '1px solid #333';
+            input.style.color = '#ccc';
+            input.step = v.type === 'float' ? '0.1' : '1';
+            input.onchange = (e) => {
+                const val = v.type === 'int' ? parseInt(e.target.value) : parseFloat(e.target.value);
+                this.updateVariable(v.name, 'defaultValue', val);
+            };
+        }
+        else if (v.type === 'vector') {
+            input = document.createElement('span');
+            input.innerText = '(x,y,z)'; // Simplified for sidebar
+            input.style.fontSize = '10px';
+            input.style.color = '#888';
+        }
+        else {
+            input = document.createElement('input');
+            input.type = 'text';
+            input.value = v.defaultValue;
+            input.style.width = '60px';
+            input.style.background = '#111';
+            input.style.border = '1px solid #333';
+            input.style.color = '#ccc';
+            input.onchange = (e) => this.updateVariable(v.name, 'defaultValue', e.target.value);
+        }
+        return input;
     }
 
     resetRuntime() {
         this.runtimeValues = {};
         this.variables.forEach(v => {
-            this.runtimeValues[v.name] = JSON.parse(JSON.stringify(v.defaultValue));
+            // Deep copy for objects (like vectors)
+            this.runtimeValues[v.name] = (typeof v.defaultValue === 'object' && v.defaultValue !== null) 
+                ? JSON.parse(JSON.stringify(v.defaultValue))
+                : v.defaultValue;
         });
     }
 
-    /**
-     * GET NODE:
-     * - Color: Matches Variable Type
-     */
     createGetTemplate(varName) {
         const v = this.variables.find(i => i.name === varName);
         if(!v) return null;
 
         return {
-            name: "", // Empty header text, but colored bar
-            color: this.getTypeColor(v.type), // Correct Color
+            name: "", // Hidden header
+            color: this.getTypeColor(v.type), 
             functionId: "Variable.Get",
-            inputs: [], // No inputs
+            inputs: [], 
             outputs: [
                 { name: v.name, type: v.type }
             ]
         };
     }
 
-    /**
-     * SET NODE:
-     * - Color: Matches Variable Type
-     */
     createSetTemplate(varName) {
         const v = this.variables.find(i => i.name === varName);
         if(!v) return null;
 
         return {
             name: "Set",
-            color: this.getTypeColor(v.type), // Correct Color
+            color: this.getTypeColor(v.type), 
             functionId: "Variable.Set",
             inputs: [
                 { name: "Exec", type: "exec" },
