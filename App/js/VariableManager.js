@@ -72,15 +72,16 @@ class VariableManager {
     }
 
     /**
-     * Helper to get the CSS variable for a given type's color
+     * Helper to get the CSS variable for a given type's color.
+     * Matches definitions in App/css/colors.css
      */
     getTypeColor(type) {
         switch(type) {
-            case 'boolean': return 'var(--p-bool)';   // Red/Maroon
-            case 'int':     return 'var(--p-int)';    // Cyan
-            case 'float':   return 'var(--p-float)';  // Green
-            case 'string':  return 'var(--p-string)'; // Magenta
-            case 'vector':  return 'var(--p-vector)'; // Gold
+            case 'boolean': return 'var(--c-boolean)'; 
+            case 'int':     return 'var(--c-int)';    
+            case 'float':   return 'var(--c-float)';  
+            case 'string':  return 'var(--c-string)'; 
+            case 'vector':  return 'var(--c-vector)'; 
             default:        return 'gray';
         }
     }
@@ -144,10 +145,10 @@ class VariableManager {
         if(!v) return null;
 
         return {
-            name: "", 
-            color: this.getTypeColor(v.type), // Dynamic Color
+            name: "", // Empty header text, but colored bar
+            color: this.getTypeColor(v.type), // Correct Color
             functionId: "Variable.Get",
-            inputs: [], 
+            inputs: [], // No inputs
             outputs: [
                 { name: v.name, type: v.type }
             ]
@@ -164,7 +165,7 @@ class VariableManager {
 
         return {
             name: "Set",
-            color: this.getTypeColor(v.type), // Dynamic Color
+            color: this.getTypeColor(v.type), // Correct Color
             functionId: "Variable.Set",
             inputs: [
                 { name: "Exec", type: "exec" },
