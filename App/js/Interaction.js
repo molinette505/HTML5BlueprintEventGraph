@@ -1,144 +1,99 @@
 /**
  * Interaction Class
  * Handles all user input: Mouse clicks, dragging, zooming, selection, and context menus.
- * Acts as the "Controller" in the MVC pattern, updating the Graph (Model) and Renderer (View).
  */
 class Interaction {
-    /**
-     * @param {Graph} graph - The data model containing nodes and connections.
-     * @param {Renderer} renderer - The view component that handles DOM/SVG updates.
-     * @param {Object} dom - Cache of DOM elements (container, layers, etc).
-     */
     constructor(graph, renderer, dom) {
         this.graph = graph;
         this.renderer = renderer;
         this.dom = dom;
         
-        // --- State Management ---
-        // Current interaction mode: 'IDLE', 'PANNING', 'DRAG_NODES', 'DRAG_WIRE', 'BOX_SELECT'
         this.mode = 'IDLE'; 
-        
-        // Set of Node IDs that are currently selected
         this.selectedNodes = new Set();
         
-        // Temporary data used during dragging operations
         this.dragData = {
-            startX: 0, startY: 0,       // Mouse screen coordinates at start
-            initialPan: {x:0, y:0},     // Camera pan at start
-            nodeOffsets: new Map()      // Map<NodeId, {x, y}> (Initial positions for multi-drag)
+            startX: 0, startY: 0,
+            initialPan: {x:0, y:0},
+            nodeOffsets: new Map()
         };
         
-        // Track last mouse position for Paste operations
         this.lastMousePos = { x: 0, y: 0 };
 
-        // Create the Selection Box DOM element (hidden by default)
         this.selectionBox = document.createElement('div');
         this.selectionBox.id = 'selection-box';
         this.dom.container.appendChild(this.selectionBox);
 
-        // Context Menu position (Graph coordinates) for spawning new nodes
         this.contextMenuPos = {x:0, y:0};
-        
-        // Track collapsed categories
         this.collapsedCategories = new Set(); 
 
         this.bindEvents();
         this.bindKeyboardEvents();
     }
 
-    /**
-     * Attaches global event listeners to the graph container and window.
-     */
     bindEvents() {
         const c = this.dom.container;
 
-        // --- MOUSE DOWN: Entry point for most interactions ---
         c.addEventListener('mousedown', e => {
             this.hideContextMenu();
 
-            // 1. PIN INTERACTION
             if (e.target.classList.contains('pin')) {
-                // Right Click on Pin: Show Type Context Menu
                 if (e.button === 2) {
                     const pin = e.target;
                     this.showContextMenu(e.clientX, e.clientY, 'pin', parseInt(pin.dataset.node), parseInt(pin.dataset.index), pin.dataset.type);
                     return;
                 }
-                // Alt+Click: Break connections
                 if (e.altKey) {
                     this.handlePinBreak(e);
                 } 
-                // Left Click: Drag Wire
                 else if (e.button === 0) {
                     this.handlePinDown(e);
                 }
                 return;
             }
 
-            // 2. NODE INTERACTION
             const nodeEl = e.target.closest('.node');
             if (nodeEl) {
-                // Extract ID from "node-123"
                 const nodeId = parseInt(nodeEl.id.replace('node-', ''));
-                
-                // Right Click on Node: Show Node Context Menu (Copy/Cut/Delete)
                 if (e.button === 2) {
                     this.addSelection(nodeId);
                     this.showContextMenu(e.clientX, e.clientY, 'node', nodeId);
                     return;
                 }
-                
-                // Left Click on Node: Select or Drag
                 if (e.button === 0) {
                     this.handleNodeDown(e, nodeId);
                     return;
                 }
             }
 
-            // 3. BACKGROUND INTERACTION
-            // Check if clicking the canvas directly (not on top of something else)
             if (e.target === c || e.target === this.dom.transformLayer || e.target.id === 'connections-layer') {
                 if (e.button === 0) {
-                    this.startBoxSelect(e); // Left Click = Box Select
+                    this.startBoxSelect(e);
                 } else if (e.button === 2) {
-                    this.startPan(e);       // Right Click = Pan Camera
+                    this.startPan(e);
                 }
             }
         });
 
-        // --- MOUSE MOVE: Update state based on current Mode ---
         window.addEventListener('mousemove', e => {
             this.lastMousePos = { x: e.clientX, y: e.clientY };
             switch (this.mode) {
-                case 'PANNING':
-                    this.updatePan(e);
-                    break;
-                case 'DRAG_NODES':
-                    this.updateNodeDrag(e);
-                    break;
-                case 'DRAG_WIRE':
-                    this.updateWireDrag(e);
-                    break;
-                case 'BOX_SELECT':
-                    this.updateBoxSelect(e);
-                    break;
+                case 'PANNING': this.updatePan(e); break;
+                case 'DRAG_NODES': this.updateNodeDrag(e); break;
+                case 'DRAG_WIRE': this.updateWireDrag(e); break;
+                case 'BOX_SELECT': this.updateBoxSelect(e); break;
             }
         });
 
-        // --- MOUSE UP: Commit actions or Cleanup ---
         window.addEventListener('mouseup', e => {
             if (this.mode === 'PANNING') {
-                // Heuristic: If mouse barely moved during right-click, treat as Context Menu request
                 const dist = Math.hypot(e.clientX - this.dragData.startX, e.clientY - this.dragData.startY);
                 if (dist < 5 && e.button === 2) {
-                    // Only show if we didn't click a node or pin
                     if(!e.target.closest('.node') && !e.target.closest('.pin')) {
                         this.showContextMenu(e.clientX, e.clientY, 'canvas');
                     }
                 }
             }
             else if (this.mode === 'DRAG_WIRE') {
-                // Check if we dropped on a valid pin
                 const target = e.target.closest('.pin');
                 if (target) this.finishWireDrag(target);
                 this.renderer.render();
@@ -147,41 +102,32 @@ class Interaction {
                 this.finishBoxSelect();
             }
 
-            // Reset state
             this.mode = 'IDLE';
-            this.renderer.dom.connectionsLayer.innerHTML = ''; // Clear temporary drag wire
-            this.renderer.render(); // Redraw persistent wires
+            this.renderer.dom.connectionsLayer.innerHTML = ''; 
+            this.renderer.render(); 
             this.selectionBox.style.display = 'none';
         });
 
-        // Prevent default browser context menu so we can use Right Click for Panning
         c.addEventListener('contextmenu', e => e.preventDefault());
-
-        // Zoom Handling
         c.addEventListener('wheel', e => this.handleZoom(e), { passive: false });
     }
 
     bindKeyboardEvents() {
         document.addEventListener('keydown', async (e) => {
-            // Ignore shortcuts if typing in a text field
             if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
 
-            // Copy (Ctrl+C)
             if ((e.ctrlKey || e.metaKey) && e.key === 'c') { 
                 e.preventDefault(); 
                 await this.copySelection(); 
             }
-            // Cut (Ctrl+X)
             if ((e.ctrlKey || e.metaKey) && e.key === 'x') { 
                 e.preventDefault(); 
                 await this.cutSelection(); 
             }
-            // Paste (Ctrl+V)
             if ((e.ctrlKey || e.metaKey) && e.key === 'v') { 
                 e.preventDefault(); 
                 await this.pasteFromClipboard(this.lastMousePos.x, this.lastMousePos.y); 
             }
-            // Delete (Del / Backspace)
             if (e.key === 'Delete' || e.key === 'Backspace') { 
                 if (this.selectedNodes.size > 0) this.deleteSelected(); 
             }
@@ -198,13 +144,11 @@ class Interaction {
         const nodesToCopy = [];
         const idsToCopy = new Set(this.selectedNodes);
 
-        // Serialize Selected Nodes
         this.selectedNodes.forEach(id => {
             const node = this.graph.nodes.find(n => n.id === id);
             if (node) nodesToCopy.push(node.toJSON());
         });
 
-        // Copy connections ONLY if both start and end nodes are selected
         const connectionsToCopy = this.graph.connections.filter(c => 
             idsToCopy.has(c.fromNode) && idsToCopy.has(c.toNode)
         );
@@ -241,24 +185,37 @@ class Interaction {
 
             this.clearSelection();
 
-            // Calculate center of the copied group to offset relative to mouse
             let minX = Infinity, minY = Infinity;
             nodes.forEach(n => {
                 if (n.x < minX) minX = n.x;
                 if (n.y < minY) minY = n.y;
             });
 
-            // Convert Mouse Screen Pos -> Graph Pos
             const rect = this.dom.container.getBoundingClientRect();
             const pasteX = (screenX - rect.left - this.graph.pan.x) / this.graph.scale;
             const pasteY = (screenY - rect.top - this.graph.pan.y) / this.graph.scale;
 
-            const idMap = new Map(); // Old ID -> New ID
+            const idMap = new Map();
 
             // 1. Create Nodes
             nodes.forEach(nodeData => {
-                const template = window.nodeTemplates.find(t => t.name === nodeData.name);
-                if (!template) return;
+                let template = null;
+
+                // [FIX] Handle Variable Nodes Logic
+                if (nodeData.varName && window.App.variableManager) {
+                    if (nodeData.functionId === 'Variable.Get') {
+                        template = window.App.variableManager.createGetTemplate(nodeData.varName);
+                    } else if (nodeData.functionId === 'Variable.Set') {
+                        template = window.App.variableManager.createSetTemplate(nodeData.varName);
+                    }
+                } 
+                
+                // If not a variable (or variable fallback failed), try standard library
+                if (!template) {
+                    template = window.nodeTemplates.find(t => t.name === nodeData.name);
+                }
+
+                if (!template) return; // Cannot paste if template is missing
 
                 const offsetX = nodeData.x - minX;
                 const offsetY = nodeData.y - minY;
@@ -266,8 +223,7 @@ class Interaction {
                 const newNode = this.graph.addNode(template, pasteX + offsetX, pasteY + offsetY);
                 idMap.set(nodeData.id, newNode.id);
 
-                // [STEP A] Restore Pin Types FIRST.
-                // Polymorphic nodes reset their widgets when type changes.
+                // [STEP A] Restore Pin Types
                 if (nodeData.pinTypes) {
                     if (nodeData.pinTypes.inputs) {
                         nodeData.pinTypes.inputs.forEach((type, idx) => {
@@ -285,7 +241,7 @@ class Interaction {
                     }
                 }
 
-                // [STEP B] Restore Widget Values SECOND.
+                // [STEP B] Restore Widget Values
                 if (nodeData.inputs) {
                     nodeData.inputs.forEach((savedPin, index) => {
                         const realPin = newNode.inputs[index];
@@ -302,7 +258,7 @@ class Interaction {
                 this.addSelection(newNode.id);
             });
 
-            // 2. Restore Connections (using new IDs)
+            // 2. Restore Connections
             connections.forEach(c => {
                 const newFrom = idMap.get(c.fromNode);
                 const newTo = idMap.get(c.toNode);
@@ -332,12 +288,8 @@ class Interaction {
     // NODE SELECTION & MOVEMENT
     // ==========================================
 
-    /**
-     * Handles clicking on a node. Manages selection state and prepares for dragging.
-     */
     handleNodeDown(e, nodeId) {
         if (e.button !== 0) return;
-
         e.stopPropagation(); 
         
         if (!e.ctrlKey && !e.shiftKey && !this.selectedNodes.has(nodeId)) {
@@ -469,7 +421,6 @@ class Interaction {
 
     handleZoom(e) {
         e.preventDefault();
-        
         const rect = this.dom.container.getBoundingClientRect();
         const mouseX = e.clientX - rect.left;
         const mouseY = e.clientY - rect.top;
@@ -492,11 +443,7 @@ class Interaction {
 
     handlePinBreak(e) {
         const pin = e.target;
-        this.graph.disconnectPin(
-            parseInt(pin.dataset.node), 
-            parseInt(pin.dataset.index), 
-            pin.dataset.type
-        );
+        this.graph.disconnectPin(parseInt(pin.dataset.node), parseInt(pin.dataset.index), pin.dataset.type);
         this.renderer.render();
     }
 
@@ -560,7 +507,6 @@ class Interaction {
         }
     }
 
-    // [MERGED] Includes Automatic Wildcard Propagation + Automatic Conversion
     finishWireDrag(target) {
         const s = this.dragWire;
         const t = {
@@ -570,56 +516,47 @@ class Interaction {
             dataType: target.dataset.dataType
         };
 
-        // 1. Basic Validation
-        if (s.sourceNode === t.nodeId) return; // Self-connection
-        if (s.sourceType === t.type) return;   // Same direction
+        if (s.sourceNode === t.nodeId) return; 
+        if (s.sourceType === t.type) return;   
 
-        // 2. Wildcard Logic (Polytype)
-        // If connecting Specific -> Wildcard, update the Wildcard Node
         if (s.dataType !== 'wildcard' && t.dataType === 'wildcard') {
             const targetNode = this.graph.nodes.find(n => n.id === t.nodeId);
             if (targetNode) {
                 targetNode.inputs.forEach(p => p.setType(s.dataType));
                 targetNode.outputs.forEach(p => p.setType(s.dataType));
-                t.dataType = s.dataType; // Update local ref for subsequent checks
+                t.dataType = s.dataType; 
                 this.renderer.refreshNode(targetNode);
             }
         }
-        // If connecting Wildcard -> Specific, update the Wildcard Node
         else if (s.dataType === 'wildcard' && t.dataType !== 'wildcard') {
             const sourceNode = this.graph.nodes.find(n => n.id === s.sourceNode);
             if (sourceNode) {
                 sourceNode.inputs.forEach(p => p.setType(t.dataType));
                 sourceNode.outputs.forEach(p => p.setType(t.dataType));
-                s.dataType = t.dataType; // Update local ref for subsequent checks
+                s.dataType = t.dataType; 
                 this.renderer.refreshNode(sourceNode);
             }
         }
 
-        // 3. Conversion Injection (If types still mismatch)
         if (s.dataType !== t.dataType) {
             const srcType = s.sourceType === 'output' ? s.dataType : t.dataType;
             const tgtType = s.sourceType === 'output' ? t.dataType : s.dataType;
             
-            // Look for conversion template (e.g. "int->string")
             const key = `${srcType}->${tgtType}`;
             const templateName = window.nodeConversions ? window.nodeConversions[key] : null;
             
             if (templateName && window.nodeTemplates) {
                 const template = window.nodeTemplates.find(n => n.name === templateName);
                 if (template) {
-                    // Calculate midpoint
                     const nodeA = this.graph.nodes.find(n => n.id === s.sourceNode);
                     const nodeB = this.graph.nodes.find(n => n.id === t.nodeId);
                     
                     const midX = (nodeA.x + nodeB.x) / 2;
                     const midY = (nodeA.y + nodeB.y) / 2;
                     
-                    // Spawn Converter
                     const convNode = this.graph.addNode(template, midX, midY);
                     this.renderer.createNodeElement(convNode, (e, nid) => this.handleNodeDown(e, nid));
                     
-                    // Wire A -> Converter -> B
                     const fromNodeId = s.sourceType === 'output' ? s.sourceNode : t.nodeId;
                     const fromPinIdx = s.sourceType === 'output' ? s.sourcePin : t.index;
                     const toNodeId = s.sourceType === 'output' ? t.nodeId : s.sourceNode;
@@ -627,13 +564,12 @@ class Interaction {
 
                     this.graph.addConnection(fromNodeId, fromPinIdx, convNode.id, 0, srcType);
                     this.graph.addConnection(convNode.id, 0, toNodeId, toPinIdx, tgtType);
-                    return; // Stop here, we handled it
+                    return; 
                 }
             }
-            return; // If no conversion found, do nothing (prevent bad connection)
+            return; 
         }
 
-        // 4. Standard Connection
         const fromNode = s.sourceType === 'output' ? s.sourceNode : t.nodeId;
         const fromPin = s.sourceType === 'output' ? s.sourcePin : t.index;
         const toNode = s.sourceType === 'output' ? t.nodeId : s.sourceNode;
@@ -641,10 +577,6 @@ class Interaction {
 
         this.graph.addConnection(fromNode, fromPin, toNode, toPin, s.dataType);
     }
-
-    // ==========================================
-    // CONTEXT MENU
-    // ==========================================
 
     showContextMenu(x, y, type, targetId, pinIndex, pinDir) {
         const menu = this.dom.contextMenu;

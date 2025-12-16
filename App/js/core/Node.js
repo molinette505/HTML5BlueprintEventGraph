@@ -17,6 +17,9 @@ class GraphNode {
         
         this.showAdvanced = false;
 
+        // Restore Variable Name if present
+        this.varName = template.varName || null;
+
         this.functionId = template.functionId || null;
         this.jsFunctionRef = window.FunctionRegistry ? window.FunctionRegistry[this.functionId] : null;
         this.executionResult = null; 
@@ -67,12 +70,13 @@ class GraphNode {
             name: this.name,
             x: this.x,
             y: this.y,
-            // [FIX] Ensure pinTypes are saved so we can restore Wildcard nodes correctly
+            varName: this.varName, 
+            functionId: this.functionId, // [FIX] Save functionId to identify Get/Set logic on paste
+            
             pinTypes: {
                 inputs: this.inputs.map(p => p.type),
                 outputs: this.outputs.map(p => p.type)
             },
-            // [FIX] Save Widget value if present, else Pin value
             inputs: this.inputs.map(p => ({
                 name: p.name,
                 value: p.widget ? p.widget.value : p.value 

@@ -7,8 +7,6 @@ class VariableManager {
     constructor(editor) {
         this.editor = editor;
         this.variables = []; // { name, type, defaultValue }
-        
-        // Runtime storage (reset on simulation start)
         this.runtimeValues = {};
 
         // Helper to render widgets in the sidebar
@@ -47,82 +45,42 @@ class VariableManager {
     }
 
     deleteVariable(name) {
+        // 1. Remove from Data Model
         this.variables = this.variables.filter(v => v.name !== name);
+        
+        // 2. [FIX] Remove associated nodes from Graph
+        // We collect IDs first to avoid modifying the array while iterating
+        const nodesToRemove = this.editor.graph.nodes
+            .filter(n => n.varName === name)
+            .map(n => n.id);
+
+        nodesToRemove.forEach(id => {
+            this.editor.graph.removeNode(id);
+            
+            // Remove DOM element
+            const el = document.getElementById(`node-${id}`);
+            if(el) el.remove();
+        });
+
+        // 3. Re-render View
+        this.editor.renderer.render(); // Redraw wires (since nodes are gone)
         this.renderList();
     }
 
-    /**
-     * Updates a variable property.
-     * INTELLIGENT RENDER: Only re-renders the list if the TYPE changes.
-     * Name/Value changes update the graph but keep the sidebar DOM intact to preserve focus.
-     */
     updateVariable(oldName, key, value) {
         const v = this.variables.find(i => i.name === oldName);
         if(!v) return;
 
-        // 1. Handle TYPE Change (Requires full re-render)
-        if (key === 'type') {
-            v.type = value;
-            v.defaultValue = this.getTypeDefault(value);
-            
-            // Update Graph Nodes (Type & Color)
-            this.updateGraphNodes(v.name, value);
-            
-            // Re-render list because the widget type changed (e.g. Checkbox -> Number)
-            this.renderList();
-        }
+        v[key] = value;
         
-        // 2. Handle NAME Change (No re-render)
-        else if (key === 'name') {
-            const newName = value;
-            // Prevent duplicate names
-            if (newName !== oldName && !this.variables.find(x => x.name === newName)) {
-                v.name = newName;
-                this.renameGraphNodes(oldName, newName);
-            }
-            // Do NOT re-render list (keeps focus in the input)
+        if (key === 'type') {
+            v.defaultValue = this.getTypeDefault(value);
+            this.updateGraphNodes(v.name, value);
         }
 
-        // 3. Handle VALUE Change (No re-render)
-        else if (key === 'defaultValue') {
-            v.defaultValue = value;
-            
-            // Sync default value to "Set" nodes in the graph
-            this.updateGraphNodes(v.name, v.type);
-            
-            // Do NOT re-render list (keeps focus in the input)
-        }
+        this.renderList();
     }
 
-    /**
-     * Updates the text labels of Get/Set nodes when a variable is renamed.
-     */
-    renameGraphNodes(oldName, newName) {
-        const graph = this.editor.graph;
-        const renderer = this.editor.renderer;
-
-        graph.nodes.forEach(node => {
-            if (node.varName === oldName) {
-                // Update internal reference
-                node.varName = newName;
-
-                // Update Pin Names
-                if (node.functionId === "Variable.Get") {
-                    if(node.outputs[0]) node.outputs[0].name = newName;
-                } 
-                else if (node.functionId === "Variable.Set") {
-                    if(node.inputs[1]) node.inputs[1].name = newName;
-                }
-
-                // Refresh Node DOM
-                renderer.refreshNode(node);
-            }
-        });
-    }
-
-    /**
-     * Scans the graph for Get/Set nodes for this variable and updates them (Type/Color/Widget).
-     */
     updateGraphNodes(varName, newType) {
         const graph = this.editor.graph;
         const renderer = this.editor.renderer;
@@ -132,52 +90,38 @@ class VariableManager {
         graph.nodes.forEach(node => {
             if (node.varName === varName) {
                 
-                // Update Node Color
                 node.color = color; 
 
-                // Update Get Node
                 if (node.functionId === "Variable.Get") {
                     if(node.outputs[0]) {
                         node.outputs[0].type = newType;
                         node.outputs[0].dataType = newType;
                     }
                 } 
-                // Update Set Node
                 else if (node.functionId === "Variable.Set") {
-                    // Update Input Pin
                     if(node.inputs[1]) {
                         const pin = node.inputs[1];
                         pin.type = newType;
                         pin.dataType = newType;
                         
-                        // Update Widget Model
                         const config = this.getWidgetConfig(newType, defaultValue);
                         if (config) {
-                            // If widget type matches, update value; else create new
-                            // (Simplest is to always recreate for safety)
                             pin.widget = new Widget(config.type, config.value);
-                            
-                            // If we are just updating the value (not type), preserve the value?
-                            // Actually, if this is called from 'defaultValue' change, 
-                            // we WANT to overwrite the Set node's value with the new default.
-                            const v = this.variables.find(i => i.name === varName);
-                            if(v) pin.widget.value = v.defaultValue;
                         } else {
                             pin.widget = null;
                         }
                     }
-                    // Update Output Pin
                     if(node.outputs[1]) {
                         node.outputs[1].type = newType;
                         node.outputs[1].dataType = newType;
                     }
                 }
-                
-                // Refresh DOM
                 renderer.refreshNode(node);
             }
         });
     }
+
+    // ... (Rest of methods: getTypeDefault, getTypeColor, getWidgetConfig, etc. remain the same) ...
 
     getTypeDefault(type) {
         switch(type) {
@@ -225,14 +169,12 @@ class VariableManager {
             row.style.gap = '8px';
             row.style.padding = '8px';
             
-            // 1. Color Indicator
             const typeIndicator = document.createElement('div');
             typeIndicator.style.width = '4px';
             typeIndicator.style.backgroundColor = this.getTypeColor(v.type);
             typeIndicator.style.borderRadius = '2px';
             typeIndicator.style.flexShrink = '0';
 
-            // 2. Main Content Column
             const col = document.createElement('div');
             col.style.display = 'flex';
             col.style.flexDirection = 'column';
@@ -240,7 +182,6 @@ class VariableManager {
             col.style.gap = '6px';
             col.style.minWidth = '0';
 
-                // Row A: Name + Delete
                 const topRow = document.createElement('div');
                 topRow.style.display = 'flex';
                 topRow.style.justifyContent = 'space-between';
@@ -252,7 +193,6 @@ class VariableManager {
                     nameInput.className = 'var-name';
                     nameInput.style.flexGrow = '1';
                     nameInput.style.minWidth = '0';
-                    // Use 'change' for name to update on Blur/Enter
                     nameInput.onchange = (e) => this.updateVariable(v.name, 'name', e.target.value);
 
                     const delBtn = document.createElement('button');
@@ -262,14 +202,12 @@ class VariableManager {
 
                 topRow.append(nameInput, delBtn);
 
-                // Row B: Type + Default Value
                 const botRow = document.createElement('div');
                 botRow.style.display = 'flex';
                 botRow.style.alignItems = 'center';
                 botRow.style.gap = '8px';
                 botRow.style.flexWrap = 'wrap'; 
 
-                    // Type Dropdown
                     const typeSelect = document.createElement('select');
                     typeSelect.className = 'var-type';
                     typeSelect.style.width = '70px'; 
@@ -282,7 +220,6 @@ class VariableManager {
                     });
                     typeSelect.onchange = (e) => this.updateVariable(v.name, 'type', e.target.value);
 
-                    // Default Value Container
                     const defContainer = document.createElement('div');
                     defContainer.className = 'var-default';
                     defContainer.style.flexGrow = '1'; 
@@ -292,7 +229,6 @@ class VariableManager {
                     const widgetConfig = this.getWidgetConfig(v.type, v.defaultValue);
                     if (widgetConfig) {
                         const widgetEl = this.widgetRenderer.render(widgetConfig, (newVal) => {
-                            // This callback fires on every keystroke ('input' event)
                             this.updateVariable(v.name, 'defaultValue', newVal);
                         });
                         
@@ -348,6 +284,7 @@ class VariableManager {
             name: "", 
             color: this.getTypeColor(v.type), 
             functionId: "Variable.Get",
+            varName: varName, // Ensure this is in template so copy/paste works immediately on creation
             inputs: [], 
             outputs: [
                 { name: v.name, type: v.type }
@@ -365,6 +302,7 @@ class VariableManager {
             name: "Set",
             color: this.getTypeColor(v.type), 
             functionId: "Variable.Set",
+            varName: varName, // Ensure this is in template
             inputs: [
                 { name: "Exec", type: "exec" },
                 { name: v.name, type: v.type, widget: widgetConfig } 
