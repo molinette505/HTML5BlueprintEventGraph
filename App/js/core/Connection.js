@@ -1,29 +1,31 @@
 /**
  * Connection Class
  * Represents a wire linking two pins in the graph.
- * This is the "Model" for a connection. The "View" (SVG path) is handled by Renderer.js.
+ * This class acts as the "Model" for a connection. 
+ * The visual representation "View" (SVG path) is handled separately by Renderer.js.
  */
 class Connection {
     /**
-     * @param {Number} id - Unique ID for the connection.
-     * @param {Number} fromNodeId - ID of the source Node.
-     * @param {Number} fromPinIdx - Index of the output pin on the source Node.
-     * @param {Number} toNodeId - ID of the target Node.
-     * @param {Number} toPinIdx - Index of the input pin on the target Node.
-     * @param {String} type - Data type of the connection (e.g., 'exec', 'string', 'int').
+     * Initializes a new Connection.
+     * @param {Number} uniqueConnectionId - Unique ID for the connection.
+     * @param {Number} sourceNodeId - The ID of the node where the connection starts (Output).
+     * @param {Number} sourcePinIndex - The index of the specific output pin on the source Node.
+     * @param {Number} targetNodeId - The ID of the node where the connection ends (Input).
+     * @param {Number} targetPinIndex - The index of the specific input pin on the target Node.
+     * @param {String} connectionType - Data type of the connection (e.g., 'exec', 'string', 'int').
      */
-    constructor(id, fromNodeId, fromPinIdx, toNodeId, toPinIdx, type) {
-        this.id = id;
+    constructor(uniqueConnectionId, sourceNodeId, sourcePinIndex, targetNodeId, targetPinIndex, connectionType) {
+        this.id = uniqueConnectionId;
         
-        // Source (Output Pin)
-        this.fromNode = fromNodeId;
-        this.fromPin = fromPinIdx;
+        // Source Information (Output Pin)
+        this.fromNode = sourceNodeId;
+        this.fromPin = sourcePinIndex;
         
-        // Target (Input Pin)
-        this.toNode = toNodeId;
-        this.toPin = toPinIdx;
+        // Target Information (Input Pin)
+        this.toNode = targetNodeId;
+        this.toPin = targetPinIndex;
         
-        // Type determines the color and compatibility rules
-        this.type = type; 
+        // Type determines the color and compatibility rules during interaction
+        this.type = connectionType; 
     }
 }

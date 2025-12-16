@@ -1,18 +1,19 @@
 /**
  * Widget Class
  * Represents the state and configuration of a UI control (widget) attached to a Pin.
- * This is the "Model" for the widget. The "View" is handled by WidgetRenderer.js.
- * * Common widget types: 'text', 'number', 'checkbox', 'dropdown', 'vector3', 'color'.
+ * This acts as the "Model" for the widget. The visual "View" is handled by WidgetRenderer.js.
+ * Common widget types include: 'text', 'number', 'checkbox', 'dropdown', 'vector3', 'color'.
  */
 class Widget {
     /**
-     * @param {String} type - The type of widget (e.g., 'number', 'dropdown').
-     * @param {any} value - The initial value (e.g., 0, "Hello", true).
-     * @param {Array<String>} options - Optional array of strings for 'dropdown' widgets.
+     * Initializes a new Widget model.
+     * @param {String} widgetType - The identifier for the type of widget (e.g., 'number', 'dropdown').
+     * @param {any} initialValue - The initial value held by the widget (e.g., 0, "Hello", true).
+     * @param {Array<String>} dropdownOptions - Optional array of strings used only for 'dropdown' widgets.
      */
-    constructor(type, value, options = []) {
-        this.type = type;       
-        this.value = value;     
-        this.options = options; 
+    constructor(widgetType, initialValue, dropdownOptions = []) {
+        this.type = widgetType;       
+        this.value = initialValue;     
+        this.options = dropdownOptions; 
     }
 }

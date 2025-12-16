@@ -1,148 +1,295 @@
+/**
+ * Function Registry
+ * This object acts as a catalog of all executable logic available to the Blueprint system.
+ * It maps 'functionId' strings (used in Node definitions) to actual JavaScript implementations.
+ * * It also contains 'Visualizers' which format the output of nodes for debugging displays on the graph.
+ */
 window.FunctionRegistry = {
-    // --- VARIABLES ---
     
-    // Accessed via 'this.varName' because the node is bound as context
+    // ==========================================================================================
+    // VARIABLE OPERATIONS
+    // These functions interact with the global VariableManager to Get/Set runtime state.
+    // ==========================================================================================
+    
+    // Accessed via 'this.varName' because the calling context (the Node instance) is bound to these functions.
     "Variable.Get": function() {
-        const vm = window.App.variableManager;
-        if (!vm || !this.varName) return null;
-        return vm.runtimeValues[this.varName];
+        const variableManager = window.App.variableManager;
+        // If the manager isn't ready or the node has no variable name assigned, return null.
+        if (!variableManager || !this.varName) return null;
+        
+        return variableManager.runtimeValues[this.varName];
     },
 
-    "Variable.Set": function(value) {
-        const vm = window.App.variableManager;
-        if (vm && this.varName) {
-            vm.runtimeValues[this.varName] = value;
+    "Variable.Set": function(incomingValue) {
+        const variableManager = window.App.variableManager;
+        if (variableManager && this.varName) {
+            variableManager.runtimeValues[this.varName] = incomingValue;
         }
-        return value; // Pass-through
+        // Passthrough: The 'Set' node also outputs the value it just set.
+        return incomingValue; 
     },
 
-    // --- REST OF REGISTRY ---
-    getVisualDebug: (node, inputs, result) => {
-        const visualizer = window.FunctionRegistry.Visualizers[node.functionId];
-        if (visualizer) {
-            try { return visualizer(inputs, result, node); } // Pass node to visualizer too
-            catch(e) { console.error("Visualizer Error", e); }
+    // ==========================================================================================
+    // DEBUGGING & VISUALIZATION
+    // These helpers generate the small text previews shown on nodes after execution.
+    // ==========================================================================================
+
+    /**
+     * formatting helper called by the NodeRenderer to display the last execution result.
+     * @param {GraphNode} graphNode - The node being visualized.
+     * @param {Array} inputValues - The values passed into the node.
+     * @param {any} operationResult - The result produced by the node.
+     */
+    getVisualDebug: (graphNode, inputValues, operationResult) => {
+        // Check if a specific visualizer exists for this function type
+        const customVisualizer = window.FunctionRegistry.Visualizers[graphNode.functionId];
+        
+        if (customVisualizer) {
+            try { 
+                return customVisualizer(inputValues, operationResult, graphNode); 
+            } catch(error) { 
+                console.error("Visualizer Error", error); 
+            }
         }
-        if (typeof result === 'object' && result !== null) {
-            if ('x' in result && 'y' in result && 'z' in result) return `(${result.x.toFixed(1)}, ${result.y.toFixed(1)}, ${result.z.toFixed(1)})`;
-            if ('loc' in result && 'rot' in result) return `Trs(...)`;
+
+        // Default formatting if no custom visualizer is defined
+        if (typeof operationResult === 'object' && operationResult !== null) {
+            // Check for Vector format (x, y, z)
+            if ('x' in operationResult && 'y' in operationResult && 'z' in operationResult) {
+                return `(${operationResult.x.toFixed(1)}, ${operationResult.y.toFixed(1)}, ${operationResult.z.toFixed(1)})`;
+            }
+            // Check for Transform format (location, rotation)
+            if ('loc' in operationResult && 'rot' in operationResult) {
+                return `Trs(...)`;
+            }
             return '{Obj}';
         }
-        return String(result);
+        
+        return String(operationResult);
     },
 
+    /**
+     * Dictionary of specific formatting functions for different node types.
+     * Keys match the 'functionId' of the nodes.
+     */
     Visualizers: {
-        "Math.AddGeneric": (inps, res) => `${fmt(inps[0])} + ${fmt(inps[1])} = ${fmt(res)}`,
-        "Math.SubtractGeneric": (inps, res) => `${fmt(inps[0])} - ${fmt(inps[1])} = ${fmt(res)}`,
-        "Math.MultiplyGeneric": (inps, res) => `${fmt(inps[0])} × ${fmt(inps[1])} = ${fmt(res)}`,
-        "Math.DivideGeneric": (inps, res) => `${fmt(inps[0])} ÷ ${fmt(inps[1])} = ${fmt(res)}`,
+        // Mathematical Operations
+        "Math.AddGeneric": (inputs, result) => `${formatValueForDisplay(inputs[0])} + ${formatValueForDisplay(inputs[1])} = ${formatValueForDisplay(result)}`,
+        "Math.SubtractGeneric": (inputs, result) => `${formatValueForDisplay(inputs[0])} - ${formatValueForDisplay(inputs[1])} = ${formatValueForDisplay(result)}`,
+        "Math.MultiplyGeneric": (inputs, result) => `${formatValueForDisplay(inputs[0])} × ${formatValueForDisplay(inputs[1])} = ${formatValueForDisplay(result)}`,
+        "Math.DivideGeneric": (inputs, result) => `${formatValueForDisplay(inputs[0])} ÷ ${formatValueForDisplay(inputs[1])} = ${formatValueForDisplay(result)}`,
         
-        "Logic.Greater": (inps, res) => `(${fmt(inps[0])} > ${fmt(inps[1])}) = ${res}`,
-        "Logic.Less": (inps, res) => `(${fmt(inps[0])} < ${fmt(inps[1])}) = ${res}`,
-        "Logic.GreaterEqual": (inps, res) => `(${fmt(inps[0])} >= ${fmt(inps[1])}) = ${res}`,
-        "Logic.LessEqual": (inps, res) => `(${fmt(inps[0])} <= ${fmt(inps[1])}) = ${res}`,
-        "Logic.Equal": (inps, res) => `(${fmt(inps[0])} == ${fmt(inps[1])}) = ${res}`,
-        "Logic.NotEqual": (inps, res) => `(${fmt(inps[0])} != ${fmt(inps[1])}) = ${res}`,
+        // Logical Comparisons
+        "Logic.Greater": (inputs, result) => `(${formatValueForDisplay(inputs[0])} > ${formatValueForDisplay(inputs[1])}) = ${result}`,
+        "Logic.Less": (inputs, result) => `(${formatValueForDisplay(inputs[0])} < ${formatValueForDisplay(inputs[1])}) = ${result}`,
+        "Logic.GreaterEqual": (inputs, result) => `(${formatValueForDisplay(inputs[0])} >= ${formatValueForDisplay(inputs[1])}) = ${result}`,
+        "Logic.LessEqual": (inputs, result) => `(${formatValueForDisplay(inputs[0])} <= ${formatValueForDisplay(inputs[1])}) = ${result}`,
+        "Logic.Equal": (inputs, result) => `(${formatValueForDisplay(inputs[0])} == ${formatValueForDisplay(inputs[1])}) = ${result}`,
+        "Logic.NotEqual": (inputs, result) => `(${formatValueForDisplay(inputs[0])} != ${formatValueForDisplay(inputs[1])}) = ${result}`,
         
-        "Vector.Make": (inps, res) => `Vec(${inps[0]}, ${inps[1]}, ${inps[2]})`,
-        "Vector.Length": (inps, res) => {
-            const v = inps[0] || {x:0, y:0, z:0};
-            return `sqrt(${v.x.toFixed(1)}^2 + ${v.y.toFixed(1)}^2 + ${v.z.toFixed(1)}^2) = ${fmt(res)}`;
+        // Vector Operations
+        "Vector.Make": (inputs, result) => `Vec(${inputs[0]}, ${inputs[1]}, ${inputs[2]})`,
+        "Vector.Length": (inputs, result) => {
+            const vector = inputs[0] || {x:0, y:0, z:0};
+            return `sqrt(${vector.x.toFixed(1)}^2 + ${vector.y.toFixed(1)}^2 + ${vector.z.toFixed(1)}^2) = ${formatValueForDisplay(result)}`;
         },
         
-        "Conv.FloatToInt": (inps, res) => `${inps[0]} ➞ ${res}`,
-        "Conv.IntToFloat": (inps, res) => `${inps[0]} ➞ ${fmt(res)}`,
-        "Conv.FloatToString": (inps, res) => `${inps[0]} ➞ "${res}"`,
-        "Conv.IntToString": (inps, res) => `${inps[0]} ➞ "${res}"`,
-        "Conv.BoolToString": (inps, res) => `${inps[0]} ➞ "${res}"`,
-        "Conv.VectorToString": (inps, res) => `Vec ➞ "${res}"`,
+        // Type Conversions
+        "Conv.FloatToInt": (inputs, result) => `${inputs[0]} ➞ ${result}`,
+        "Conv.IntToFloat": (inputs, result) => `${inputs[0]} ➞ ${formatValueForDisplay(result)}`,
+        "Conv.FloatToString": (inputs, result) => `${inputs[0]} ➞ "${result}"`,
+        "Conv.IntToString": (inputs, result) => `${inputs[0]} ➞ "${result}"`,
+        "Conv.BoolToString": (inputs, result) => `${inputs[0]} ➞ "${result}"`,
+        "Conv.VectorToString": (inputs, result) => `Vec ➞ "${result}"`,
 
-        // Visualizer also needs to check node.varName if inputs are empty
-        "Variable.Get": (inps, res, node) => `${node.varName} = ${fmt(res)}`,
-        "Variable.Set": (inps, res, node) => `${node.varName} = ${fmt(res)}`
+        // Variable Accessors (Visualizer needs the Node instance to read 'varName')
+        "Variable.Get": (inputs, result, node) => `${node.varName} = ${formatValueForDisplay(result)}`,
+        "Variable.Set": (inputs, result, node) => `${node.varName} = ${formatValueForDisplay(result)}`
     },
 
-    "Flow.Print": (msg) => { console.log("%c[Blueprint Output]:", "color: cyan", msg); return msg; },
-    "Flow.Branch": (condition) => !!condition,
+    // ==========================================================================================
+    // EXECUTION LOGIC
+    // These functions implement the actual behavior of the nodes during simulation.
+    // ==========================================================================================
 
-    "Math.AddGeneric": (a, b) => polyOp(a, b, (x,y)=>x+y),
-    "Math.SubtractGeneric": (a, b) => polyOp(a, b, (x,y)=>x-y),
-    "Math.MultiplyGeneric": (a, b) => polyOp(a, b, (x,y)=>x*y),
-    "Math.DivideGeneric": (a, b) => {
-        if (typeof b === 'number' && b === 0) { throw new Error("Division by zero."); }
-        return polyOp(a, b, (x,y)=>x/y);
+    // Flow Control
+    "Flow.Print": (message) => { 
+        console.log("%c[Blueprint Output]:", "color: cyan", message); 
+        return message; 
+    },
+    
+    "Flow.Branch": (condition) => {
+        // Returns true/false to direct the Execution Flow to the appropriate output pin
+        return !!condition;
     },
 
-    "Logic.Equal": (a, b) => deepEq(a, b),
-    "Logic.NotEqual": (a, b) => !deepEq(a, b),
-    "Logic.Greater": (a, b) => checkNum(a,b) && a > b,
-    "Logic.GreaterEqual": (a, b) => checkNum(a,b) && a >= b,
-    "Logic.Less": (a, b) => checkNum(a,b) && a < b,
-    "Logic.LessEqual": (a, b) => checkNum(a,b) && a <= b,
+    // Generic Math (Handles both Numbers and Vectors via 'executePolymorphicOperation')
+    "Math.AddGeneric": (leftOperand, rightOperand) => executePolymorphicOperation(leftOperand, rightOperand, (a, b) => a + b),
+    "Math.SubtractGeneric": (leftOperand, rightOperand) => executePolymorphicOperation(leftOperand, rightOperand, (a, b) => a - b),
+    "Math.MultiplyGeneric": (leftOperand, rightOperand) => executePolymorphicOperation(leftOperand, rightOperand, (a, b) => a * b),
+    "Math.DivideGeneric": (leftOperand, rightOperand) => {
+        if (typeof rightOperand === 'number' && rightOperand === 0) { 
+            throw new Error("Division by zero."); 
+        }
+        return executePolymorphicOperation(leftOperand, rightOperand, (a, b) => a / b);
+    },
 
-    "Vector.Make": (x, y, z) => ({ x: x||0, y: y||0, z: z||0 }),
-    "Vector.Add": (v1, v2) => {
-        const a = v1 || {x:0, y:0, z:0};
-        const b = v2 || {x:0, y:0, z:0};
+    // Comparison Logic
+    "Logic.Equal": (leftOperand, rightOperand) => areValuesDeeplyEqual(leftOperand, rightOperand),
+    "Logic.NotEqual": (leftOperand, rightOperand) => !areValuesDeeplyEqual(leftOperand, rightOperand),
+    "Logic.Greater": (leftOperand, rightOperand) => validateNumericComparison(leftOperand, rightOperand) && leftOperand > rightOperand,
+    "Logic.GreaterEqual": (leftOperand, rightOperand) => validateNumericComparison(leftOperand, rightOperand) && leftOperand >= rightOperand,
+    "Logic.Less": (leftOperand, rightOperand) => validateNumericComparison(leftOperand, rightOperand) && leftOperand < rightOperand,
+    "Logic.LessEqual": (leftOperand, rightOperand) => validateNumericComparison(leftOperand, rightOperand) && leftOperand <= rightOperand,
+
+    // Vector Logic
+    "Vector.Make": (xInput, yInput, zInput) => ({ 
+        x: xInput || 0, 
+        y: yInput || 0, 
+        z: zInput || 0 
+    }),
+    
+    "Vector.Add": (vector1, vector2) => {
+        const a = vector1 || {x:0, y:0, z:0};
+        const b = vector2 || {x:0, y:0, z:0};
         return { x: a.x + b.x, y: a.y + b.y, z: a.z + b.z };
     },
-    "Vector.Length": (v) => {
-        if (!v) return 0;
-        return Math.sqrt(v.x*v.x + v.y*v.y + v.z*v.z);
+    
+    "Vector.Length": (vector) => {
+        if (!vector) return 0;
+        return Math.sqrt(vector.x * vector.x + vector.y * vector.y + vector.z * vector.z);
     },
-    "Vector.Normalize": (v) => {
-        if (!v) return {x:0, y:0, z:0};
-        const len = Math.sqrt(v.x*v.x + v.y*v.y + v.z*v.z);
-        if (len === 0) return {x:0, y:0, z:0};
-        return { x: v.x/len, y: v.y/len, z: v.z/len };
+    
+    "Vector.Normalize": (vector) => {
+        if (!vector) return {x:0, y:0, z:0};
+        const length = Math.sqrt(vector.x * vector.x + vector.y * vector.y + vector.z * vector.z);
+        if (length === 0) return {x:0, y:0, z:0};
+        return { x: vector.x / length, y: vector.y / length, z: vector.z / length };
     },
-    "Rotator.Make": (r, p, y) => ({ roll: r||0, pitch: p||0, yaw: y||0 }),
-    "Transform.Make": (loc, rot, scale) => ({
-        loc: loc || {x:0, y:0, z:0},
-        rot: rot || {roll:0, pitch:0, yaw:0},
+
+    // Struct Creation
+    "Rotator.Make": (roll, pitch, yaw) => ({ 
+        roll: roll || 0, 
+        pitch: pitch || 0, 
+        yaw: yaw || 0 
+    }),
+    
+    "Transform.Make": (location, rotation, scale) => ({
+        loc: location || {x:0, y:0, z:0},
+        rot: rotation || {roll:0, pitch:0, yaw:0},
         scale: scale || {x:1, y:1, z:1}
     }),
 
-    "Make.Bool": (val) => val === true,
-    "Make.Float": (val) => parseFloat(val),
-    "Make.Int": (val) => parseInt(val),
-    "Make.String": (val) => String(val),
+    // Primitive Constructors
+    "Make.Bool": (value) => value === true,
+    "Make.Float": (value) => parseFloat(value),
+    "Make.Int": (value) => parseInt(value),
+    "Make.String": (value) => String(value),
 
-    "Conv.IntToFloat": (val) => val, 
-    "Conv.FloatToInt": (val) => Math.floor(val), 
-    "Conv.FloatToString": (val) => (val !== undefined ? val.toString() : "0.0"),
-    "Conv.IntToString": (val) => (val !== undefined ? val.toString() : "0"),
-    "Conv.BoolToString": (val) => (val ? "true" : "false"),
-    "Conv.VectorToString": (v) => {
-        if (!v) return "X=0.000 Y=0.000 Z=0.000";
-        return `X=${v.x.toFixed(3)} Y=${v.y.toFixed(3)} Z=${v.z.toFixed(3)}`;
+    // Type Conversions
+    "Conv.IntToFloat": (value) => value, 
+    "Conv.FloatToInt": (value) => Math.floor(value), 
+    "Conv.FloatToString": (value) => (value !== undefined ? value.toString() : "0.0"),
+    "Conv.IntToString": (value) => (value !== undefined ? value.toString() : "0"),
+    "Conv.BoolToString": (value) => (value ? "true" : "false"),
+    "Conv.VectorToString": (vector) => {
+        if (!vector) return "X=0.000 Y=0.000 Z=0.000";
+        return `X=${vector.x.toFixed(3)} Y=${vector.y.toFixed(3)} Z=${vector.z.toFixed(3)}`;
     }
 };
 
-function fmt(val) {
-    if (typeof val === 'object' && val !== null && 'x' in val) 
-        return `(${val.x.toFixed(1)}, ${val.y.toFixed(1)}, ${val.z.toFixed(1)})`;
-    if (typeof val === 'number') return parseFloat(val.toFixed(2));
-    return String(val);
+// ==========================================================================================
+// HELPER FUNCTIONS
+// ==========================================================================================
+
+/**
+ * Formats a value for succinct display in the node graph visualizers.
+ * @param {any} value - The value to format.
+ * @returns {String} The formatted string.
+ */
+function formatValueForDisplay(value) {
+    // Format Vectors
+    if (typeof value === 'object' && value !== null && 'x' in value) 
+        return `(${value.x.toFixed(1)}, ${value.y.toFixed(1)}, ${value.z.toFixed(1)})`;
+    
+    // Format Numbers to 2 decimal places
+    if (typeof value === 'number') return parseFloat(value.toFixed(2));
+    
+    return String(value);
 }
 
-function polyOp(a, b, op) {
+/**
+ * Executes an operation polymorphically, handling both Scalar and Vector math.
+ * Supports: (Vector, Vector), (Scalar, Scalar), (Vector, Scalar), and (Scalar, Vector).
+ * * @param {any} leftOperand - The first value.
+ * @param {any} rightOperand - The second value.
+ * @param {Function} operationCallback - The math function (e.g., (x,y)=>x+y) to apply to components.
+ * @returns {any} The result of the operation.
+ */
+function executePolymorphicOperation(leftOperand, rightOperand, operationCallback) {
     const isVector = (v) => v && typeof v === 'object' && 'x' in v;
     const isNumber = (v) => typeof v === 'number';
-    if (isVector(a) && isVector(b)) return { x: op(a.x, b.x), y: op(a.y, b.y), z: op(a.z, b.z) };
-    if (isNumber(a) && isNumber(b)) return op(a, b);
-    if (isVector(a) && isNumber(b)) return { x: op(a.x, b), y: op(a.y, b), z: op(a.z, b) };
-    if (isNumber(a) && isVector(b)) return { x: op(a, b.x), y: op(a, b.y), z: op(a, b.z) };
-    if (a === undefined || b === undefined) return 0;
-    const err = new Error("Operation not supported."); err.isBlueprintError = true; throw err; 
+
+    // Case 1: Vector op Vector (Component-wise)
+    if (isVector(leftOperand) && isVector(rightOperand)) {
+        return { 
+            x: operationCallback(leftOperand.x, rightOperand.x), 
+            y: operationCallback(leftOperand.y, rightOperand.y), 
+            z: operationCallback(leftOperand.z, rightOperand.z) 
+        };
+    }
+
+    // Case 2: Number op Number
+    if (isNumber(leftOperand) && isNumber(rightOperand)) {
+        return operationCallback(leftOperand, rightOperand);
+    }
+
+    // Case 3: Vector op Scalar (Apply scalar to all components)
+    if (isVector(leftOperand) && isNumber(rightOperand)) {
+        return { 
+            x: operationCallback(leftOperand.x, rightOperand), 
+            y: operationCallback(leftOperand.y, rightOperand), 
+            z: operationCallback(leftOperand.z, rightOperand) 
+        };
+    }
+
+    // Case 4: Scalar op Vector (Apply scalar to all components)
+    if (isNumber(leftOperand) && isVector(rightOperand)) {
+        return { 
+            x: operationCallback(leftOperand, rightOperand.x), 
+            y: operationCallback(leftOperand, rightOperand.y), 
+            z: operationCallback(leftOperand, rightOperand.z) 
+        };
+    }
+
+    // Fallback for undefined inputs (treat as zero)
+    if (leftOperand === undefined || rightOperand === undefined) return 0;
+
+    // Error
+    const error = new Error("Operation not supported for these types."); 
+    error.isBlueprintError = true; 
+    throw error; 
 }
 
-function deepEq(a, b) {
-    if (typeof a === 'object' && a !== null && typeof b === 'object' && b !== null) return JSON.stringify(a) === JSON.stringify(b);
-    return a == b;
+/**
+ * Checks for Deep Equality between two values (including objects/vectors).
+ */
+function areValuesDeeplyEqual(valueA, valueB) {
+    if (typeof valueA === 'object' && valueA !== null && typeof valueB === 'object' && valueB !== null) {
+        return JSON.stringify(valueA) === JSON.stringify(valueB);
+    }
+    return valueA == valueB;
 }
 
-function checkNum(a, b) {
-    if (typeof a === 'object' || typeof b === 'object') { const err = new Error("Comparison not supported"); err.isBlueprintError = true; throw err; }
+/**
+ * Validates that inputs are numbers before performing numeric comparisons.
+ * Throws an error if complex types (objects/vectors) are compared directly.
+ */
+function validateNumericComparison(valueA, valueB) {
+    if (typeof valueA === 'object' || typeof valueB === 'object') { 
+        const error = new Error("Comparison not supported for Objects/Vectors."); 
+        error.isBlueprintError = true; 
+        throw error; 
+    }
     return true;
 }
