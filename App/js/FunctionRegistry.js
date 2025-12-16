@@ -73,40 +73,39 @@ window.FunctionRegistry = {
      * Keys match the 'functionId' of the nodes.
      */
     Visualizers: {
-        // Mathematical Operations with Detailed Expansion
-        "Math.AddGeneric": (inputs, result) => formatMathVisualizer(inputs, result, '+'),
-        "Math.SubtractGeneric": (inputs, result) => formatMathVisualizer(inputs, result, '-'),
-        "Math.MultiplyGeneric": (inputs, result) => formatMathVisualizer(inputs, result, '×'),
-        "Math.DivideGeneric": (inputs, result) => formatMathVisualizer(inputs, result, '÷'),
+        // Mathematical Operations
+        "Math.AddGeneric": (inputs, result) => `${formatValueForDisplay(inputs[0])} + ${formatValueForDisplay(inputs[1])} = ${formatValueForDisplay(result)}`,
+        "Math.SubtractGeneric": (inputs, result) => `${formatValueForDisplay(inputs[0])} - ${formatValueForDisplay(inputs[1])} = ${formatValueForDisplay(result)}`,
+        "Math.MultiplyGeneric": (inputs, result) => `${formatValueForDisplay(inputs[0])} × ${formatValueForDisplay(inputs[1])} = ${formatValueForDisplay(result)}`,
+        "Math.DivideGeneric": (inputs, result) => `${formatValueForDisplay(inputs[0])} ÷ ${formatValueForDisplay(inputs[1])} = ${formatValueForDisplay(result)}`,
         
         // Logical Comparisons
-        "Logic.Greater": (inputs, result) => `${formatValueForDisplay(inputs[0])} > ${formatValueForDisplay(inputs[1])}\n---\n${result}`,
-        "Logic.Less": (inputs, result) => `${formatValueForDisplay(inputs[0])} < ${formatValueForDisplay(inputs[1])}\n---\n${result}`,
-        "Logic.GreaterEqual": (inputs, result) => `${formatValueForDisplay(inputs[0])} >= ${formatValueForDisplay(inputs[1])}\n---\n${result}`,
-        "Logic.LessEqual": (inputs, result) => `${formatValueForDisplay(inputs[0])} <= ${formatValueForDisplay(inputs[1])}\n---\n${result}`,
-        "Logic.Equal": (inputs, result) => `${formatValueForDisplay(inputs[0])} == ${formatValueForDisplay(inputs[1])}\n---\n${result}`,
-        "Logic.NotEqual": (inputs, result) => `${formatValueForDisplay(inputs[0])} != ${formatValueForDisplay(inputs[1])}\n---\n${result}`,
+        "Logic.Greater": (inputs, result) => `(${formatValueForDisplay(inputs[0])} > ${formatValueForDisplay(inputs[1])}) = ${result}`,
+        "Logic.Less": (inputs, result) => `(${formatValueForDisplay(inputs[0])} < ${formatValueForDisplay(inputs[1])}) = ${result}`,
+        "Logic.GreaterEqual": (inputs, result) => `(${formatValueForDisplay(inputs[0])} >= ${formatValueForDisplay(inputs[1])}) = ${result}`,
+        "Logic.LessEqual": (inputs, result) => `(${formatValueForDisplay(inputs[0])} <= ${formatValueForDisplay(inputs[1])}) = ${result}`,
+        "Logic.Equal": (inputs, result) => `(${formatValueForDisplay(inputs[0])} == ${formatValueForDisplay(inputs[1])}) = ${result}`,
+        "Logic.NotEqual": (inputs, result) => `(${formatValueForDisplay(inputs[0])} != ${formatValueForDisplay(inputs[1])}) = ${result}`,
         
         // Vector Operations
-        "Vector.Make": (inputs, result) => `Vec(${inputs[0]}, ${inputs[1]}, ${inputs[2]})\n---\n${formatValueForDisplay(result)}`,
-        
+        "Vector.Make": (inputs, result) => `Vec(${inputs[0]}, ${inputs[1]}, ${inputs[2]})`,
         "Vector.Length": (inputs, result) => {
             const vector = inputs[0] || {x:0, y:0, z:0};
-            // Shows calculation logic: sqrt(x^2 + y^2 + z^2)
-            return `sqrt(${vector.x.toFixed(1)}² + ${vector.y.toFixed(1)}² + ${vector.z.toFixed(1)}²)\n---\n${formatValueForDisplay(result)}`;
+            // Modified to use consistent formatting
+            return `|${formatValueForDisplay(vector)}| = ${formatValueForDisplay(result)}`;
         },
         
         // Type Conversions
-        "Conv.FloatToInt": (inputs, result) => `${inputs[0]}\n⬇\n${result}`,
-        "Conv.IntToFloat": (inputs, result) => `${inputs[0]}\n⬇\n${formatValueForDisplay(result)}`,
-        "Conv.FloatToString": (inputs, result) => `${inputs[0]}\n⬇\n"${result}"`,
-        "Conv.IntToString": (inputs, result) => `${inputs[0]}\n⬇\n"${result}"`,
-        "Conv.BoolToString": (inputs, result) => `${inputs[0]}\n⬇\n"${result}"`,
-        "Conv.VectorToString": (inputs, result) => `Vec\n⬇\n"${result}"`,
+        "Conv.FloatToInt": (inputs, result) => `${inputs[0]} ➞ ${result}`,
+        "Conv.IntToFloat": (inputs, result) => `${inputs[0]} ➞ ${formatValueForDisplay(result)}`,
+        "Conv.FloatToString": (inputs, result) => `${inputs[0]} ➞ "${result}"`,
+        "Conv.IntToString": (inputs, result) => `${inputs[0]} ➞ "${result}"`,
+        "Conv.BoolToString": (inputs, result) => `${inputs[0]} ➞ "${result}"`,
+        "Conv.VectorToString": (inputs, result) => `Vec ➞ "${result}"`,
 
-        // Variable Accessors
-        "Variable.Get": (inputs, result, node) => `Get ${node.varName}\n---\n${formatValueForDisplay(result)}`,
-        "Variable.Set": (inputs, result, node) => `Set ${node.varName}\n---\n${formatValueForDisplay(result)}`
+        // Variable Accessors (Visualizer needs the Node instance to read 'varName')
+        "Variable.Get": (inputs, result, node) => `${node.varName} = ${formatValueForDisplay(result)}`,
+        "Variable.Set": (inputs, result, node) => `${node.varName} = ${formatValueForDisplay(result)}`
     },
 
     // ==========================================================================================
@@ -205,44 +204,21 @@ window.FunctionRegistry = {
 // ==========================================================================================
 
 /**
- * Handles complex formatting for Math operations to show expansion steps.
- * e.g. (1,2,3) * 5 -> "(1*5, 2*5, 3*5)"
- */
-function formatMathVisualizer(inputs, result, symbol) {
-    const a = inputs[0];
-    const b = inputs[1];
-    const isVecA = a && typeof a === 'object' && 'x' in a;
-    const isVecB = b && typeof b === 'object' && 'x' in b;
-    
-    let expansion = "";
-
-    // Vector * Scalar
-    if (isVecA && typeof b === 'number') {
-        expansion = `\n(${formatValueForDisplay(a.x)}${symbol}${b}, ${formatValueForDisplay(a.y)}${symbol}${b}, ${formatValueForDisplay(a.z)}${symbol}${b})`;
-    } 
-    // Scalar * Vector
-    else if (typeof a === 'number' && isVecB) {
-        expansion = `\n(${a}${symbol}${formatValueForDisplay(b.x)}, ${a}${symbol}${formatValueForDisplay(b.y)}, ${a}${symbol}${formatValueForDisplay(b.z)})`;
-    }
-    // Vector * Vector
-    else if (isVecA && isVecB) {
-        expansion = `\n(x${symbol}x, y${symbol}y, z${symbol}z)`; // Brief summary for space
-    }
-
-    return `${formatValueForDisplay(a)} ${symbol} ${formatValueForDisplay(b)}${expansion}\n---\n${formatValueForDisplay(result)}`;
-}
-
-/**
  * Formats a value for succinct display in the node graph visualizers.
  * @param {any} value - The value to format.
  * @returns {String} The formatted string.
  */
 function formatValueForDisplay(value) {
     // Format Vectors
-    if (typeof value === 'object' && value !== null && 'x' in value) 
-        return `(${value.x.toFixed(1)}, ${value.y.toFixed(1)}, ${value.z.toFixed(1)})`;
+    if (typeof value === 'object' && value !== null && 'x' in value) {
+        // Parse float to remove trailing zeros (e.g. 5.0 -> 5)
+        const x = parseFloat(value.x.toFixed(2));
+        const y = parseFloat(value.y.toFixed(2));
+        const z = parseFloat(value.z.toFixed(2));
+        return `(${x}, ${y}, ${z})`;
+    }
     
-    // Format Numbers to 2 decimal places
+    // Format Numbers to 2 decimal places max (stripping trailing zeros)
     if (typeof value === 'number') return parseFloat(value.toFixed(2));
     
     return String(value);
