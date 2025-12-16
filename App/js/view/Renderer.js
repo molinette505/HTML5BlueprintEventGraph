@@ -221,6 +221,12 @@ class Renderer {
         label.style.left = `${midPoint.x}px`;
         label.style.top = `${midPoint.y}px`;
         
+        // --- NEW STYLE OVERRIDES ---
+        // Ensure newlines are respected and text is centered
+        label.style.whiteSpace = 'pre';
+        label.style.textAlign = 'center';
+        label.style.zIndex = '200'; // Ensure it floats above nodes
+        
         this.dom.nodesLayer.appendChild(label); 
 
         // CSS Animation handles movement and removal (fade out).
