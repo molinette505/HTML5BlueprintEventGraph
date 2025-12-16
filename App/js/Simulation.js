@@ -1,7 +1,3 @@
-/**
- * Simulation Class
- * Manages the execution flow of the blueprint graph.
- */
 class Simulation {
     constructor(graph, renderer) { 
         this.graph = graph; 
@@ -21,6 +17,10 @@ class Simulation {
         console.clear();
         console.log(`--- Simulation Initialized (Run ${this.runInstanceId}) ---`);
         
+        if (window.App.variableManager) {
+            window.App.variableManager.resetRuntime();
+        }
+
         this.graph.nodes.forEach(n => n.executionResult = null);
         this.executionQueue = [];
         this.lastProcessedItem = null;
@@ -99,20 +99,17 @@ class Simulation {
 
         const { node, conn } = item;
 
-        // Wire Animation
         if (conn && this.renderer) {
             this.renderer.animateExecWire(conn);
             await new Promise(r => setTimeout(r, 1500));
             if (this.runInstanceId !== currentRunId) return;
         }
 
-        // Pause Check
         if (this.status === 'PAUSED' && !isSingleStep) {
             this.executionQueue.unshift(item); 
             return;
         }
 
-        // Evaluation Phase (White)
         this.highlightNode(node.id, '#ffffff'); 
         node.setError(null);
 
@@ -122,9 +119,9 @@ class Simulation {
                 if (this.runInstanceId !== currentRunId) return;
 
                 if (args !== null) {
-                    // Execution Phase (Orange)
                     this.highlightNode(node.id, '#ff9900'); 
-                    node.executionResult = node.jsFunctionRef(...args);
+                    // CRITICAL CHANGE: Use .apply to pass 'node' as context
+                    node.executionResult = node.jsFunctionRef.apply(node, args);
                 }
             } catch (err) {
                 if (err.isBlueprintError) node.setError(err.message);
@@ -136,7 +133,6 @@ class Simulation {
             this.highlightNode(node.id, '#ff9900');
         }
 
-        // Flow Control
         let targetPinName = null;
         if (node.name === "Branch") {
             targetPinName = node.executionResult ? "True" : "False";
@@ -159,7 +155,6 @@ class Simulation {
             }
         }
 
-        // Schedule Next
         if (this.status === 'RUNNING' && !isSingleStep) {
             this.timer = setTimeout(() => this.tick(), 100);
         }
@@ -182,7 +177,6 @@ class Simulation {
                     try {
                         if (sourceNode.executionResult === null) {
                             
-                            // Highlight Pure Node
                             this.highlightNode(sourceNode.id, '#ffffff'); 
                             await new Promise(r => setTimeout(r, 600)); 
                             if (this.runInstanceId !== runId) return null;
@@ -193,10 +187,9 @@ class Simulation {
 
                             sourceNode.setError(null);
                             
-                            // Execute Logic
-                            const rawRes = sourceNode.jsFunctionRef(...sourceArgs);
+                            // CRITICAL CHANGE: Use .apply here too for Pure nodes
+                            const rawRes = sourceNode.jsFunctionRef.apply(sourceNode, sourceArgs);
                             
-                            // [FIX] Enforce Output Pin Type (e.g. if Add is Cyan, force Int)
                             const outPin = sourceNode.outputs[0];
                             sourceNode.executionResult = this.castValue(rawRes, outPin ? outPin.type : 'wildcard');
                             
@@ -222,6 +215,7 @@ class Simulation {
                         }
                     }
 
+                    // Pass node to visualizer to support variables
                     const debugLabel = window.FunctionRegistry.getVisualDebug(sourceNode, debugInputs, val);
                     this.renderer.animateDataWire(conn, debugLabel);
                     
@@ -232,23 +226,17 @@ class Simulation {
                 val = node.getInputValue(i);
             }
 
-            // [FIX] Enforce Input Pin Type (e.g. entering Int Pin = Floor)
             args.push(this.castValue(val, pin.type));
         }
         return args;
     }
 
-    /**
-     * Type Enforcement Helper
-     * Ensures strict strict typing for connections.
-     */
     castValue(val, type) {
         if (val === null || val === undefined) return val;
         if (type === 'wildcard') return val;
 
         switch (type) {
             case 'int':
-                // Floor floats when converting to Int
                 if (typeof val === 'number') return Math.floor(val);
                 return parseInt(val) || 0;
             case 'float':

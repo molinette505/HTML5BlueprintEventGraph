@@ -16,8 +16,10 @@
 
 <div id="app">
     <div id="toolbar">
-        <div class="tab-group">
-            <div class="tab active" style="cursor: default;">Graph Editor</div>
+        <div class="toolbar-left">
+            <button class="btn-action" id="btn-toggle-vars">
+                Variables
+            </button>
         </div>
         
         <div class="controls">
@@ -52,6 +54,20 @@
                 <ul id="context-list"></ul>
             </div>
         </div>
+
+        <div id="variable-panel">
+            <div class="panel-header">
+                <h3>Variables</h3>
+                <button id="btn-add-var" class="btn-small" title="Add Variable">+</button>
+            </div>
+            <div class="panel-content">
+                <div id="var-list">
+                    </div>
+            </div>
+            <div class="hint-footer">
+                Drag to Graph (Alt+Drag to Set)
+            </div>
+        </div>
     </div>
 </div>
 
@@ -72,6 +88,8 @@
 <script src="js/view/Renderer.js"></script>
 <script src="js/Interaction.js"></script>
 <script src="js/Simulation.js"></script>
+
+<script src="js/VariableManager.js"></script>
 <script src="js/Editor.js"></script>
 
 </body>
