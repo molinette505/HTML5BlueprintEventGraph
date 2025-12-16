@@ -11,6 +11,9 @@ class VariableManager {
         // Runtime storage (reset on simulation start)
         this.runtimeValues = {};
 
+        // Helper to render widgets in the sidebar
+        this.widgetRenderer = new WidgetRenderer();
+
         this.ui = {
             list: document.getElementById('var-list'),
             addBtn: document.getElementById('btn-add-var')
@@ -48,18 +51,132 @@ class VariableManager {
         this.renderList();
     }
 
+    /**
+     * Updates a variable property.
+     * INTELLIGENT RENDER: Only re-renders the list if the TYPE changes.
+     * Name/Value changes update the graph but keep the sidebar DOM intact to preserve focus.
+     */
     updateVariable(oldName, key, value) {
         const v = this.variables.find(i => i.name === oldName);
         if(!v) return;
 
-        v[key] = value;
-        
-        // If type changed, reset default value
+        // 1. Handle TYPE Change (Requires full re-render)
         if (key === 'type') {
+            v.type = value;
             v.defaultValue = this.getTypeDefault(value);
+            
+            // Update Graph Nodes (Type & Color)
+            this.updateGraphNodes(v.name, value);
+            
+            // Re-render list because the widget type changed (e.g. Checkbox -> Number)
+            this.renderList();
+        }
+        
+        // 2. Handle NAME Change (No re-render)
+        else if (key === 'name') {
+            const newName = value;
+            // Prevent duplicate names
+            if (newName !== oldName && !this.variables.find(x => x.name === newName)) {
+                v.name = newName;
+                this.renameGraphNodes(oldName, newName);
+            }
+            // Do NOT re-render list (keeps focus in the input)
         }
 
-        this.renderList();
+        // 3. Handle VALUE Change (No re-render)
+        else if (key === 'defaultValue') {
+            v.defaultValue = value;
+            
+            // Sync default value to "Set" nodes in the graph
+            this.updateGraphNodes(v.name, v.type);
+            
+            // Do NOT re-render list (keeps focus in the input)
+        }
+    }
+
+    /**
+     * Updates the text labels of Get/Set nodes when a variable is renamed.
+     */
+    renameGraphNodes(oldName, newName) {
+        const graph = this.editor.graph;
+        const renderer = this.editor.renderer;
+
+        graph.nodes.forEach(node => {
+            if (node.varName === oldName) {
+                // Update internal reference
+                node.varName = newName;
+
+                // Update Pin Names
+                if (node.functionId === "Variable.Get") {
+                    if(node.outputs[0]) node.outputs[0].name = newName;
+                } 
+                else if (node.functionId === "Variable.Set") {
+                    if(node.inputs[1]) node.inputs[1].name = newName;
+                }
+
+                // Refresh Node DOM
+                renderer.refreshNode(node);
+            }
+        });
+    }
+
+    /**
+     * Scans the graph for Get/Set nodes for this variable and updates them (Type/Color/Widget).
+     */
+    updateGraphNodes(varName, newType) {
+        const graph = this.editor.graph;
+        const renderer = this.editor.renderer;
+        const color = this.getTypeColor(newType);
+        const defaultValue = this.getTypeDefault(newType);
+
+        graph.nodes.forEach(node => {
+            if (node.varName === varName) {
+                
+                // Update Node Color
+                node.color = color; 
+
+                // Update Get Node
+                if (node.functionId === "Variable.Get") {
+                    if(node.outputs[0]) {
+                        node.outputs[0].type = newType;
+                        node.outputs[0].dataType = newType;
+                    }
+                } 
+                // Update Set Node
+                else if (node.functionId === "Variable.Set") {
+                    // Update Input Pin
+                    if(node.inputs[1]) {
+                        const pin = node.inputs[1];
+                        pin.type = newType;
+                        pin.dataType = newType;
+                        
+                        // Update Widget Model
+                        const config = this.getWidgetConfig(newType, defaultValue);
+                        if (config) {
+                            // If widget type matches, update value; else create new
+                            // (Simplest is to always recreate for safety)
+                            pin.widget = new Widget(config.type, config.value);
+                            
+                            // If we are just updating the value (not type), preserve the value?
+                            // Actually, if this is called from 'defaultValue' change, 
+                            // we WANT to overwrite the Set node's value with the new default.
+                            const v = this.variables.find(i => i.name === varName);
+                            if(v) pin.widget.value = v.defaultValue;
+                        } else {
+                            pin.widget = null;
+                        }
+                    }
+                    // Update Output Pin
+                    if(node.outputs[1]) {
+                        node.outputs[1].type = newType;
+                        node.outputs[1].dataType = newType;
+                    }
+                }
+                
+                // Refresh DOM
+                renderer.refreshNode(node);
+            }
+        });
     }
 
     getTypeDefault(type) {
@@ -84,6 +201,17 @@ class VariableManager {
         }
     }
 
+    getWidgetConfig(type, value) {
+        switch(type) {
+            case 'boolean': return { type: 'checkbox', value: value };
+            case 'int':     return { type: 'number', value: value };
+            case 'float':   return { type: 'number', value: value };
+            case 'string':  return { type: 'text', value: value };
+            case 'vector':  return { type: 'vector3', value: value };
+            default: return null; 
+        }
+    }
+
     renderList() {
         if(!this.ui.list) return;
         this.ui.list.innerHTML = '';
@@ -91,15 +219,104 @@ class VariableManager {
         this.variables.forEach(v => {
             const row = document.createElement('div');
             row.className = 'var-row';
+            row.style.display = 'flex';
+            row.style.flexDirection = 'row';
+            row.style.alignItems = 'stretch';
+            row.style.gap = '8px';
+            row.style.padding = '8px';
             
-            // 1. Name Input
-            const nameInput = document.createElement('input');
-            nameInput.value = v.name;
-            nameInput.className = 'var-name';
-            nameInput.title = "Variable Name";
-            nameInput.onchange = (e) => this.updateVariable(v.name, 'name', e.target.value);
-            
-            // Drag Events
+            // 1. Color Indicator
+            const typeIndicator = document.createElement('div');
+            typeIndicator.style.width = '4px';
+            typeIndicator.style.backgroundColor = this.getTypeColor(v.type);
+            typeIndicator.style.borderRadius = '2px';
+            typeIndicator.style.flexShrink = '0';
+
+            // 2. Main Content Column
+            const col = document.createElement('div');
+            col.style.display = 'flex';
+            col.style.flexDirection = 'column';
+            col.style.flexGrow = '1';
+            col.style.gap = '6px';
+            col.style.minWidth = '0';
+
+                // Row A: Name + Delete
+                const topRow = document.createElement('div');
+                topRow.style.display = 'flex';
+                topRow.style.justifyContent = 'space-between';
+                topRow.style.alignItems = 'center';
+                topRow.style.gap = '5px';
+
+                    const nameInput = document.createElement('input');
+                    nameInput.value = v.name;
+                    nameInput.className = 'var-name';
+                    nameInput.style.flexGrow = '1';
+                    nameInput.style.minWidth = '0';
+                    // Use 'change' for name to update on Blur/Enter
+                    nameInput.onchange = (e) => this.updateVariable(v.name, 'name', e.target.value);
+
+                    const delBtn = document.createElement('button');
+                    delBtn.innerText = '×';
+                    delBtn.className = 'var-del';
+                    delBtn.onclick = () => this.deleteVariable(v.name);
+
+                topRow.append(nameInput, delBtn);
+
+                // Row B: Type + Default Value
+                const botRow = document.createElement('div');
+                botRow.style.display = 'flex';
+                botRow.style.alignItems = 'center';
+                botRow.style.gap = '8px';
+                botRow.style.flexWrap = 'wrap'; 
+
+                    // Type Dropdown
+                    const typeSelect = document.createElement('select');
+                    typeSelect.className = 'var-type';
+                    typeSelect.style.width = '70px'; 
+                    ['boolean', 'int', 'float', 'string', 'vector'].forEach(t => {
+                        const opt = document.createElement('option');
+                        opt.value = t;
+                        opt.innerText = t;
+                        if(t === v.type) opt.selected = true;
+                        typeSelect.appendChild(opt);
+                    });
+                    typeSelect.onchange = (e) => this.updateVariable(v.name, 'type', e.target.value);
+
+                    // Default Value Container
+                    const defContainer = document.createElement('div');
+                    defContainer.className = 'var-default';
+                    defContainer.style.flexGrow = '1'; 
+                    defContainer.style.display = 'flex';
+                    defContainer.style.justifyContent = 'flex-start';
+                    
+                    const widgetConfig = this.getWidgetConfig(v.type, v.defaultValue);
+                    if (widgetConfig) {
+                        const widgetEl = this.widgetRenderer.render(widgetConfig, (newVal) => {
+                            // This callback fires on every keystroke ('input' event)
+                            this.updateVariable(v.name, 'defaultValue', newVal);
+                        });
+                        
+                        if (widgetEl) {
+                            if (v.type === 'string' || v.type === 'int' || v.type === 'float') {
+                                widgetEl.style.width = '60px'; 
+                                widgetEl.style.minWidth = '40px';
+                            } 
+                            else if (v.type === 'boolean') {
+                                widgetEl.style.width = 'auto';
+                            }
+                            else if (v.type === 'vector') {
+                                widgetEl.style.width = '100%';
+                                widgetEl.style.minWidth = '120px';
+                            }
+                            
+                            defContainer.appendChild(widgetEl);
+                        }
+                    }
+
+                botRow.append(typeSelect, defContainer);
+
+            col.append(topRow, botRow);
+
             row.draggable = true;
             row.ondragstart = (e) => {
                 e.dataTransfer.setData('application/json', JSON.stringify({
@@ -109,84 +326,14 @@ class VariableManager {
                 }));
             };
 
-            // 2. Type Dropdown
-            const typeSelect = document.createElement('select');
-            typeSelect.className = 'var-type';
-            ['boolean', 'int', 'float', 'string', 'vector'].forEach(t => {
-                const opt = document.createElement('option');
-                opt.value = t;
-                opt.innerText = t;
-                if(t === v.type) opt.selected = true;
-                typeSelect.appendChild(opt);
-            });
-            typeSelect.onchange = (e) => this.updateVariable(v.name, 'type', e.target.value);
-
-            // 3. Default Value Input (Dynamic based on type)
-            const defContainer = document.createElement('div');
-            defContainer.className = 'var-default';
-            defContainer.style.flexGrow = '1';
-            defContainer.style.marginLeft = '5px';
-            
-            const defInput = this.createDefaultInput(v);
-            defContainer.appendChild(defInput);
-
-            // 4. Delete Button
-            const delBtn = document.createElement('button');
-            delBtn.innerText = '×';
-            delBtn.className = 'var-del';
-            delBtn.onclick = () => this.deleteVariable(v.name);
-
-            row.append(nameInput, typeSelect, defContainer, delBtn);
+            row.append(typeIndicator, col);
             this.ui.list.appendChild(row);
         });
-    }
-
-    createDefaultInput(v) {
-        let input;
-        
-        if (v.type === 'boolean') {
-            input = document.createElement('input');
-            input.type = 'checkbox';
-            input.checked = v.defaultValue;
-            input.onchange = (e) => this.updateVariable(v.name, 'defaultValue', e.target.checked);
-        } 
-        else if (v.type === 'int' || v.type === 'float') {
-            input = document.createElement('input');
-            input.type = 'number';
-            input.value = v.defaultValue;
-            input.style.width = '50px';
-            input.style.background = '#111';
-            input.style.border = '1px solid #333';
-            input.style.color = '#ccc';
-            input.step = v.type === 'float' ? '0.1' : '1';
-            input.onchange = (e) => {
-                const val = v.type === 'int' ? parseInt(e.target.value) : parseFloat(e.target.value);
-                this.updateVariable(v.name, 'defaultValue', val);
-            };
-        }
-        else if (v.type === 'vector') {
-            input = document.createElement('span');
-            input.innerText = '(x,y,z)'; // Simplified for sidebar
-            input.style.fontSize = '10px';
-            input.style.color = '#888';
-        }
-        else {
-            input = document.createElement('input');
-            input.type = 'text';
-            input.value = v.defaultValue;
-            input.style.width = '60px';
-            input.style.background = '#111';
-            input.style.border = '1px solid #333';
-            input.style.color = '#ccc';
-            input.onchange = (e) => this.updateVariable(v.name, 'defaultValue', e.target.value);
-        }
-        return input;
     }
 
     resetRuntime() {
         this.runtimeValues = {};
         this.variables.forEach(v => {
-            // Deep copy for objects (like vectors)
             this.runtimeValues[v.name] = (typeof v.defaultValue === 'object' && v.defaultValue !== null) 
                 ? JSON.parse(JSON.stringify(v.defaultValue))
                 : v.defaultValue;
@@ -198,7 +345,7 @@ class VariableManager {
         if(!v) return null;
 
         return {
-            name: "", // Hidden header
+            name: "", 
             color: this.getTypeColor(v.type), 
             functionId: "Variable.Get",
             inputs: [], 
@@ -212,13 +359,15 @@ class VariableManager {
         const v = this.variables.find(i => i.name === varName);
         if(!v) return null;
 
+        const widgetConfig = this.getWidgetConfig(v.type, v.defaultValue);
+
         return {
             name: "Set",
             color: this.getTypeColor(v.type), 
             functionId: "Variable.Set",
             inputs: [
                 { name: "Exec", type: "exec" },
-                { name: v.name, type: v.type } 
+                { name: v.name, type: v.type, widget: widgetConfig } 
             ],
             outputs: [
                 { name: "Out", type: "exec" },
