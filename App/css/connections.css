@@ -68,11 +68,17 @@ path.connection.data-flow {
     z-index: 2000;
     transform: translate(-50%, -100%); /* Center above point */
     /* [FIX] Increased duration to 2.0s */
-    animation: float-up 2.0s forwards;
+    /* UPDATED: Animation now stays visible at the end */
+    animation: float-up 0.3s ease-out forwards;
 }
 
 @keyframes float-up {
-    0% { opacity: 1; transform: translate(-50%, -100%) scale(1); }
-    80% { opacity: 1; transform: translate(-50%, -250%) scale(1); }
-    100% { opacity: 0; transform: translate(-50%, -300%) scale(0.8); }
+    0% { 
+        opacity: 0; 
+        transform: translate(-50%, -100%) scale(0.5); 
+    }
+    100% { 
+        opacity: 1; 
+        transform: translate(-50%, -250%) scale(1); 
+    }
 }

@@ -194,22 +194,25 @@ class Renderer {
      */
     animateDataWire(conn, value) {
         const path = document.getElementById(`conn-${conn.id}`);
-        if (!path) return;
+        if (!path) return null;
 
-        // 1. Flash the wire
+        // 1. Flash the wire (Add Glow Class)
         path.classList.remove('data-flow');
         void path.offsetWidth; // Trigger reflow
         path.classList.add('data-flow');
+
+        // [FIX] RESTORED TIMEOUT. 
+        // The glow should disappear after the flash (500ms), leaving only the label.
+        setTimeout(() => {
+            if(path) path.classList.remove('data-flow');
+        }, 500); 
 
         // 2. Create Floating Label
         const totalLen = path.getTotalLength();
         const midPoint = path.getPointAtLength(totalLen * 0.5);
 
-        // The simulation now passes a formatted string from FunctionRegistry.
-        // We only do a sanity check here.
         let displayVal = value;
         if (typeof value === 'object' && value !== null) {
-             // Fallback if registry didn't format it
              displayVal = '{Obj}'; 
         }
         
@@ -221,16 +224,15 @@ class Renderer {
         label.style.left = `${midPoint.x}px`;
         label.style.top = `${midPoint.y}px`;
         
-        // --- NEW STYLE OVERRIDES ---
-        // Ensure newlines are respected and text is centered
+        // Style overrides
         label.style.whiteSpace = 'pre';
         label.style.textAlign = 'center';
-        label.style.zIndex = '200'; // Ensure it floats above nodes
+        label.style.zIndex = '200'; 
         
         this.dom.nodesLayer.appendChild(label); 
 
-        // CSS Animation handles movement and removal (fade out).
-        setTimeout(() => label.remove(), 2000); 
+        // Return object containing both visuals for tracking
+        return { label: label, path: path };
     }
 
     /**
@@ -255,7 +257,6 @@ class Renderer {
 
     /**
      * Updates the CSS Transform of the main layers to reflect Pan/Zoom state.
-     * [FIX] Now properly sets multiple background sizes to support the sub-grid.
      */
     updateTransform() {
         // Move the layer holding Nodes and Wires
@@ -265,13 +266,9 @@ class Renderer {
         this.dom.container.style.backgroundPosition = `${this.graph.pan.x}px ${this.graph.pan.y}px`;
         
         // Scale the grid sizes
-        // Major grid (100px base)
         const sMaj = this.graph.scale * 100;
-        // Sub grid (20px base)
         const sMin = this.graph.scale * 20;
         
-        // Apply list of sizes matching the 4-layer gradients in graph.css
-        // (Major Horizontal, Major Vertical, Minor Horizontal, Minor Vertical)
         this.dom.container.style.backgroundSize = `${sMaj}px ${sMaj}px, ${sMaj}px ${sMaj}px, ${sMin}px ${sMin}px, ${sMin}px ${sMin}px`;
     }
 }
