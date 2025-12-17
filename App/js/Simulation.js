@@ -113,6 +113,11 @@ class Simulation {
         this.lastProcessedItem = item; 
         if (this.onStateChange) this.onStateChange(this.status);
 
+        // --- GLOBAL VISUAL CLEANUP ---
+        // We only clear the previous step's visuals (wires/labels) when we officially 
+        // start processing the NEXT Execution Node.
+        this.clearStepVisuals();
+
         const { node, conn } = item;
 
         // Animate Wire (Execution Flow)
@@ -144,8 +149,8 @@ class Simulation {
                 if (args !== null) {
                     this.highlightNode(node.id, '#ff9900'); 
                     
-                    // --- CHANGED: CLEAR LABELS HERE ---
-                    // The labels from gatherInputs() are cleared exactly when the node starts "running".
+                    // --- CLEAR LABELS HERE ---
+                    // The labels are cleared exactly when the node starts "running".
                     this.clearStepVisuals(); 
 
                     // Execution Phase
@@ -195,7 +200,6 @@ class Simulation {
         const args = [];
         
         // --- VISUALIZATION: BACKTRACK HIGHLIGHT ---
-        // If this is an Impure Node (Start of chain), light up the path white.
         let dependencyConnections = [];
         if (!this.isPureNode(node)) {
             const { nodes, connections } = this.collectPureDependencyChain(node);
@@ -241,15 +245,10 @@ class Simulation {
                             this.highlightNode(sourceNode.id, '#ff9900');
                             
                             // DO NOT CLEAR LABELS/WIRES HERE. 
-                            // They must persist so the parent node can show them alongside other inputs.
 
                         } else {
                             // If cached, just clear the "highlight" effect (white box) 
-                            // but we do NOT clear the data wire flow yet.
                             this.clearNodeHighlight(sourceNode.id);
-                            
-                            // Important: We need to ensure the cached inputs are also reset 
-                            // from "White" to "Normal" so they can be animated to "Flowing" if needed.
                             this.resetInputWiresRecursively(sourceNode);
                         }
                     } catch (err) {
@@ -261,7 +260,6 @@ class Simulation {
                 val = sourceNode.executionResult;
 
                 if (this.renderer) {
-                    // Turn off "White" highlight, so "Data Flow" color can take over
                     this.resetWireColor(conn);
 
                     let debugInputs = [];
@@ -277,15 +275,12 @@ class Simulation {
 
                     const debugLabel = window.FunctionRegistry.getVisualDebug(sourceNode, debugInputs, val);
                     
-                    // --- PERSISTENT VISUAL LOGIC ---
-                    // 1. animateDataWire turns on the "data-flow" class (for 500ms) AND creates the label.
-                    // 2. It returns both.
-                    // 3. We track them so we can force-remove the label later.
+                    // --- ANIMATE LABEL ON WIRE ---
                     const visualObj = this.renderer.animateDataWire(conn, debugLabel);
                     this.addStepVisual(visualObj);
                     
-                    // Wait 1s for the "pulse" to travel visually before moving to next input
-                    await new Promise(r => setTimeout(r, 1000)); 
+                    // Wait 1s for the "travel" animation
+                    await new Promise(r => setTimeout(r, 2000)); 
                     if (this.runInstanceId !== runId) return null;
                 }
             } else {
@@ -296,8 +291,6 @@ class Simulation {
         }
 
         // --- CLEANUP OF HIGHLIGHTS ---
-        // We only reset the "White" path color. 
-        // We do NOT remove the text labels or the "Data Flow" glow here.
         if (!this.isPureNode(node) && dependencyConnections.length > 0) {
             dependencyConnections.forEach(c => this.resetWireColor(c));
         }
@@ -345,18 +338,12 @@ class Simulation {
 
     // --- HELPER METHODS ---
 
-    /**
-     * Stores a reference to a visual object (Label + Wire Element).
-     */
     addStepVisual(visualObj) {
         if (visualObj) {
             this.activeStepVisuals.push(visualObj);
         }
     }
 
-    /**
-     * Removes ALL currently active step visuals (Labels and Wire Glows).
-     */
     clearStepVisuals() {
         if (this.activeStepVisuals && this.activeStepVisuals.length > 0) {
             this.activeStepVisuals.forEach(obj => {

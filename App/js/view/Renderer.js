@@ -190,7 +190,7 @@ class Renderer {
     }
 
     /**
-     * ANIMATION: Flashes the wire and floats the data value above it.
+     * ANIMATION: Flashes the wire and moves the data value label along it.
      */
     animateDataWire(conn, value) {
         const path = document.getElementById(`conn-${conn.id}`);
@@ -201,16 +201,12 @@ class Renderer {
         void path.offsetWidth; // Trigger reflow
         path.classList.add('data-flow');
 
-        // [FIX] RESTORED TIMEOUT. 
-        // The glow should disappear after the flash (500ms), leaving only the label.
+        // Remove glow after 500ms
         setTimeout(() => {
             if(path) path.classList.remove('data-flow');
         }, 500); 
 
         // 2. Create Floating Label
-        const totalLen = path.getTotalLength();
-        const midPoint = path.getPointAtLength(totalLen * 0.5);
-
         let displayVal = value;
         if (typeof value === 'object' && value !== null) {
              displayVal = '{Obj}'; 
@@ -220,18 +216,44 @@ class Renderer {
         label.className = 'data-value-label';
         label.innerText = displayVal;
         
-        // Position in the transform layer so it moves with the graph
-        label.style.left = `${midPoint.x}px`;
-        label.style.top = `${midPoint.y}px`;
-        
-        // Style overrides
+        // Initial Styles
         label.style.whiteSpace = 'pre';
         label.style.textAlign = 'center';
         label.style.zIndex = '200'; 
         
         this.dom.nodesLayer.appendChild(label); 
 
-        // Return object containing both visuals for tracking
+        // 3. Animate Label along path with DELAY
+        const totalLen = path.getTotalLength();
+        const startPoint = path.getPointAtLength(0);
+        
+        // Set initial position immediately so it appears at the start
+        label.style.left = `${startPoint.x}px`;
+        label.style.top = `${startPoint.y}px`;
+
+        // Wait 300ms before moving, then travel for 700ms (Total ~1s)
+        setTimeout(() => {
+            const duration = 1000; 
+            const start = performance.now();
+
+            const animate = (time) => {
+                const elapsed = time - start;
+                const progress = Math.min(elapsed / duration, 1);
+                
+                const point = path.getPointAtLength(progress * totalLen);
+                
+                // Apply position
+                label.style.left = `${point.x}px`;
+                label.style.top = `${point.y}px`;
+
+                if (progress < 1) {
+                    requestAnimationFrame(animate);
+                }
+            };
+            requestAnimationFrame(animate);
+        }, 1000);
+
+        // Return object containing both visuals for tracking/cleanup
         return { label: label, path: path };
     }
 
