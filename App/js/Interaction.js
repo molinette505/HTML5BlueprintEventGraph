@@ -11,6 +11,7 @@ class Interaction {
         this.viewportManager = new ViewportManager(graph, renderer, dom);
         this.selectionManager = new SelectionManager(graph, dom);
         this.nodeMovementManager = new NodeMovementManager(graph, renderer, this.selectionManager);
+        this.connectionManager = new ConnectionManager(graph, renderer, dom);
         
         this.mode = 'IDLE'; 
         
@@ -42,10 +43,11 @@ class Interaction {
                     return;
                 }
                 if (e.altKey) {
-                    this.handlePinBreak(e);
+                    this.connectionManager.breakConnection(e.target);
                 } 
                 else if (e.button === 0) {
-                    this.handlePinDown(e);
+                    this.connectionManager.startDrag(e);
+                    this.mode = 'DRAG_WIRE';
                 }
                 return;
             }
@@ -62,7 +64,6 @@ class Interaction {
                     return;
                 }
                 if (e.button === 0) {
-
                      if (!e.ctrlKey && !e.shiftKey && !this.selectionManager.selected.has(nodeId)) {
                         this.selectionManager.clear();
                     }
@@ -91,7 +92,7 @@ class Interaction {
             switch (this.mode) {
                 case 'PANNING': this.viewportManager.updatePan(e); break;
                 case 'DRAG_NODES': this.nodeMovementManager.update(e); break;
-                case 'DRAG_WIRE': this.updateWireDrag(e); break;
+                case 'DRAG_WIRE': this.connectionManager.update(e); break;
                 case 'BOX_SELECT': this.selectionManager.updateBox(e); break;
             }
         });
@@ -106,7 +107,7 @@ class Interaction {
             }
             else if (this.mode === 'DRAG_WIRE') {
                 const target = e.target.closest('.pin');
-                if (target) this.finishWireDrag(target);
+                if (target) this.connectionManager.commit(target);
                 this.renderer.render();
             }
             else if (this.mode === 'BOX_SELECT') {
@@ -321,174 +322,6 @@ class Interaction {
                 this.dragData.nodeOffsets.set(id, { x: node.x, y: node.y });
             }
         });
-    }
-
-    updateNodeDrag(e) {
-        const dx = (e.clientX - this.dragData.startX) / this.graph.scale;
-        const dy = (e.clientY - this.dragData.startY) / this.graph.scale;
-
-        this.dragData.nodeOffsets.forEach((initialPos, id) => {
-            const node = this.graph.nodes.find(n => n.id === id);
-            if (node) {
-                node.x = initialPos.x + dx;
-                node.y = initialPos.y + dy;
-                const el = document.getElementById(`node-${id}`);
-                if (el) {
-                    el.style.left = node.x + 'px';
-                    el.style.top = node.y + 'px';
-                }
-            }
-        });
-        this.renderer.render();
-    }
-
-    clearSelection() {
-        this.selectedNodes.forEach(id => {
-            const el = document.getElementById(`node-${id}`);
-            if(el) el.classList.remove('selected');
-        });
-        this.selectedNodes.clear();
-    }
-
-    // ==========================================
-    // WIRE & PIN INTERACTION
-    // ==========================================
-
-    handlePinBreak(e) {
-        const pin = e.target;
-        this.graph.disconnectPin(parseInt(pin.dataset.node), parseInt(pin.dataset.index), pin.dataset.type);
-        this.renderer.render();
-    }
-
-    handlePinDown(e) {
-        e.stopPropagation();
-        const pin = e.target;
-        const nodeId = parseInt(pin.dataset.node);
-        const index = parseInt(pin.dataset.index);
-        const type = pin.dataset.type;
-        
-        if (type === 'input') {
-            const conn = this.graph.connections.find(c => c.toNode === nodeId && c.toPin === index);
-            if (conn) {
-                this.graph.removeConnection(conn.id);
-                this.renderer.render();
-                
-                const srcPos = this.renderer.getPinPos(conn.fromNode, conn.fromPin, 'output');
-                if (srcPos) {
-                    this.dragWire = {
-                        sourceNode: conn.fromNode, 
-                        sourcePin: conn.fromPin, 
-                        sourceType: 'output',
-                        dataType: pin.dataset.dataType, 
-                        startX: srcPos.x, startY: srcPos.y
-                    };
-                    this.mode = 'DRAG_WIRE';
-                }
-                return;
-            }
-        }
-
-        const rect = pin.getBoundingClientRect();
-        const cRect = this.dom.container.getBoundingClientRect();
-        
-        this.dragWire = {
-            sourceNode: nodeId, 
-            sourcePin: index, 
-            sourceType: type, 
-            dataType: pin.dataset.dataType,
-            startX: (rect.left + rect.width/2 - cRect.left - this.graph.pan.x)/this.graph.scale,
-            startY: (rect.top + rect.height/2 - cRect.top - this.graph.pan.y)/this.graph.scale
-        };
-        this.mode = 'DRAG_WIRE';
-    }
-
-    updateWireDrag(e) {
-        const rect = this.dom.container.getBoundingClientRect();
-        const mx = (e.clientX - rect.left - this.graph.pan.x)/this.graph.scale;
-        const my = (e.clientY - rect.top - this.graph.pan.y)/this.graph.scale;
-        
-        this.renderer.dom.connectionsLayer.innerHTML = '';
-        this.graph.connections.forEach(cx => this.renderer.drawConnection(cx));
-        
-        const p1 = {x: this.dragWire.startX, y: this.dragWire.startY};
-        const p2 = {x: mx, y: my};
-        
-        if (this.dragWire.sourceType === 'output') {
-            this.renderer.drawCurve(p1, p2, this.dragWire.dataType, true);
-        } else {
-            this.renderer.drawCurve(p2, p1, this.dragWire.dataType, true);
-        }
-    }
-
-    finishWireDrag(target) {
-        const s = this.dragWire;
-        const t = {
-            nodeId: parseInt(target.dataset.node),
-            index: parseInt(target.dataset.index),
-            type: target.dataset.type,
-            dataType: target.dataset.dataType
-        };
-
-        if (s.sourceNode === t.nodeId) return; 
-        if (s.sourceType === t.type) return;   
-
-        if (s.dataType !== 'wildcard' && t.dataType === 'wildcard') {
-            const targetNode = this.graph.nodes.find(n => n.id === t.nodeId);
-            if (targetNode) {
-                targetNode.inputs.forEach(p => p.setType(s.dataType));
-                targetNode.outputs.forEach(p => p.setType(s.dataType));
-                t.dataType = s.dataType; 
-                this.renderer.refreshNode(targetNode);
-            }
-        }
-        else if (s.dataType === 'wildcard' && t.dataType !== 'wildcard') {
-            const sourceNode = this.graph.nodes.find(n => n.id === s.sourceNode);
-            if (sourceNode) {
-                sourceNode.inputs.forEach(p => p.setType(t.dataType));
-                sourceNode.outputs.forEach(p => p.setType(t.dataType));
-                s.dataType = t.dataType; 
-                this.renderer.refreshNode(sourceNode);
-            }
-        }
-
-        if (s.dataType !== t.dataType) {
-            const srcType = s.sourceType === 'output' ? s.dataType : t.dataType;
-            const tgtType = s.sourceType === 'output' ? t.dataType : s.dataType;
-            
-            const key = `${srcType}->${tgtType}`;
-            const templateName = window.nodeConversions ? window.nodeConversions[key] : null;
-            
-            if (templateName && window.nodeTemplates) {
-                const template = window.nodeTemplates.find(n => n.name === templateName);
-                if (template) {
-                    const nodeA = this.graph.nodes.find(n => n.id === s.sourceNode);
-                    const nodeB = this.graph.nodes.find(n => n.id === t.nodeId);
-                    
-                    const midX = (nodeA.x + nodeB.x) / 2;
-                    const midY = (nodeA.y + nodeB.y) / 2;
-                    
-                    const convNode = this.graph.addNode(template, midX, midY);
-                    this.renderer.createNodeElement(convNode, (e, nid) => this.handleNodeDown(e, nid));
-                    
-                    const fromNodeId = s.sourceType === 'output' ? s.sourceNode : t.nodeId;
-                    const fromPinIdx = s.sourceType === 'output' ? s.sourcePin : t.index;
-                    const toNodeId = s.sourceType === 'output' ? t.nodeId : s.sourceNode;
-                    const toPinIdx = s.sourceType === 'output' ? t.index : s.sourcePin;
-
-                    this.graph.addConnection(fromNodeId, fromPinIdx, convNode.id, 0, srcType);
-                    this.graph.addConnection(convNode.id, 0, toNodeId, toPinIdx, tgtType);
-                    return; 
-                }
-            }
-            return; 
-        }
-
-        const fromNode = s.sourceType === 'output' ? s.sourceNode : t.nodeId;
-        const fromPin = s.sourceType === 'output' ? s.sourcePin : t.index;
-        const toNode = s.sourceType === 'output' ? t.nodeId : s.sourceNode;
-        const toPin = s.sourceType === 'output' ? t.index : s.sourcePin;
-
-        this.graph.addConnection(fromNode, fromPin, toNode, toPin, s.dataType);
     }
 
     showContextMenu(x, y, type, targetId, pinIndex, pinDir) {
