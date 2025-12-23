@@ -72,7 +72,6 @@ class Renderer {
     createNodeElement(node, onDragCallback) {
         this.dragCallback = onDragCallback; // Cache for later use
         const el = this.nodeRenderer.createElement(node);
-        this.attachEvents(el, node);
         this.dom.nodesLayer.appendChild(el);
     }
 
@@ -87,28 +86,11 @@ class Renderer {
         // Create new HTML structure
         const newEl = this.nodeRenderer.createElement(node);
         
-        // Re-attach listeners
-        this.attachEvents(newEl, node);
-        
         // Swap in DOM
         this.dom.nodesLayer.replaceChild(newEl, oldEl);
         
         // Trigger full render to update wire positions attached to this node
         this.render();
-    }
-
-    /**
-     * Attaches the MouseDown event for node dragging.
-     * Includes logic to preventing dragging if clicking on a Pin, Input, or Arrow.
-     */
-    attachEvents(el, node) {
-        el.addEventListener('mousedown', (e) => {
-            // Stop drag if clicking interactive elements
-            if(e.target.closest('.pin') || e.target.closest('input') || 
-               e.target.closest('.node-widget') || e.target.closest('.advanced-arrow')) return;
-            
-            if(this.dragCallback) this.dragCallback(e, node.id);
-        });
     }
 
     /**

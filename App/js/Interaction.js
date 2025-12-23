@@ -7,9 +7,12 @@ class Interaction {
         this.graph = graph;
         this.renderer = renderer;
         this.dom = dom;
+
+        this.viewportManager = new ViewportManager(graph, renderer, dom);
+        this.selectionManager = new SelectionManager(graph, dom);
+        this.nodeMovementManager = new NodeMovementManager(graph, renderer, this.selectionManager);
         
         this.mode = 'IDLE'; 
-        this.selectedNodes = new Set();
         
         this.dragData = {
             startX: 0, startY: 0,
@@ -18,10 +21,6 @@ class Interaction {
         };
         
         this.lastMousePos = { x: 0, y: 0 };
-
-        this.selectionBox = document.createElement('div');
-        this.selectionBox.id = 'selection-box';
-        this.dom.container.appendChild(this.selectionBox);
 
         this.contextMenuPos = {x:0, y:0};
         this.collapsedCategories = new Set(); 
@@ -53,23 +52,36 @@ class Interaction {
 
             const nodeEl = e.target.closest('.node');
             if (nodeEl) {
+                if(e.target.closest('.pin') || e.target.closest('input') || 
+                    e.target.closest('.node-widget') || e.target.closest('.advanced-arrow')) return;
+                    
                 const nodeId = parseInt(nodeEl.id.replace('node-', ''));
                 if (e.button === 2) {
-                    this.addSelection(nodeId);
+                    this.selectionManager.add(nodeId);
                     this.showContextMenu(e.clientX, e.clientY, 'node', nodeId);
                     return;
                 }
                 if (e.button === 0) {
-                    this.handleNodeDown(e, nodeId);
+
+                     if (!e.ctrlKey && !e.shiftKey && !this.selectionManager.selected.has(nodeId)) {
+                        this.selectionManager.clear();
+                    }
+                    this.selectionManager.add(nodeId);
+
+                    this.nodeMovementManager.startDrag(e, nodeId);
+                    this.mode = 'DRAG_NODES';
+                    
                     return;
                 }
             }
 
             if (e.target === c || e.target === this.dom.transformLayer || e.target.id === 'connections-layer') {
                 if (e.button === 0) {
-                    this.startBoxSelect(e);
+                    this.selectionManager.startBox(e);
+                    this.mode = 'BOX_SELECT';
                 } else if (e.button === 2) {
-                    this.startPan(e);
+                    this.viewportManager.startPan(e);
+                    this.mode = 'PANNING';
                 }
             }
         });
@@ -77,17 +89,16 @@ class Interaction {
         window.addEventListener('mousemove', e => {
             this.lastMousePos = { x: e.clientX, y: e.clientY };
             switch (this.mode) {
-                case 'PANNING': this.updatePan(e); break;
-                case 'DRAG_NODES': this.updateNodeDrag(e); break;
+                case 'PANNING': this.viewportManager.updatePan(e); break;
+                case 'DRAG_NODES': this.nodeMovementManager.update(e); break;
                 case 'DRAG_WIRE': this.updateWireDrag(e); break;
-                case 'BOX_SELECT': this.updateBoxSelect(e); break;
+                case 'BOX_SELECT': this.selectionManager.updateBox(e); break;
             }
         });
 
         window.addEventListener('mouseup', e => {
             if (this.mode === 'PANNING') {
-                const dist = Math.hypot(e.clientX - this.dragData.startX, e.clientY - this.dragData.startY);
-                if (dist < 5 && e.button === 2) {
+                if (!this.viewportManager.isIntentionalDrag && e.button === 2) {
                     if(!e.target.closest('.node') && !e.target.closest('.pin')) {
                         this.showContextMenu(e.clientX, e.clientY, 'canvas');
                     }
@@ -99,17 +110,19 @@ class Interaction {
                 this.renderer.render();
             }
             else if (this.mode === 'BOX_SELECT') {
-                this.finishBoxSelect();
+                this.selectionManager.endBox();
             }
 
             this.mode = 'IDLE';
             this.renderer.dom.connectionsLayer.innerHTML = ''; 
             this.renderer.render(); 
-            this.selectionBox.style.display = 'none';
         });
 
         c.addEventListener('contextmenu', e => e.preventDefault());
-        c.addEventListener('wheel', e => this.handleZoom(e), { passive: false });
+        c.addEventListener('wheel', e => {
+            this.viewportManager.handleZoom(e);
+            this.hideContextMenu();
+        }, { passive: false });
     }
 
     bindKeyboardEvents() {
@@ -129,7 +142,7 @@ class Interaction {
                 await this.pasteFromClipboard(this.lastMousePos.x, this.lastMousePos.y); 
             }
             if (e.key === 'Delete' || e.key === 'Backspace') { 
-                if (this.selectedNodes.size > 0) this.deleteSelected(); 
+                if (this.selectionManager.selected.size > 0) this.deleteSelected(); 
             }
         });
     }
@@ -139,12 +152,12 @@ class Interaction {
     // ==========================================
 
     async copySelection() {
-        if (this.selectedNodes.size === 0) return;
+        if (this.selectionManager.selected.size === 0) return;
         
         const nodesToCopy = [];
-        const idsToCopy = new Set(this.selectedNodes);
+        const idsToCopy = new Set(this.selectionManager.selected);
 
-        this.selectedNodes.forEach(id => {
+        this.selectionManager.selected.forEach(id => {
             const node = this.graph.nodes.find(n => n.id === id);
             if (node) nodesToCopy.push(node.toJSON());
         });
@@ -183,7 +196,7 @@ class Interaction {
 
             if (!nodes) return;
 
-            this.clearSelection();
+            this.selectionManager.clear();
 
             let minX = Infinity, minY = Infinity;
             nodes.forEach(n => {
@@ -201,7 +214,7 @@ class Interaction {
             nodes.forEach(nodeData => {
                 let template = null;
 
-                // [FIX] Handle Variable Nodes Logic
+                // Handle Variable Nodes Logic
                 if (nodeData.varName && window.App.variableManager) {
                     if (nodeData.functionId === 'Variable.Get') {
                         template = window.App.variableManager.createGetTemplate(nodeData.varName);
@@ -255,7 +268,7 @@ class Interaction {
                 }
 
                 this.renderer.createNodeElement(newNode, (e, nid) => this.handleNodeDown(e, nid));
-                this.addSelection(newNode.id);
+                this.selectionManager.add(newNode.id);
             });
 
             // 2. Restore Connections
@@ -275,12 +288,12 @@ class Interaction {
     }
 
     deleteSelected() {
-        this.selectedNodes.forEach(id => {
+        this.selectionManager.selected.forEach(id => {
             this.graph.removeNode(id);
             const el = document.getElementById(`node-${id}`);
             if (el) el.remove();
         });
-        this.selectedNodes.clear();
+        this.selectionManager.clear();
         this.renderer.render();
     }
 
@@ -291,18 +304,18 @@ class Interaction {
     handleNodeDown(e, nodeId) {
         if (e.button !== 0) return;
         e.stopPropagation(); 
-        
-        if (!e.ctrlKey && !e.shiftKey && !this.selectedNodes.has(nodeId)) {
-            this.clearSelection();
+
+        if (!e.ctrlKey && !e.shiftKey && !this.selectionManager.selected.has(nodeId)) {
+            this.selectionManager.clear();
         }
-        this.addSelection(nodeId);
+        this.selectionManager.add(nodeId);
 
         this.mode = 'DRAG_NODES';
         this.dragData.startX = e.clientX;
         this.dragData.startY = e.clientY;
         this.dragData.nodeOffsets.clear();
 
-        this.selectedNodes.forEach(id => {
+        this.selectionManager.selected.forEach(id => {
             const node = this.graph.nodes.find(n => n.id === id);
             if (node) {
                 this.dragData.nodeOffsets.set(id, { x: node.x, y: node.y });
@@ -329,112 +342,12 @@ class Interaction {
         this.renderer.render();
     }
 
-    addSelection(id) {
-        this.selectedNodes.add(id);
-        const el = document.getElementById(`node-${id}`);
-        if(el) el.classList.add('selected');
-    }
-
     clearSelection() {
         this.selectedNodes.forEach(id => {
             const el = document.getElementById(`node-${id}`);
             if(el) el.classList.remove('selected');
         });
         this.selectedNodes.clear();
-    }
-
-    // ==========================================
-    // BOX SELECTION
-    // ==========================================
-
-    startBoxSelect(e) {
-        if (!e.ctrlKey && !e.shiftKey) this.clearSelection();
-        
-        this.mode = 'BOX_SELECT';
-        this.dragData.startX = e.clientX;
-        this.dragData.startY = e.clientY;
-        
-        const rect = this.dom.container.getBoundingClientRect();
-        const relX = e.clientX - rect.left;
-        const relY = e.clientY - rect.top;
-
-        this.selectionBox.style.left = relX + 'px';
-        this.selectionBox.style.top = relY + 'px';
-        this.selectionBox.style.width = '0px';
-        this.selectionBox.style.height = '0px';
-        this.selectionBox.style.display = 'block';
-    }
-
-    updateBoxSelect(e) {
-        const x = Math.min(e.clientX, this.dragData.startX);
-        const y = Math.min(e.clientY, this.dragData.startY);
-        const w = Math.abs(e.clientX - this.dragData.startX);
-        const h = Math.abs(e.clientY - this.dragData.startY);
-
-        const rect = this.dom.container.getBoundingClientRect();
-        this.selectionBox.style.left = (x - rect.left) + 'px';
-        this.selectionBox.style.top = (y - rect.top) + 'px';
-        this.selectionBox.style.width = w + 'px';
-        this.selectionBox.style.height = h + 'px';
-
-        const boxRect = { left: x, top: y, right: x+w, bottom: y+h };
-
-        this.graph.nodes.forEach(node => {
-            const el = document.getElementById(`node-${node.id}`);
-            if (!el) return;
-            const r = el.getBoundingClientRect();
-            
-            const intersect = !(boxRect.left > r.right || 
-                                boxRect.right < r.left || 
-                                boxRect.top > r.bottom || 
-                                boxRect.bottom < r.top);
-            
-            if (intersect) {
-                this.addSelection(node.id);
-            } else if (!e.ctrlKey) { 
-                this.selectedNodes.delete(node.id);
-                el.classList.remove('selected');
-            }
-        });
-    }
-
-    finishBoxSelect() {
-        this.selectionBox.style.display = 'none';
-    }
-
-    // ==========================================
-    // PANNING & ZOOM
-    // ==========================================
-
-    startPan(e) {
-        this.mode = 'PANNING';
-        this.dragData.startX = e.clientX;
-        this.dragData.startY = e.clientY;
-        this.dragData.initialPan = { ...this.graph.pan };
-    }
-
-    updatePan(e) {
-        this.graph.pan.x = this.dragData.initialPan.x + (e.clientX - this.dragData.startX);
-        this.graph.pan.y = this.dragData.initialPan.y + (e.clientY - this.dragData.startY);
-        this.renderer.updateTransform();
-    }
-
-    handleZoom(e) {
-        e.preventDefault();
-        const rect = this.dom.container.getBoundingClientRect();
-        const mouseX = e.clientX - rect.left;
-        const mouseY = e.clientY - rect.top;
-
-        const delta = e.deltaY > 0 ? -0.1 : 0.1;
-        const oldScale = this.graph.scale;
-        const newScale = Math.min(Math.max(0.2, oldScale + delta), 3);
-
-        this.graph.pan.x = mouseX - (mouseX - this.graph.pan.x) * (newScale / oldScale);
-        this.graph.pan.y = mouseY - (mouseY - this.graph.pan.y) * (newScale / oldScale);
-        this.graph.scale = newScale;
-
-        this.renderer.updateTransform();
-        this.hideContextMenu();
     }
 
     // ==========================================
