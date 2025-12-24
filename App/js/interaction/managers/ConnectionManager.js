@@ -1,6 +1,8 @@
 /**
- * ConnectionManager Class
- * Encapsulates the logic for pin interactions and dragging wires.
+ * ConnectionManager
+ * Manages the lifecycle of "Wires" (connections).
+ * Handles pin-to-pin validation, wildcard type propagation, 
+ * and automatic conversion node spawning.
  */
 class ConnectionManager {
     constructor(graph, renderer, dom) {
@@ -8,27 +10,31 @@ class ConnectionManager {
         this.renderer = renderer;
         this.dom = dom;
         
-        // Internal state for the wire currently being dragged
+        /** @type {Object|null} - State of the wire currently being dragged by the user */
         this.dragWire = null;
     }
 
     /**
-     * Starts a wire drag from a pin element.
-     * Handles "re-dragging" an existing connection if the target is an input pin.
+     * Initiates a wire dragging operation.
+     * Features "Socket Stealing": if an input pin is clicked, we disconnect the 
+     * existing wire and start dragging it from the source instead.
+     * @param {MouseEvent} e 
      */
     startDrag(e) {
         const pin = e.target;
         const nodeId = parseInt(pin.dataset.node);
         const index = parseInt(pin.dataset.index);
-        const type = pin.dataset.type;
+        const type = pin.dataset.type; // 'input' or 'output'
         const dataType = pin.dataset.dataType;
         
-        // 1. Logic for Input Pins: If already connected, "steal" the connection to re-drag it
+        // --- SOCKET STEALING LOGIC ---
+        // If the user clicks an input that is already occupied, we allow them to 
+        // "pull" the wire out to move it to a different pin.
         if (type === 'input') {
             const conn = this.graph.connections.find(c => c.toNode === nodeId && c.toPin === index);
             if (conn) {
                 this.graph.removeConnection(conn.id);
-                this.renderer.render();
+                this.renderer.render(); // Redraw immediately to show the break
                 
                 const srcPos = this.renderer.getPinPos(conn.fromNode, conn.fromPin, 'output');
                 if (srcPos) {
@@ -44,7 +50,7 @@ class ConnectionManager {
             }
         }
 
-        // 2. Logic for starting a new wire from an output (or empty input)
+        // --- NEW WIRE LOGIC ---
         const rect = pin.getBoundingClientRect();
         const cRect = this.dom.container.getBoundingClientRect();
         
@@ -53,14 +59,15 @@ class ConnectionManager {
             sourcePin: index, 
             sourceType: type, 
             dataType: dataType,
-            // Calculate starting position in graph space
+            // Map screen coordinates to the transformed graph space
             startX: (rect.left + rect.width/2 - cRect.left - this.graph.pan.x) / this.graph.scale,
             startY: (rect.top + rect.height/2 - cRect.top - this.graph.pan.y) / this.graph.scale
         };
     }
 
     /**
-     * Updates the visual state of the dragged wire during mousemove.
+     * Updates the temporary Bezier curve being drawn while dragging.
+     * @param {MouseEvent} e 
      */
     update(e) {
         if (!this.dragWire) return;
@@ -69,14 +76,14 @@ class ConnectionManager {
         const mx = (e.clientX - rect.left - this.graph.pan.x) / this.graph.scale;
         const my = (e.clientY - rect.top - this.graph.pan.y) / this.graph.scale;
         
-        // Refresh the connections layer
+        // Clear the overlay and redraw existing connections + the current preview
         this.dom.connectionsLayer.innerHTML = '';
         this.graph.connections.forEach(cx => this.renderer.drawConnection(cx));
         
         const p1 = { x: this.dragWire.startX, y: this.dragWire.startY };
         const p2 = { x: mx, y: my };
         
-        // Draw the preview curve based on whether we started from an output or input
+        // Orient the curve correctly (always Output -> Input for curvature math)
         if (this.dragWire.sourceType === 'output') {
             this.renderer.drawCurve(p1, p2, this.dragWire.dataType, true);
         } else {
@@ -85,7 +92,9 @@ class ConnectionManager {
     }
 
     /**
-     * Finalizes the connection logic when mouse is released over a pin.
+     * Finalizes the connection when the mouse is released.
+     * Handles complex logic like Type Conversions and Wildcard updates.
+     * @param {HTMLElement} targetElement - The pin element the user released on.
      */
     commit(targetElement) {
         if (!this.dragWire) return;
@@ -98,14 +107,15 @@ class ConnectionManager {
             dataType: targetElement.dataset.dataType
         };
 
-        this.dragWire = null; // Reset state immediately
+        this.dragWire = null; // Reset dragging state immediately
 
         // --- VALIDATION ---
-        if (s.sourceNode === t.nodeId) return; // Cannot connect to self
-        if (s.sourceType === t.type) return;   // Cannot connect output-to-output or input-to-input
+        if (s.sourceNode === t.nodeId) return; // Prevent connecting a node to itself
+        if (s.sourceType === t.type) return;   // Prevent Output-to-Output or Input-to-Input
 
-        // --- WILDCARD LOGIC ---
-        // If connecting a typed pin to a wildcard, propagate the type to the wildcard node
+        // --- WILDCARD PROPAGATION ---
+        // If one of the nodes is a generic "Wildcard" node (like a 'Print' node),
+        // it adopts the data type of the node it is being connected to.
         if (s.dataType !== 'wildcard' && t.dataType === 'wildcard') {
             const targetNode = this.graph.nodes.find(n => n.id === t.nodeId);
             if (targetNode) {
@@ -125,7 +135,9 @@ class ConnectionManager {
             }
         }
 
-        // --- TYPE CONVERSION LOGIC ---
+        // --- AUTOMATIC TYPE CONVERSION ---
+        // If user connects Float -> String, we look for a "ToString" converter node 
+        // to place automatically between them.
         if (s.dataType !== t.dataType) {
             const srcType = s.sourceType === 'output' ? s.dataType : t.dataType;
             const tgtType = s.sourceType === 'output' ? t.dataType : s.dataType;
@@ -139,6 +151,7 @@ class ConnectionManager {
                     const nodeA = this.graph.nodes.find(n => n.id === s.sourceNode);
                     const nodeB = this.graph.nodes.find(n => n.id === t.nodeId);
                     
+                    // Spawn the converter at the midpoint between the two nodes
                     const midX = (nodeA.x + nodeB.x) / 2;
                     const midY = (nodeA.y + nodeB.y) / 2;
                     
@@ -155,10 +168,10 @@ class ConnectionManager {
                     return; 
                 }
             }
-            return; // Incompatible types with no conversion
+            return; // Reject if no conversion is available
         }
 
-        // --- STANDARD CONNECTION ---
+        // --- FINAL CONNECTION ---
         const fromNode = s.sourceType === 'output' ? s.sourceNode : t.nodeId;
         const fromPin = s.sourceType === 'output' ? s.sourcePin : t.index;
         const toNode = s.sourceType === 'output' ? t.nodeId : s.sourceNode;
@@ -168,7 +181,8 @@ class ConnectionManager {
     }
 
     /**
-     * Breaks a connection on a specific pin.
+     * Sever connections for a specific pin.
+     * @param {HTMLElement} pinElement 
      */
     breakConnection(pinElement) {
         this.graph.disconnectPin(

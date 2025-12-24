@@ -1,3 +1,9 @@
+/**
+ * ClipboardManager
+ * Handles serialization of graph data to the system clipboard and 
+ * deserialization back into the graph. Manages ID remapping to prevent 
+ * data collisions upon pasting.
+ */
 class ClipboardManager {
     constructor(graph, renderer, selectionManager, dom) {
         this.graph = graph;
@@ -7,40 +13,47 @@ class ClipboardManager {
     }
 
     /**
-     * Copies selected nodes and internal connections to system clipboard
+     * Copies selected nodes and their internal connections to the system clipboard.
+     * @returns {Promise<boolean>} - Success status of the clipboard write operation.
      */
     async copy() {
-        if (this.selection.selected.size === 0) return;
+        if (this.selection.selected.size === 0) return false;
         
         const nodesToCopy = [];
         const idsToCopy = new Set(this.selection.selected);
 
+        // Snapshot selected nodes into plain JSON objects
         this.selection.selected.forEach(id => {
             const node = this.graph.nodes.find(n => n.id === id);
             if (node) nodesToCopy.push(node.toJSON());
         });
 
-        // Only copy connections where BOTH nodes are in the selection
+        // SNAPSHOT CONNECTIONS: Only copy wires where both start and end nodes are selected.
         const connectionsToCopy = this.graph.connections.filter(c => 
             idsToCopy.has(c.fromNode) && idsToCopy.has(c.toNode)
         );
 
         const clipboardData = {
             nodes: nodesToCopy,
-            connections: connectionsToCopy
+            connections: connectionsToCopy,
+            appIdentifier: 'NodeGraphEditor' // Useful if users copy/paste between tabs
         };
 
         try {
-            await navigator.clipboard.writeText(JSON.stringify(clipboardData));
-            return true; // The OS confirmed: "I have the data"
+            const jsonString = JSON.stringify(clipboardData);
+            await navigator.clipboard.writeText(jsonString);
+            return true; 
         } catch (err) {
-            console.error("Clipboard blocked!", err);
-            return false; // Something went wrong (e.g. user denied permission)
+            console.error("Clipboard blocked! Ensure the tab is focused.", err);
+            return false;
         }
     }
 
     /**
-     * Pastes nodes from JSON at a specific screen coordinate
+     * Pastes nodes from the clipboard at a specific screen coordinate.
+     * Re-maps internal IDs to ensure connections are preserved in the new instances.
+     * @param {number} screenX - Mouse X coordinate
+     * @param {number} screenY - Mouse Y coordinate
      */
     async paste(screenX, screenY) {
         try {
@@ -48,29 +61,39 @@ class ClipboardManager {
             if (!text) return;
             
             let data;
-            try { data = JSON.parse(text); } catch(e) { return; } 
+            try { 
+                data = JSON.parse(text); 
+            } catch(e) { 
+                return; // Not valid JSON or not our format
+            } 
 
             const nodes = Array.isArray(data) ? data : data.nodes;
             const connections = Array.isArray(data) ? [] : (data.connections || []);
             if (!nodes || nodes.length === 0) return;
 
+            // Clear existing selection to focus on the newly pasted items
             this.selection.clear();
 
-            // 1. Calculate the center/top-left of the copied group
+            // 1. CALCULATE BOUNDS: Find the top-left corner of the copied group
+            // to maintain the relative spacing between nodes.
             let minX = Infinity, minY = Infinity;
             nodes.forEach(n => {
                 if (n.x < minX) minX = n.x;
                 if (n.y < minY) minY = n.y;
             });
 
-            // 2. Convert mouse screen position to graph position
+            // 2. COORDINATE TRANSFORM: Convert screen pixels to graph world-space
             const rect = this.dom.container.getBoundingClientRect();
             const pasteX = (screenX - rect.left - this.graph.pan.x) / this.graph.scale;
             const pasteY = (screenY - rect.top - this.graph.pan.y) / this.graph.scale;
 
-            const idMap = new Map(); // Maps old ID -> new ID
+            /** * ID MAPPING:
+             * Since original IDs might already exist in the graph, we map 
+             * 'Old ID' -> 'New ID' to re-wire connections correctly.
+             */
+            const idMap = new Map(); 
 
-            // 3. Recreate Nodes
+            // 3. RECREATE NODES
             nodes.forEach(nodeData => {
                 const template = this._findTemplate(nodeData);
                 if (!template) return;
@@ -78,19 +101,23 @@ class ClipboardManager {
                 const offsetX = nodeData.x - minX;
                 const offsetY = nodeData.y - minY;
                 
+                // Add the node and store the mapping for wire reconstruction
                 const newNode = this.graph.addNode(template, pasteX + offsetX, pasteY + offsetY);
                 idMap.set(nodeData.id, newNode.id);
 
+                // Restore dynamic state (pin types and widget inputs)
                 this._restoreNodeState(newNode, nodeData);
                 
                 this.renderer.createNodeElement(newNode);
                 this.selection.add(newNode.id);
             });
 
-            // 4. Recreate Connections using the ID Map
+            // 4. RECONSTRUCT CONNECTIONS
             connections.forEach(c => {
                 const newFrom = idMap.get(c.fromNode);
                 const newTo = idMap.get(c.toNode);
+                
+                // Only create the connection if both ends were successfully pasted
                 if (newFrom && newTo) {
                     this.graph.addConnection(newFrom, c.fromPin, newTo, c.toPin, c.type);
                 }
@@ -102,15 +129,19 @@ class ClipboardManager {
         }
     }
 
+    /**
+     * Initiates a cut operation.
+     * Note: Deletion of nodes should be handled by the Orchestrator/NodeManager 
+     * ONLY if this returns true.
+     */
     async cut() {
-        const success = await this.copy();
-        return success; 
+        return await this.copy(); 
     }
 
     // --- Private Helpers ---
 
+    /** Resolves node templates, including specialized variable nodes. */
     _findTemplate(nodeData) {
-        // Support for specialized variables
         if (nodeData.varName && window.App.variableManager) {
             if (nodeData.functionId === 'Variable.Get') return window.App.variableManager.createGetTemplate(nodeData.varName);
             if (nodeData.functionId === 'Variable.Set') return window.App.variableManager.createSetTemplate(nodeData.varName);
@@ -118,8 +149,8 @@ class ClipboardManager {
         return window.nodeTemplates.find(t => t.name === nodeData.name);
     }
 
+    /** Restores dynamic data (pin types/widget values) to a newly instantiated node. */
     _restoreNodeState(newNode, nodeData) {
-        // Restore Dynamic Types
         if (nodeData.pinTypes) {
             ['inputs', 'outputs'].forEach(dir => {
                 if (nodeData.pinTypes[dir]) {
@@ -129,7 +160,6 @@ class ClipboardManager {
                 }
             });
         }
-        // Restore Widget Values
         if (nodeData.inputs) {
             nodeData.inputs.forEach((savedPin, index) => {
                 const realPin = newNode.inputs[index];
