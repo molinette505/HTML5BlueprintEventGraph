@@ -8,10 +8,11 @@ class Interaction {
         this.renderer = renderer;
         this.dom = dom;
 
-        this.viewportManager = new ViewportManager(graph, renderer, dom);
-        this.selectionManager = new SelectionManager(graph, dom);
-        this.nodeMovementManager = new NodeMovementManager(graph, renderer, this.selectionManager);
-        this.connectionManager = new ConnectionManager(graph, renderer, dom);
+        this.viewportManager = new ViewportManager(this.graph, this.renderer, this.dom);
+        this.selectionManager = new SelectionManager(this.graph, this.dom);
+        this.nodeMovementManager = new NodeMovementManager(this.graph, this.renderer, this.selectionManager);
+        this.connectionManager = new ConnectionManager(this.graph, this.renderer, this.dom);
+        this.clipboard = new ClipboardManager(this.graph, this.renderer, this.selectionManager, this.dom);
         
         this.mode = 'IDLE'; 
         
@@ -132,15 +133,21 @@ class Interaction {
 
             if ((e.ctrlKey || e.metaKey) && e.key === 'c') { 
                 e.preventDefault(); 
-                await this.copySelection(); 
-            }
-            if ((e.ctrlKey || e.metaKey) && e.key === 'x') { 
-                e.preventDefault(); 
-                await this.cutSelection(); 
+                this.clipboard.copy(); 
             }
             if ((e.ctrlKey || e.metaKey) && e.key === 'v') { 
                 e.preventDefault(); 
-                await this.pasteFromClipboard(this.lastMousePos.x, this.lastMousePos.y); 
+                this.clipboard.paste(this.lastMousePos.x, this.lastMousePos.y); 
+            }
+
+            if ((e.ctrlKey || e.metaKey) && e.key === 'x') {
+                const itActuallyWorked = await this.clipboard.cut();
+                
+                if (itActuallyWorked) {
+                    this.deleteSelected();
+                } else {
+                    alert("Cut failed: Could not copy to clipboard. Nodes were not deleted.");
+                }
             }
             if (e.key === 'Delete' || e.key === 'Backspace') { 
                 if (this.selectionManager.selected.size > 0) this.deleteSelected(); 
@@ -149,144 +156,8 @@ class Interaction {
     }
     
     // ==========================================
-    // COPY / PASTE / DELETE
-    // ==========================================
-
-    async copySelection() {
-        if (this.selectionManager.selected.size === 0) return;
-        
-        const nodesToCopy = [];
-        const idsToCopy = new Set(this.selectionManager.selected);
-
-        this.selectionManager.selected.forEach(id => {
-            const node = this.graph.nodes.find(n => n.id === id);
-            if (node) nodesToCopy.push(node.toJSON());
-        });
-
-        const connectionsToCopy = this.graph.connections.filter(c => 
-            idsToCopy.has(c.fromNode) && idsToCopy.has(c.toNode)
-        );
-
-        const clipboardData = {
-            nodes: nodesToCopy,
-            connections: connectionsToCopy
-        };
-
-        try {
-            await navigator.clipboard.writeText(JSON.stringify(clipboardData, null, 2));
-        } catch (err) {
-            console.error("Clipboard Error:", err);
-        }
-    }
-
-    async cutSelection() {
-        await this.copySelection();
-        this.deleteSelected();
-    }
-
-    async pasteFromClipboard(screenX, screenY) {
-        try {
-            const text = await navigator.clipboard.readText();
-            if (!text) return;
-            
-            let data;
-            try { data = JSON.parse(text); } catch(e) { return; } 
-
-            const nodes = Array.isArray(data) ? data : data.nodes;
-            const connections = Array.isArray(data) ? [] : (data.connections || []);
-
-            if (!nodes) return;
-
-            this.selectionManager.clear();
-
-            let minX = Infinity, minY = Infinity;
-            nodes.forEach(n => {
-                if (n.x < minX) minX = n.x;
-                if (n.y < minY) minY = n.y;
-            });
-
-            const rect = this.dom.container.getBoundingClientRect();
-            const pasteX = (screenX - rect.left - this.graph.pan.x) / this.graph.scale;
-            const pasteY = (screenY - rect.top - this.graph.pan.y) / this.graph.scale;
-
-            const idMap = new Map();
-
-            // 1. Create Nodes
-            nodes.forEach(nodeData => {
-                let template = null;
-
-                // Handle Variable Nodes Logic
-                if (nodeData.varName && window.App.variableManager) {
-                    if (nodeData.functionId === 'Variable.Get') {
-                        template = window.App.variableManager.createGetTemplate(nodeData.varName);
-                    } else if (nodeData.functionId === 'Variable.Set') {
-                        template = window.App.variableManager.createSetTemplate(nodeData.varName);
-                    }
-                } 
-                
-                // If not a variable (or variable fallback failed), try standard library
-                if (!template) {
-                    template = window.nodeTemplates.find(t => t.name === nodeData.name);
-                }
-
-                if (!template) return; // Cannot paste if template is missing
-
-                const offsetX = nodeData.x - minX;
-                const offsetY = nodeData.y - minY;
-                
-                const newNode = this.graph.addNode(template, pasteX + offsetX, pasteY + offsetY);
-                idMap.set(nodeData.id, newNode.id);
-
-                // [STEP A] Restore Pin Types
-                if (nodeData.pinTypes) {
-                    if (nodeData.pinTypes.inputs) {
-                        nodeData.pinTypes.inputs.forEach((type, idx) => {
-                            if (newNode.inputs[idx] && type && newNode.inputs[idx].type !== type) {
-                                newNode.inputs[idx].setType(type);
-                            }
-                        });
-                    }
-                    if (nodeData.pinTypes.outputs) {
-                        nodeData.pinTypes.outputs.forEach((type, idx) => {
-                            if (newNode.outputs[idx] && type && newNode.outputs[idx].type !== type) {
-                                newNode.outputs[idx].setType(type);
-                            }
-                        });
-                    }
-                }
-
-                // [STEP B] Restore Widget Values
-                if (nodeData.inputs) {
-                    nodeData.inputs.forEach((savedPin, index) => {
-                        const realPin = newNode.inputs[index];
-                        if (realPin) {
-                            realPin.value = savedPin.value;
-                            if (realPin.widget) {
-                                realPin.widget.value = savedPin.value;
-                            }
-                        }
-                    });
-                }
-
-                this.renderer.createNodeElement(newNode, (e, nid) => this.handleNodeDown(e, nid));
-                this.selectionManager.add(newNode.id);
-            });
-
-            // 2. Restore Connections
-            connections.forEach(c => {
-                const newFrom = idMap.get(c.fromNode);
-                const newTo = idMap.get(c.toNode);
-                if (newFrom && newTo) {
-                    this.graph.addConnection(newFrom, c.fromPin, newTo, c.toPin, c.type);
-                }
-            });
-
-            this.renderer.render();
-
-        } catch (err) {
-            console.error(err);
-        }
-    }
+    // DELETE
+    // ========================================
 
     deleteSelected() {
         this.selectionManager.selected.forEach(id => {
@@ -296,32 +167,6 @@ class Interaction {
         });
         this.selectionManager.clear();
         this.renderer.render();
-    }
-
-    // ==========================================
-    // NODE SELECTION & MOVEMENT
-    // ==========================================
-
-    handleNodeDown(e, nodeId) {
-        if (e.button !== 0) return;
-        e.stopPropagation(); 
-
-        if (!e.ctrlKey && !e.shiftKey && !this.selectionManager.selected.has(nodeId)) {
-            this.selectionManager.clear();
-        }
-        this.selectionManager.add(nodeId);
-
-        this.mode = 'DRAG_NODES';
-        this.dragData.startX = e.clientX;
-        this.dragData.startY = e.clientY;
-        this.dragData.nodeOffsets.clear();
-
-        this.selectionManager.selected.forEach(id => {
-            const node = this.graph.nodes.find(n => n.id === id);
-            if (node) {
-                this.dragData.nodeOffsets.set(id, { x: node.x, y: node.y });
-            }
-        });
     }
 
     showContextMenu(x, y, type, targetId, pinIndex, pinDir) {
@@ -479,7 +324,7 @@ class Interaction {
         
         li.onclick = () => {
             const n = this.graph.addNode(tmpl, this.contextMenuPos.x, this.contextMenuPos.y);
-            this.renderer.createNodeElement(n, (e, nid) => this.handleNodeDown(e, nid));
+            this.renderer.createNodeElement(n)
             this.hideContextMenu();
         };
         list.appendChild(li);
