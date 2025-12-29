@@ -101,8 +101,8 @@ window.globalNodes = [
         "functionId": "Logic.Equal",
         "centerLabel": "==",
         "inputs": [
-            { "name": "A", "type": "float", "allowedTypes": ["float", "int", "string", "boolean", "vector", "class", "object", "transform"] },
-            { "name": "B", "type": "float", "allowedTypes": ["float", "int", "string", "boolean", "vector", "class", "object", "transform"] }
+            { "name": "A", "type": "wildcard", "allowedTypes": ["float", "int", "string", "boolean", "vector", "class", "object", "transform"] },
+            { "name": "B", "type": "wildcard", "allowedTypes": ["float", "int", "string", "boolean", "vector", "class", "object", "transform"] }
         ],
         "outputs": [{ "name": "Result", "type": "boolean" }]
     },
@@ -114,8 +114,8 @@ window.globalNodes = [
         "functionId": "Logic.NotEqual",
         "centerLabel": "!=",
         "inputs": [
-            { "name": "A", "type": "float", "allowedTypes": ["float", "int", "string", "boolean", "vector", "class", "object", "transform"] },
-            { "name": "B", "type": "float", "allowedTypes": ["float", "int", "string", "boolean", "vector", "class", "object", "transform"] }
+            { "name": "A", "type": "wildcard", "allowedTypes": ["float", "int", "string", "boolean", "vector", "class", "object", "transform"] },
+            { "name": "B", "type": "wildcard", "allowedTypes": ["float", "int", "string", "boolean", "vector", "class", "object", "transform"] }
         ],
         "outputs": [{ "name": "Result", "type": "boolean" }]
     },
@@ -127,8 +127,8 @@ window.globalNodes = [
         "functionId": "Logic.Greater",
         "centerLabel": ">",
         "inputs": [
-            { "name": "A", "type": "float", "allowedTypes": ["float", "int", "string"] },
-            { "name": "B", "type": "float", "allowedTypes": ["float", "int", "string"] }
+            { "name": "A", "type": "wildcard", "allowedTypes": ["float", "int", "string"] },
+            { "name": "B", "type": "wildcard", "allowedTypes": ["float", "int", "string"] }
         ],
         "outputs": [{ "name": "Result", "type": "boolean" }]
     },
@@ -140,8 +140,8 @@ window.globalNodes = [
         "functionId": "Logic.GreaterEqual",
         "centerLabel": ">=",
         "inputs": [
-            { "name": "A", "type": "float", "allowedTypes": ["float", "int", "string"] },
-            { "name": "B", "type": "float", "allowedTypes": ["float", "int", "string"] }
+            { "name": "A", "type": "wildcard", "allowedTypes": ["float", "int", "string"] },
+            { "name": "B", "type": "wildcard", "allowedTypes": ["float", "int", "string"] }
         ],
         "outputs": [{ "name": "Result", "type": "boolean" }]
     },
@@ -153,8 +153,8 @@ window.globalNodes = [
         "functionId": "Logic.Less",
         "centerLabel": "<",
         "inputs": [
-            { "name": "A", "type": "float", "allowedTypes": ["float", "int", "string"] },
-            { "name": "B", "type": "float", "allowedTypes": ["float", "int", "string"] }
+            { "name": "A", "type": "wildcard", "allowedTypes": ["float", "int", "string"] },
+            { "name": "B", "type": "wildcard", "allowedTypes": ["float", "int", "string"] }
         ],
         "outputs": [{ "name": "Result", "type": "boolean" }]
     },
@@ -166,8 +166,8 @@ window.globalNodes = [
         "functionId": "Logic.LessEqual",
         "centerLabel": "<=",
         "inputs": [
-            { "name": "A", "type": "float", "allowedTypes": ["float", "int", "string"] },
-            { "name": "B", "type": "float", "allowedTypes": ["float", "int", "string"] }
+            { "name": "A", "type": "wildcard", "allowedTypes": ["float", "int", "string"] },
+            { "name": "B", "type": "wildcard", "allowedTypes": ["float", "int", "string"] }
         ],
         "outputs": [{ "name": "Result", "type": "boolean" }]
     },
