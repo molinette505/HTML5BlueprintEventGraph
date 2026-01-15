@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Simulateur Enhanced Input</title>
+    <!-- Tailwind CSS pour le style -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        /* Styles personnalisés pour la scrollbar et touch-action */
+        body { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        /* Animation fade-in pour les logs */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateX(-10px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+        .log-entry { animation: fadeIn 0.2s ease-out; }
+
+        /* Disable select on UI elements */
+        .noselect {
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+        }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 font-sans overflow-hidden h-[100dvh] flex noselect">
+
+    <!-- LEFT PANEL: DATA (PHASES + LOGS) -->
+    <div class="w-[40%] md:w-80 flex flex-col border-r border-slate-800 bg-slate-950 shadow-xl z-10">
+        
+        <!-- Header -->
+        <div class="p-3 border-b border-slate-800 bg-slate-900/50">
+            <h2 class="text-xs font-bold text-slate-400 uppercase flex items-center gap-2">
+                <i data-lucide="activity" class="w-3.5 h-3.5"></i> Phases
+            </h2>
+        </div>
+
+        <!-- Phases List -->
+        <div class="p-2 space-y-1.5 border-b border-slate-800" id="phases-container">
+            <!-- Phase Items injected via JS -->
+        </div>
+
+        <!-- Logs Header -->
+        <div class="p-2 border-b border-slate-800 flex justify-between items-center bg-slate-900/50 mt-1">
+            <h2 class="text-xs font-bold text-slate-400 uppercase flex items-center gap-2">
+                <i data-lucide="clock" class="w-3.5 h-3.5"></i> Log
+            </h2>
+            <button id="clear-logs-btn" class="text-slate-500 hover:text-white p-1 rounded hover:bg-slate-800 transition-colors">
+                <i data-lucide="rotate-ccw" class="w-3 h-3"></i>
+            </button>
+        </div>
+
+        <!-- Logs List -->
+        <div class="flex-1 overflow-y-auto p-1 bg-slate-950" id="logs-container">
+            <div class="text-[10px] text-slate-700 text-center py-4 italic">En attente...</div>
+        </div>
+    </div>
+
+    <!-- RIGHT PANEL: ACTION (SETTINGS + BUTTON) -->
+    <div class="flex-1 flex flex-col bg-slate-900 relative">
+        
+        <!-- Settings Bar -->
+        <div class="p-3 border-b border-slate-800 bg-slate-800/50">
+             <div class="flex justify-between items-center mb-2">
+                <h2 class="text-xs font-bold text-blue-400 uppercase flex items-center gap-2">
+                    <i data-lucide="settings" class="w-3.5 h-3.5"></i> Config
+                </h2>
+                <div id="current-trigger-label" class="text-[10px] text-slate-500 font-mono bg-slate-900 px-2 py-0.5 rounded border border-slate-700">
+                    Hold
+                </div>
+             </div>
+             
+             <!-- Trigger Buttons Grid -->
+             <div class="grid grid-cols-3 gap-2 pb-2" id="trigger-buttons">
+                <!-- Buttons injected via JS -->
+             </div>
+
+            <!-- Contextual Sliders/Inputs -->
+            <div class="mt-2 text-[10px] text-slate-400 space-y-2 border-t border-slate-700/50 pt-2">
+                <p id="trigger-description" class="italic opacity-70 mb-2 truncate">Description...</p>
+                
+                <div id="settings-content">
+                    <!-- Dynamic inputs injected via JS -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Button Area -->
+        <div class="flex-1 flex flex-col items-center justify-center p-4 min-h-0">
+            <div class="flex flex-col items-center gap-6 w-full">
+                
+                <!-- Progress Bar -->
+                <div class="w-full max-w-[180px]">
+                     <div class="flex justify-between text-[9px] text-slate-500 mb-1 uppercase font-bold tracking-wider">
+                        <span>Evaluating trigger</span>
+                        <span id="progress-text">0%</span>
+                    </div>
+                    <div class="h-1.5 bg-slate-800 rounded-full overflow-hidden border border-slate-700/50">
+                        <div id="progress-bar" class="h-full bg-blue-500" style="width: 0%"></div>
+                    </div>
+                </div>
+
+                <!-- Interaction Button -->
+                <button id="input-btn" class="
+                        w-32 h-32 md:w-40 md:h-40 rounded-full border-[6px] text-sm font-bold uppercase tracking-widest
+                        shadow-[0_10px_30px_rgba(0,0,0,0.3)] transition-all transform active:scale-95 touch-none
+                        flex flex-col items-center justify-center gap-1 select-none outline-none
+                        border-slate-700 bg-slate-800 text-slate-500 hover:border-slate-600
+                    ">
+                    <i data-lucide="mouse-pointer-2" class="w-6 h-6 mb-1"></i>
+                    <span id="btn-text">Input</span>
+                </button>
+                
+                <p class="text-[10px] text-slate-600 text-center max-w-[150px] leading-tight">
+                    Maintenez pour simuler.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- JAVASCRIPT LOGIC -->
+    <script>
+        // --- CONSTANTS & STATE ---
+        const VISUAL_TICK_MS = 200;
+        
+        const DESCRIPTIONS = {
+            Pressed: "Une fois à l'appui.",
+            Down: "Chaque tick (maintenu).",
+            Released: "Au relâchement.",
+            Hold: (d) => `Après ${d}s.`,
+            Tap: (d) => `< ${d}s.`,
+            Pulse: (d) => `Chaque ${d}s.`
+        };
+
+        const state = {
+            triggerType: 'Hold',
+            holdDuration: 1.0,
+            tapMaxDuration: 0.5,
+            pulseInterval: 1.0,
+            isOneShot: false,
+            isPressed: false,
+            progress: 0,
+            logs: [],
+            activePhases: {
+                started: false,
+                ongoing: false,
+                triggered: false,
+                canceled: false,
+                completed: false
+            },
+            // Runtime tracking
+            startTime: 0,
+            lastPulse: 0,
+            lastVisualTick: 0,
+            hasTriggered: false,
+            animFrameId: null
+        };
+
+        // --- DOM ELEMENTS ---
+        const els = {
+            logsContainer: document.getElementById('logs-container'),
+            phasesContainer: document.getElementById('phases-container'),
+            triggerBtnsContainer: document.getElementById('trigger-buttons'),
+            settingsContent: document.getElementById('settings-content'),
+            triggerDesc: document.getElementById('trigger-description'),
+            currentTriggerLabel: document.getElementById('current-trigger-label'),
+            progressBar: document.getElementById('progress-bar'),
+            progressText: document.getElementById('progress-text'),
+            inputBtn: document.getElementById('input-btn'),
+            btnText: document.getElementById('btn-text'),
+            btnIcon: document.querySelector('#input-btn i'),
+            clearLogsBtn: document.getElementById('clear-logs-btn')
+        };
+
+        // --- UI RENDERING FUNCTIONS ---
+
+        function renderPhases() {
+            const phases = [
+                { id: 'started', label: 'Started', color: 'bg-blue-500', text: 'text-blue-500' },
+                { id: 'ongoing', label: 'Ongoing', color: 'bg-purple-500', text: 'text-purple-500' },
+                { id: 'triggered', label: 'Triggered', color: 'bg-yellow-400', text: 'text-yellow-400' },
+                { id: 'canceled', label: 'Canceled', color: 'bg-red-500', text: 'text-red-500' },
+                { id: 'completed', label: 'Completed', color: 'bg-green-500', text: 'text-green-500' }
+            ];
+
+            els.phasesContainer.innerHTML = phases.map(p => {
+                const isActive = state.activePhases[p.id];
+                const borderColor = p.color.replace('bg-', 'border-');
+                const containerClass = isActive 
+                    ? `bg-slate-800 ${borderColor} border shadow-sm` 
+                    : 'bg-transparent border-transparent opacity-50';
+                const dotColor = isActive ? p.color : 'bg-slate-700';
+                const textColor = isActive ? 'text-slate-200' : 'text-slate-600';
+
+                return `
+                <div class="flex items-center px-2 py-1.5 rounded transition-all duration-150 border ${containerClass}">
+                    <div class="w-2 h-2 rounded-full mr-2 ${dotColor}"></div>
+                    <span class="text-[10px] uppercase font-bold tracking-wide ${textColor}">${p.label}</span>
+                </div>`;
+            }).join('');
+        }
+
+        function renderLogs() {
+            if (state.logs.length === 0) {
+                els.logsContainer.innerHTML = '<div class="text-[10px] text-slate-700 text-center py-4 italic">En attente...</div>';
+                return;
+            }
+
+            const getTextColor = (phase) => {
+                const map = {
+                    'Started': 'text-blue-500',
+                    'Ongoing': 'text-purple-500',
+                    'Triggered': 'text-yellow-500',
+                    'Canceled': 'text-red-500',
+                    'Completed': 'text-green-500'
+                };
+                return map[phase] || 'text-slate-400';
+            };
+
+            els.logsContainer.innerHTML = state.logs.map(log => `
+                <div class="log-entry flex gap-2 p-1.5 border-b border-slate-800/50 text-[10px] font-mono items-center">
+                    <span class="text-slate-600 w-8 text-right shrink-0">${log.time}</span>
+                    <span class="font-bold ${getTextColor(log.phase)}">${log.phase}</span>
+                    ${log.details ? `<span class="text-slate-500 truncate ml-1 opacity-70">- ${log.details}</span>` : ''}
+                </div>
+            `).join('');
+            
+            // Auto scroll to top (logs are prepended in data, but rendered top-down)
+            els.logsContainer.scrollTop = 0;
+        }
+
+        function renderConfigUI() {
+            // Render Trigger Buttons
+            const types = ['Pressed', 'Down', 'Released', 'Hold', 'Tap', 'Pulse'];
+            els.triggerBtnsContainer.innerHTML = types.map(type => {
+                const isActive = state.triggerType === type;
+                const classes = isActive 
+                    ? 'bg-blue-600 text-white shadow-md ring-1 ring-blue-400' 
+                    : 'bg-slate-800 border border-slate-700 text-slate-400 hover:bg-slate-700';
+                return `<button onclick="setTrigger('${type}')" class="px-1 py-1.5 rounded-md text-[9px] md:text-[10px] font-bold uppercase tracking-wide transition-colors ${classes}">${type}</button>`;
+            }).join('');
+
+            // Update Label & Description
+            els.currentTriggerLabel.textContent = state.triggerType;
+            const descFn = DESCRIPTIONS[state.triggerType];
+            let durationVal = state.holdDuration;
+            if(state.triggerType === 'Tap') durationVal = state.tapMaxDuration;
+            if(state.triggerType === 'Pulse') durationVal = state.pulseInterval;
+            
+            els.triggerDesc.textContent = typeof descFn === 'function' ? descFn(durationVal) : descFn;
+
+            // Render Dynamic Inputs
+            let html = '';
+            if (state.triggerType === 'Hold') {
+                html = `
+                    <div class="flex flex-col gap-2">
+                         <div class="flex items-center gap-2">
+                            <span>Seuil: <span id="val-display">${state.holdDuration}</span>s</span>
+                            <input class="flex-1 h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer" type="range" min="0.1" max="3" step="0.1" value="${state.holdDuration}" oninput="updateSetting('holdDuration', this.value)">
+                        </div>
+                        <label class="flex items-center gap-2 cursor-pointer bg-slate-800 p-1.5 rounded border border-slate-700/50">
+                            <input type="checkbox" ${state.isOneShot ? 'checked' : ''} onchange="updateSetting('isOneShot', this.checked)" class="rounded bg-slate-700 border-slate-600 text-blue-500 focus:ring-blue-500">
+                            <span>Is One Shot (Une seule fois)</span>
+                        </label>
+                    </div>`;
+            } else if (state.triggerType === 'Tap') {
+                html = `
+                    <div class="flex items-center gap-2">
+                        <span>Max: <span id="val-display">${state.tapMaxDuration}</span>s</span>
+                        <input class="flex-1 h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer" type="range" min="0.1" max="1" step="0.1" value="${state.tapMaxDuration}" oninput="updateSetting('tapMaxDuration', this.value)">
+                    </div>`;
+            } else if (state.triggerType === 'Pulse') {
+                html = `
+                    <div class="flex items-center gap-2">
+                        <span>Freq: <span id="val-display">${state.pulseInterval}</span>s</span>
+                        <input class="flex-1 h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer" type="range" min="0.1" max="2" step="0.1" value="${state.pulseInterval}" oninput="updateSetting('pulseInterval', this.value)">
+                    </div>`;
+            }
+            els.settingsContent.innerHTML = html;
+        }
+
+        function renderButtonState() {
+            if (state.isPressed) {
+                els.inputBtn.className = "w-32 h-32 md:w-40 md:h-40 rounded-full border-[6px] text-sm font-bold uppercase tracking-widest shadow-[0_10px_30px_rgba(0,0,0,0.3)] transition-all transform scale-95 touch-none flex flex-col items-center justify-center gap-1 select-none outline-none border-blue-500 bg-slate-800 text-blue-400 shadow-blue-500/20";
+                els.btnText.textContent = "...";
+                els.btnIcon.setAttribute('fill', 'currentColor');
+            } else {
+                els.inputBtn.className = "w-32 h-32 md:w-40 md:h-40 rounded-full border-[6px] text-sm font-bold uppercase tracking-widest shadow-[0_10px_30px_rgba(0,0,0,0.3)] transition-all transform active:scale-95 touch-none flex flex-col items-center justify-center gap-1 select-none outline-none border-slate-700 bg-slate-800 text-slate-500 hover:border-slate-600";
+                els.btnText.textContent = "Input";
+                els.btnIcon.removeAttribute('fill');
+            }
+        }
+
+        function renderProgress() {
+            const p = Math.round(state.progress);
+            els.progressBar.style.width = `${p}%`;
+            els.progressText.textContent = `${p}%`;
+        }
+
+        // --- ACTIONS & LOGIC ---
+
+        function setTrigger(type) {
+            state.triggerType = type;
+            state.logs = [];
+            state.progress = 0;
+            renderConfigUI();
+            renderLogs();
+            renderProgress();
+        }
+
+        function updateSetting(key, value) {
+            state[key] = key === 'isOneShot' ? value : parseFloat(value);
+            document.getElementById('val-display').textContent = state[key]; // Quick DOM update
+            // Also update description
+            const descFn = DESCRIPTIONS[state.triggerType];
+            let durationVal = state.holdDuration;
+            if(state.triggerType === 'Tap') durationVal = state.tapMaxDuration;
+            if(state.triggerType === 'Pulse') durationVal = state.pulseInterval;
+            els.triggerDesc.textContent = typeof descFn === 'function' ? descFn(durationVal) : descFn;
+        }
+
+        function addLog(phase, details = '') {
+            const now = performance.now();
+            let relativeStr = "0.0s";
+            if (state.startTime > 0) {
+                const diff = (now - state.startTime) / 1000;
+                relativeStr = `+${diff.toFixed(1)}s`;
+            }
+            state.logs.unshift({ time: relativeStr, phase, details });
+            if (state.logs.length > 50) state.logs.pop();
+            renderLogs();
+        }
+
+        function updatePhase(phase, isActive) {
+            state.activePhases[phase] = isActive;
+            renderPhases();
+        }
+
+        function flashPhase(phase) {
+            updatePhase(phase, true);
+            setTimeout(() => updatePhase(phase, false), 150);
+        }
+
+        function handlePress(e) {
+            if (e) e.preventDefault(); // Prevent touch ghost clicks
+            if (state.isPressed) return;
+
+            state.logs = [];
+            state.isPressed = true;
+            state.startTime = performance.now();
+            state.lastPulse = performance.now();
+            state.lastVisualTick = 0;
+            state.hasTriggered = false;
+
+            // Reset phases
+            Object.keys(state.activePhases).forEach(k => state.activePhases[k] = false);
+
+            renderButtonState();
+            flashPhase('started');
+            addLog('Started');
+
+            if (state.triggerType === 'Pressed') {
+                flashPhase('triggered');
+                addLog('Triggered');
+                state.hasTriggered = true;
+            }
+
+            cancelAnimationFrame(state.animFrameId);
+            state.animFrameId = requestAnimationFrame(animateLoop);
+        }
+
+        function handleRelease(e) {
+            if (e) e.preventDefault();
+            if (!state.isPressed) return;
+
+            const elapsedTime = (performance.now() - state.startTime) / 1000;
+            state.isPressed = false;
+            cancelAnimationFrame(state.animFrameId);
+            
+            // Force Ongoing off
+            updatePhase('ongoing', false);
+            renderButtonState();
+
+            // Logic outcome
+            switch (state.triggerType) {
+                case 'Pressed':
+                case 'Down':
+                    flashPhase('completed');
+                    addLog('Completed');
+                    break;
+                case 'Released':
+                    flashPhase('triggered');
+                    addLog('Triggered');
+                    setTimeout(() => {
+                        flashPhase('completed');
+                        addLog('Completed');
+                    }, 100);
+                    break;
+                case 'Hold':
+                    if (elapsedTime >= state.holdDuration) {
+                        flashPhase('completed');
+                        addLog('Completed');
+                    } else {
+                        flashPhase('canceled');
+                        addLog('Canceled');
+                    }
+                    break;
+                case 'Tap':
+                    if (elapsedTime <= state.tapMaxDuration) {
+                        flashPhase('triggered');
+                        addLog('Triggered');
+                        setTimeout(() => {
+                            flashPhase('completed');
+                            addLog('Completed');
+                        }, 50);
+                    } else {
+                        if (!state.activePhases.canceled) {
+                            flashPhase('canceled');
+                            addLog('Canceled');
+                        }
+                    }
+                    break;
+                case 'Pulse':
+                    flashPhase('completed');
+                    addLog('Completed');
+                    break;
+            }
+
+            state.progress = 0;
+            renderProgress();
+        }
+
+        function animateLoop(time) {
+            if (!state.isPressed) return;
+
+            const now = performance.now();
+            const elapsedTime = (now - state.startTime) / 1000;
+            const timeSinceLastVisual = now - state.lastVisualTick;
+            
+            let isOngoing = true;
+            const isVisualTick = timeSinceLastVisual > VISUAL_TICK_MS;
+
+            // Ongoing Log Logic
+            if (isVisualTick && state.triggerType !== 'Pressed' && state.triggerType !== 'Released') {
+                if (state.triggerType === 'Hold' && elapsedTime < state.holdDuration) {
+                    addLog('Ongoing');
+                    flashPhase('ongoing');
+                } else if (state.triggerType === 'Tap') {
+                    addLog('Ongoing');
+                    flashPhase('ongoing');
+                } else if (state.triggerType === 'Pulse') {
+                    addLog('Ongoing');
+                    flashPhase('ongoing');
+                }
+            }
+
+            if (isVisualTick) state.lastVisualTick = now;
+
+            // Specific Trigger Logic
+            switch (state.triggerType) {
+                case 'Down':
+                    if (isVisualTick) {
+                        flashPhase('triggered');
+                        addLog('Triggered');
+                    }
+                    break;
+
+                case 'Hold':
+                    const holdRatio = Math.min(elapsedTime / state.holdDuration, 1);
+                    state.progress = holdRatio * 100;
+                    
+                    if (elapsedTime < state.holdDuration) {
+                        isOngoing = true;
+                    } else {
+                        isOngoing = false;
+                        if (state.isOneShot) {
+                            if (!state.hasTriggered) {
+                                flashPhase('triggered');
+                                addLog('Triggered');
+                                state.hasTriggered = true;
+                            }
+                        } else {
+                            if (isVisualTick) {
+                                flashPhase('triggered');
+                                addLog('Triggered');
+                            }
+                            if (!state.hasTriggered) state.hasTriggered = true;
+                        }
+                    }
+                    break;
+
+                case 'Tap':
+                    const tapRatio = Math.min(elapsedTime / state.tapMaxDuration, 1);
+                    state.progress = tapRatio * 100;
+
+                    if (elapsedTime > state.tapMaxDuration) {
+                        isOngoing = false;
+                        state.isPressed = false; // Logic force release
+                        flashPhase('canceled');
+                        addLog('Canceled');
+                        renderButtonState();
+                        return; // Stop loop
+                    } else {
+                        isOngoing = true;
+                    }
+                    break;
+
+                case 'Pulse':
+                    const sinceLast = (now - state.lastPulse) / 1000;
+                    const pulseRatio = Math.min(sinceLast / state.pulseInterval, 1);
+                    state.progress = pulseRatio * 100;
+                    if (sinceLast >= state.pulseInterval) {
+                        flashPhase('triggered');
+                        addLog('Triggered');
+                        state.lastPulse = now;
+                    }
+                    isOngoing = true;
+                    break;
+
+                case 'Released':
+                case 'Pressed':
+                    isOngoing = false;
+                    break;
+            }
+
+            updatePhase('ongoing', isOngoing);
+            renderProgress();
+            state.animFrameId = requestAnimationFrame(animateLoop);
+        }
+
+        // --- INIT ---
+        window.onload = () => {
+            lucide.createIcons();
+            
+            // Initial Render
+            renderPhases();
+            renderLogs();
+            renderConfigUI();
+            
+            // Event Listeners
+            els.inputBtn.addEventListener('mousedown', handlePress);
+            els.inputBtn.addEventListener('touchstart', handlePress, {passive: false});
+            
+            window.addEventListener('mouseup', handleRelease);
+            window.addEventListener('touchend', handleRelease);
+            
+            els.clearLogsBtn.addEventListener('click', () => {
+                state.logs = [];
+                renderLogs();
+            });
+        };
+
+    </script>
+</body>
+</html>
