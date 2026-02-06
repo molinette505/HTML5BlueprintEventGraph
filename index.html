@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visual Blueprint Editor</title>
+    
+    <link rel="stylesheet" href="/css/colors.css">
+    <link rel="stylesheet" href="/css/graph.css">
+    <link rel="stylesheet" href="/css/nodes.css">
+    <link rel="stylesheet" href="/css/pins.css">
+    <link rel="stylesheet" href="/css/connections.css">
+    <link rel="stylesheet" href="/css/editor.css">
+</head>
+<body>
+
+<div id="app">
+    <div id="toolbar">
+        <div class="toolbar-left">
+            <button class="btn-action" id="btn-toggle-vars">
+                Variables
+            </button>
+        </div>
+        
+        <div class="controls">
+            <button class="btn-control" id="btn-play" title="Play">
+                <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+            </button>
+            <button class="btn-control" id="btn-pause" title="Start Paused">
+                <svg viewBox="0 0 24 24"><path d="M6 5v14l9-7z M17 5v14h2V5z"/></svg>
+            </button>
+            <button class="btn-control" id="btn-replay" title="Replay Last Step" disabled>
+                <svg viewBox="0 0 24 24"><path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg>
+            </button>
+            <button class="btn-control" id="btn-step" title="Step Forward" disabled>
+                <svg viewBox="0 0 24 24"><path d="M16 18l2.29-2.29-4.88-4.88-4 4L2 7.41 3.41 6l6 6 4-4 6.3 6.29L22 12v6h-6z"/></svg>
+            </button>
+            <button class="btn-control" id="btn-stop" title="Stop & Reset" disabled>
+                <svg viewBox="0 0 24 24"><path d="M6 6h12v12H6z"/></svg>
+            </button>
+        </div>
+    </div>
+
+    <div id="main-content">
+        <div id="graph-view" class="view active">
+            <div id="graph-container">
+                <div id="transform-layer">
+                    <svg id="connections-layer"></svg>
+                    <div id="nodes-layer"></div>
+                </div>
+            </div>
+            <div id="context-menu">
+                <input type="text" id="context-search" placeholder="Search nodes..." autocomplete="off">
+                <ul id="context-list"></ul>
+            </div>
+        </div>
+
+        <div id="variable-panel">
+            <div class="panel-header">
+                <h3>Variables</h3>
+                <button id="btn-add-var" class="btn-small" title="Add Variable">+</button>
+            </div>
+            <div class="panel-content">
+                <div id="var-list">
+                    </div>
+            </div>
+            <div class="hint-footer">
+                Drag to Graph (Alt+Drag to Set)
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="notification"></div>
+
+<script src="/js/DataTypes.js"></script>
+<script src="/js/Nodes.js"></script>
+
+<script src="/js/core/Widget.js"></script>
+<script src="/js/core/Pin.js"></script>
+<script src="/js/core/Connection.js"></script>
+<script src="/js/core/Node.js"></script>
+<script src="/js/core/Graph.js"></script>
+<script src="/js/FunctionRegistry.js"></script>
+
+<script src="/js/view/WidgetRenderer.js"></script>
+<script src="/js/view/NodeRenderer.js"></script>
+<script src="/js/view/Renderer.js"></script>
+
+<script src="/js/interaction/managers/ViewportManager.js"></script>
+<script src="/js/interaction/managers/SelectionManager.js"></script>
+<script src="/js/interaction/managers/NodeMovementManager.js"></script>
+<script src="/js/interaction/managers/ConnectionManager.js"></script>
+<script src="/js/interaction/managers/ClipboardManager.js"></script>
+<script src="/js/interaction/managers/NodeManager.js"></script>
+<script src="/js/interaction/managers/ContextMenuManager.js"></script>
+<script src="/js/interaction/Interaction.js"></script>
+
+<script src="/js/Simulation.js"></script>
+
+<script src="/js/VariableManager.js"></script>
+<script src="/js/Editor.js"></script>
+<script type="module" src="/src/main.ts"></script>
+
+</body>
+</html>

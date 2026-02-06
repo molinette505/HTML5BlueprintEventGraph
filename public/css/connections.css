@@ -1,0 +1,84 @@
+#connections-layer {
+    width: 100%; height: 100%;
+    position: absolute; top:0; left:0;
+    overflow: visible; z-index: 1;
+    pointer-events: none;
+}
+
+path.connection {
+    fill: none;
+    stroke: var(--wire-default);
+    stroke-width: 2px;
+    stroke-linecap: round;
+    pointer-events: stroke;
+    cursor: pointer;
+    transition: stroke-width 0.1s, stroke 0.2s;
+}
+
+path.connection:hover {
+    stroke-width: 4px;
+    stroke: var(--wire-hover);
+}
+
+/* Default Pulse Animation (for dragging) */
+path.connection.pulse {
+    stroke: var(--wire-highlight);
+    stroke-width: 4px;
+    filter: drop-shadow(0 0 5px var(--wire-glow));
+    animation: dash 0.5s linear infinite;
+    stroke-dasharray: 10, 5;
+}
+
+/* DATA FLOW GLOW: A quick flash on the wire when data is read */
+path.connection.data-flow {
+    animation: data-flash 0.5s ease-out;
+    stroke: white !important;
+    stroke-width: 4px;
+    filter: drop-shadow(0 0 8px white);
+}
+
+@keyframes data-flash {
+    0% { stroke: white; stroke-width: 6px; }
+    100% { stroke: var(--wire-default); stroke-width: 2px; }
+}
+
+@keyframes dash {
+    to { stroke-dashoffset: -15; }
+}
+
+/* EXECUTION BALL: The white glowing ball */
+.exec-ball {
+    fill: white;
+    filter: drop-shadow(0 0 6px white);
+    pointer-events: none;
+}
+
+/* DATA LABEL: Floating value above wires */
+.data-value-label {
+    position: absolute;
+    background: rgba(0, 0, 0, 0.8);
+    color: #0f0; /* Matrix green text for visibility */
+    border: 1px solid #0f0;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 10px;
+    pointer-events: none;
+    white-space: nowrap;
+    z-index: 2000;
+    transform: translate(-50%, -100%); /* Center above point */
+    /* [FIX] Increased duration to 2.0s */
+    /* UPDATED: Animation now stays visible at the end */
+    animation: float-up 0.3s ease-out forwards;
+}
+
+@keyframes float-up {
+    0% { 
+        opacity: 0; 
+        transform: translate(-50%, -100%) scale(0.5); 
+    }
+    100% { 
+        opacity: 1; 
+        transform: translate(-50%, -250%) scale(1); 
+    }
+}
