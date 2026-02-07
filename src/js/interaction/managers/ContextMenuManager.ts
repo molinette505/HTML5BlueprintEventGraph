@@ -44,6 +44,12 @@ export class ContextMenuManager {
                 }
             };
         }
+
+        if (this.dom.menu) {
+            this.dom.menu.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
+            this.dom.menu.addEventListener('touchmove', (e) => e.stopPropagation(), { passive: true });
+            this.dom.menu.addEventListener('touchend', (e) => e.stopPropagation(), { passive: true });
+        }
     }
 
     /**
@@ -181,10 +187,10 @@ export class ContextMenuManager {
                 const colorVar = typeDef ? typeDef.color : '#fff';
 
                 li.innerHTML = `<span style="color:${colorVar}">${check}${t.toUpperCase()}</span>`;
-                li.onclick = () => {
+                this._bindMenuAction(li, () => {
                     this.callbacks.onPinChange(node, pin, t, pinIndex, dir);
                     this.hide();
-                };
+                });
                 list.appendChild(li);
             });
         }
@@ -203,7 +209,10 @@ export class ContextMenuManager {
             li.className = 'ctx-item';
             const style = color ? `style="color:${color}"` : '';
             li.innerHTML = `<span ${style}>${label}</span>`;
-            li.onclick = () => { action(); this.hide(); };
+            this._bindMenuAction(li, () => {
+                action();
+                this.hide();
+            });
             list.appendChild(li);
         };
 
@@ -326,7 +335,7 @@ export class ContextMenuManager {
         li.innerHTML = `<span>${tmpl.name}</span> <span style="font-size:10px; opacity:0.5">${isFlow ? 'Flow' : 'Data'}</span>`;
         
         // Click -> Trigger Spawn Callback
-        li.onclick = () => {
+        this._bindMenuAction(li, () => {
             const spawnContext = this.activeCanvasContext && this.activeCanvasContext.spawnContext
                 ? { ...this.activeCanvasContext.spawnContext }
                 : null;
@@ -339,7 +348,7 @@ export class ContextMenuManager {
             }
             this.callbacks.onSpawn(tmpl, this.activePos.x, this.activePos.y, spawnContext);
             this.hide();
-        };
+        });
         list.appendChild(li);
     }
 
@@ -394,10 +403,10 @@ export class ContextMenuManager {
             liPaste.innerHTML = `<span>Paste</span>`;
             liPaste.style.borderBottom = '1px solid #444';
             liPaste.style.marginBottom = '5px';
-            liPaste.onclick = () => {
+            this._bindMenuAction(liPaste, () => {
                 this.callbacks.onPaste(this.activeCanvasContext.clickPos.x, this.activeCanvasContext.clickPos.y);
                 this.hide();
-            };
+            });
             list.insertBefore(liPaste, list.firstChild);
         }
         this._positionMenuWithinViewport();
@@ -500,5 +509,20 @@ export class ContextMenuManager {
             localStorage.setItem(this.contextSettingKey, String(this.contextSensitiveEnabled));
         } catch (err) {
         }
+    }
+
+    _bindMenuAction(element, action) {
+        if (!element) return;
+
+        element.onclick = (e) => {
+            if (e) e.stopPropagation();
+            action();
+        };
+
+        element.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            action();
+        }, { passive: false });
     }
 }

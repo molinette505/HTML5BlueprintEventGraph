@@ -89,6 +89,11 @@ export class Editor {
 
         if (this.dom.variableDrawerHandle) {
             this.dom.variableDrawerHandle.onclick = () => toggleVariablePanel();
+            this.dom.variableDrawerHandle.addEventListener('touchend', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                toggleVariablePanel();
+            }, { passive: false });
         }
 
         // Play Button Logic
