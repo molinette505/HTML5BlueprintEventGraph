@@ -21,6 +21,17 @@ export class Simulation {
         // Tracks all visuals (labels AND glowing wires) for the current step
         this.activeStepVisuals = [];
         this.connectionVisuals = new Map();
+
+        this.execPolicies = {
+            "For Loop": (node, ctx, item, continuations, currentRunId) => this.runForLoop(node, ctx, continuations, !!item.isLoopContinuation),
+            "WhileLoop": (node, ctx, item, continuations, currentRunId) => this.runWhileLoop(node, ctx, continuations),
+            "Do Once": (node, ctx, item, continuations, currentRunId) => this.runDoOnce(node, item.conn ? item.conn.toPin : null, continuations),
+            "Delay": (node, ctx, item, continuations, currentRunId) => this.runDelay(node, ctx, continuations, currentRunId),
+            "Branch": (node, ctx, item, continuations, currentRunId) => this.runDefaultExec(node, ctx, continuations)
+        };
+        this.purePolicies = {
+            "default": (node, ctx, item, currentRunId) => this.runDefaultPure(node, ctx, item, currentRunId)
+        };
     }
 
     initialize() {
@@ -307,43 +318,7 @@ export class Simulation {
 
             const incomingPinIndex = item.conn ? item.conn.toPin : null;
 
-            if (node.name === "For Loop") {
-                this.runForLoop(node, ctx, continuations, !!item.isLoopContinuation);
-            } else if (node.name === "Do Once") {
-                this.runDoOnce(node, incomingPinIndex, continuations);
-            } else if (node.name === "Delay") {
-                this.runDelay(node, ctx, continuations, currentRunId);
-            } else if (node.name === "WhileLoop") {
-                this.runWhileLoop(node, ctx, continuations);
-            } else if (node.jsFunctionRef) {
-                try {
-                    const args = this.buildArgs(node, ctx);
-                    this.highlightNode(node.id, '#ff9900');
-                    node.executionResult = node.jsFunctionRef.apply(node, args);
-                } catch (err) {
-                    if (err.isBlueprintError) node.setError(err.message);
-                    else console.error(err);
-                    this.stop();
-                    return;
-                }
-
-                const nextInfo = this.getNextExecConnection(node);
-                if (nextInfo) {
-                    const { nextConn, nextNode } = nextInfo;
-                    this.queueExec(nextNode, nextConn, false, continuations);
-                } else {
-                    this.enqueueContinuation(continuations);
-                }
-            } else {
-                this.highlightNode(node.id, '#ff9900');
-                const nextInfo = this.getNextExecConnection(node);
-                if (nextInfo) {
-                    const { nextConn, nextNode } = nextInfo;
-                    this.queueExec(nextNode, nextConn, false, continuations);
-                } else {
-                    this.enqueueContinuation(continuations);
-                }
-            }
+            this.executeExecNode(node, ctx, item, continuations, currentRunId);
 
             this.pendingRequests.delete(item.id);
             this.lastProcessedItem = item;
@@ -353,44 +328,7 @@ export class Simulation {
             const node = item.node;
             node.setError(null);
 
-            let result = null;
-            const args = this.buildArgs(node, ctx);
-
-            if (node.jsFunctionRef) {
-                try {
-                    const rawRes = node.jsFunctionRef.apply(node, args);
-                    const outPinIndex = item.deliverTo && item.deliverTo.conn ? item.deliverTo.conn.fromPin : 0;
-                    const outPin = node.outputs[outPinIndex];
-                    result = this.castValue(rawRes, outPin ? outPin.type : 'wildcard');
-
-                    node.executionResult = result;
-
-                    if (item.deliverTo) {
-                        const targetCtx = this.pendingRequests.get(item.deliverTo.requestId);
-                        if (targetCtx) {
-                            const targetNode = targetCtx.node;
-                            const targetPin = targetNode.inputs[item.deliverTo.inputIndex];
-                            const valueForTarget = this.castValue(result, targetPin ? targetPin.type : 'wildcard');
-                            this.deliverInput(item.deliverTo, valueForTarget);
-                        }
-
-                        if (this.renderer) {
-                            const debugLabel = window.FunctionRegistry.getVisualDebug(node, args, result);
-                            const visualObj = this.renderer.animateDataWire(item.deliverTo.conn, debugLabel);
-                            this.addStepVisual(visualObj);
-                            await new Promise(r => setTimeout(r, 2000));
-                            if (this.runInstanceId !== currentRunId) return;
-                        }
-                    }
-                } catch (err) {
-                    if (err.isBlueprintError) node.setError(err.message);
-                    else console.error(err);
-                    this.stop();
-                    return;
-                }
-            } else if (item.deliverTo) {
-                this.deliverInput(item.deliverTo, null);
-            }
+            await this.executePureNode(node, ctx, item, currentRunId);
 
             this.pendingRequests.delete(item.id);
         }
@@ -571,6 +509,82 @@ export class Simulation {
             this.queueExec(nextNode, nextConn, false, continuations);
             if (this.status === 'RUNNING') this.tick();
         }, delayMs);
+    }
+
+    executeExecNode(node, ctx, item, continuations, currentRunId) {
+        const policy = this.execPolicies[node.name] || ((n, c, i, cont, runId) => this.runDefaultExec(n, c, cont));
+        return policy(node, ctx, item, continuations, currentRunId);
+    }
+
+    runDefaultExec(node, ctx, continuations) {
+        if (node.jsFunctionRef) {
+            try {
+                const args = this.buildArgs(node, ctx);
+                this.highlightNode(node.id, '#ff9900');
+                node.executionResult = node.jsFunctionRef.apply(node, args);
+            } catch (err) {
+                if (err.isBlueprintError) node.setError(err.message);
+                else console.error(err);
+                this.stop();
+                return;
+            }
+        } else {
+            this.highlightNode(node.id, '#ff9900');
+        }
+
+        const nextInfo = this.getNextExecConnection(node);
+        if (nextInfo) {
+            const { nextConn, nextNode } = nextInfo;
+            this.queueExec(nextNode, nextConn, false, continuations);
+        } else {
+            this.enqueueContinuation(continuations);
+        }
+    }
+
+    async executePureNode(node, ctx, item, currentRunId) {
+        const policy = this.purePolicies["default"];
+        return policy(node, ctx, item, currentRunId);
+    }
+
+    async runDefaultPure(node, ctx, item, currentRunId) {
+        let result = null;
+        const args = this.buildArgs(node, ctx);
+
+        if (node.jsFunctionRef) {
+            try {
+                const rawRes = node.jsFunctionRef.apply(node, args);
+                const outPinIndex = item.deliverTo && item.deliverTo.conn ? item.deliverTo.conn.fromPin : 0;
+                const outPin = node.outputs[outPinIndex];
+                result = this.castValue(rawRes, outPin ? outPin.type : 'wildcard');
+
+                node.executionResult = result;
+
+                if (item.deliverTo) {
+                    const targetCtx = this.pendingRequests.get(item.deliverTo.requestId);
+                    if (targetCtx) {
+                        const targetNode = targetCtx.node;
+                        const targetPin = targetNode.inputs[item.deliverTo.inputIndex];
+                        const valueForTarget = this.castValue(result, targetPin ? targetPin.type : 'wildcard');
+                        this.deliverInput(item.deliverTo, valueForTarget);
+                    }
+
+                    if (this.renderer) {
+                        const debugLabel = window.FunctionRegistry.getVisualDebug(node, args, result);
+                        const visualObj = this.renderer.animateDataWire(item.deliverTo.conn, debugLabel);
+                        this.addStepVisual(visualObj);
+                        await new Promise(r => setTimeout(r, 2000));
+                        if (this.runInstanceId !== currentRunId) return;
+                    }
+                }
+            } catch (err) {
+                if (err.isBlueprintError) node.setError(err.message);
+                else console.error(err);
+                this.stop();
+                return;
+            }
+        } else if (item.deliverTo) {
+            this.deliverInput(item.deliverTo, null);
+        }
     }
 
     castValue(val, type) {
