@@ -30,7 +30,6 @@ export class Editor {
             
             // Simulation Toolbar Buttons
             btnPlay: document.getElementById('btn-play'),
-            btnPause: document.getElementById('btn-pause'),
             btnStep: document.getElementById('btn-step'),
             btnReplay: document.getElementById('btn-replay'),
             btnStop: document.getElementById('btn-stop')
@@ -96,21 +95,12 @@ export class Editor {
             }, { passive: false });
         }
 
-        // Play Button Logic
+        // Play/Pause Toggle Button Logic
         if (this.dom.btnPlay) {
             this.dom.btnPlay.onclick = () => {
-                // If paused, just resume. Otherwise, start from scratch.
-                if(this.simulation.status === 'PAUSED') this.simulation.resume();
+                if (this.simulation.status === 'RUNNING') this.simulation.pause();
+                else if (this.simulation.status === 'PAUSED') this.simulation.resume();
                 else this.simulation.start();
-            };
-        }
-
-        // Pause Button Logic
-        if (this.dom.btnPause) {
-            this.dom.btnPause.onclick = () => {
-                // If stopped, "Step 0" (Start Paused). Otherwise, just pause.
-                if (this.simulation.status === 'STOPPED') this.simulation.startPaused();
-                else this.simulation.pause();
             };
         }
 
@@ -221,22 +211,19 @@ export class Editor {
         if (!d.btnPlay) return; 
 
         // Icons
-        const iconStartPaused = `<svg viewBox="0 0 24 24"><path d="M6 5v14l9-7z M17 5v14h2V5z"/></svg>`;
+        const iconPlay = `<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>`;
         const iconPause = `<svg viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>`;
 
         if (status === 'STOPPED') {
-            d.btnPlay.disabled = false; d.btnPlay.title = "Play";
-            d.btnPause.disabled = false; d.btnPause.innerHTML = iconStartPaused; d.btnPause.title = "Start Paused";
+            d.btnPlay.disabled = false; d.btnPlay.innerHTML = iconPlay; d.btnPlay.title = "Play";
             d.btnReplay.disabled = true; d.btnStep.disabled = false; d.btnStop.disabled = true;
         } 
         else if (status === 'RUNNING') {
-            d.btnPlay.disabled = true;
-            d.btnPause.disabled = false; d.btnPause.innerHTML = iconPause; d.btnPause.title = "Pause";
+            d.btnPlay.disabled = false; d.btnPlay.innerHTML = iconPause; d.btnPlay.title = "Pause";
             d.btnReplay.disabled = true; d.btnStep.disabled = true; d.btnStop.disabled = false;
         } 
         else if (status === 'PAUSED') {
-            d.btnPlay.disabled = false; d.btnPlay.title = "Resume";
-            d.btnPause.disabled = true; 
+            d.btnPlay.disabled = false; d.btnPlay.innerHTML = iconPlay; d.btnPlay.title = "Resume";
             d.btnReplay.disabled = !this.simulation.lastProcessedItem;
             d.btnStep.disabled = false; d.btnStop.disabled = false;
         }

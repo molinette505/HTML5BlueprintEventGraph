@@ -334,6 +334,7 @@ export class Simulation {
             if (this.onStateChange) this.onStateChange(this.status);
         } else if (item.kind === 'pure') {
             const node = item.node;
+            this.clearInputVisuals(node);
             node.setError(null);
 
             await this.executePureNode(node, ctx, item, currentRunId);
