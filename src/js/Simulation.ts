@@ -260,13 +260,20 @@ export class Simulation {
         }
 
         if (item.kind === 'exec') {
-            if (!item.execWireDone && item.conn && this.renderer) {
-                this.renderer.animateExecWire(item.conn);
-                await new Promise(r => setTimeout(r, 1500));
-                if (this.runInstanceId !== currentRunId) return;
+            if (!item.execWireDone) {
+                if (item.conn && this.renderer) {
+                    this.renderer.animateExecWire(item.conn);
+                    await new Promise(r => setTimeout(r, 1500));
+                    if (this.runInstanceId !== currentRunId) return;
+                }
                 item.execWireDone = true;
-            } else if (!item.execWireDone) {
-                item.execWireDone = true;
+
+                // In manual step mode, consume one click for incoming exec-wire travel only.
+                if (isSingleStep && item.conn) {
+                    this.executionQueue.unshift(item);
+                    if (this.onStateChange) this.onStateChange(this.status);
+                    return;
+                }
             }
 
             if (!item.waitingHighlight) {
@@ -297,10 +304,10 @@ export class Simulation {
             return;
         }
 
-        if (item.kind === 'pure' && ctx.inputVisualDelay && !item.inputVisualWaited) {
+        if (ctx.inputVisualDelay && !item.inputVisualWaited) {
             item.inputVisualWaited = true;
             ctx.inputVisualDelay = false;
-            await new Promise(r => setTimeout(r, 2000));
+            await new Promise(r => setTimeout(r, 900));
             if (this.runInstanceId !== currentRunId) return;
         }
 

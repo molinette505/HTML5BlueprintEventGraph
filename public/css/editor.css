@@ -7,6 +7,7 @@
     padding: 0 10px;
     box-shadow: 0 2px 10px rgba(0,0,0,0.3);
     z-index: 50; justify-content: space-between;
+    touch-action: manipulation;
 }
 
 .toolbar-left { display: flex; align-items: center; gap: 10px; }
@@ -87,6 +88,7 @@
     text-orientation: mixed;
     padding: 8px 4px;
     transition: left 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94), background 0.2s;
+    touch-action: manipulation;
 }
 
 #variable-drawer-handle:hover {
@@ -172,6 +174,7 @@
     background: #252526; border: 1px solid #454545;
     box-shadow: 0 4px 12px rgba(0,0,0,0.5);
     border-radius: 6px; z-index: 2000; overflow: hidden;
+    touch-action: manipulation;
 }
 #context-menu.visible { display: flex; }
 
@@ -243,5 +246,14 @@
 
     #context-list {
         max-height: calc(70vh - 84px);
+    }
+
+    #variable-panel input,
+    #variable-panel select,
+    #variable-panel textarea,
+    #context-menu input,
+    #context-menu select,
+    #context-menu textarea {
+        font-size: 16px !important;
     }
 }
