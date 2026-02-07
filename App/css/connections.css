@@ -66,7 +66,7 @@ path.connection.data-flow {
     pointer-events: none;
     white-space: nowrap;
     z-index: 2000;
-    transform: translate(-50%, -100%); /* Center above point */
+    transform: translate(-50%, -70%); /* Center near pin */
     /* [FIX] Increased duration to 2.0s */
     /* UPDATED: Animation now stays visible at the end */
     animation: float-up 0.3s ease-out forwards;
@@ -75,10 +75,10 @@ path.connection.data-flow {
 @keyframes float-up {
     0% { 
         opacity: 0; 
-        transform: translate(-50%, -100%) scale(0.5); 
+        transform: translate(-50%, -70%) scale(0.5); 
     }
     100% { 
         opacity: 1; 
-        transform: translate(-50%, -250%) scale(1); 
+        transform: translate(-50%, -120%) scale(1); 
     }
 }

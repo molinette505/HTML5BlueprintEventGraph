@@ -11,7 +11,12 @@ class Simulation {
         this.timer = null;
         this.runInstanceId = 0;
         this.lastProcessedItem = null;
+        this.lastProcessedExec = null;
         this.onStateChange = null; 
+
+        // Request tracking for queued evaluations
+        this.nextRequestId = 1;
+        this.pendingRequests = new Map();
         
         // Tracks all visuals (labels AND glowing wires) for the current step
         this.activeStepVisuals = [];
@@ -31,12 +36,15 @@ class Simulation {
 
         this.graph.nodes.forEach(n => n.executionResult = null);
         this.executionQueue = [];
+        this.pendingRequests.clear();
+        this.nextRequestId = 1;
         this.lastProcessedItem = null;
+        this.lastProcessedExec = null;
         this.clearStepVisuals(); // Ensure clean slate
 
         const starts = this.graph.nodes.filter(n => n.name === "Event BeginPlay");
         starts.forEach(n => {
-            this.executionQueue.push({ node: n, conn: null });
+            this.queueExec(n, null);
         });
     }
 
@@ -48,7 +56,9 @@ class Simulation {
     stop() {
         this.setStatus('STOPPED');
         this.executionQueue = [];
+        this.pendingRequests.clear();
         this.lastProcessedItem = null;
+        this.lastProcessedExec = null;
         if(this.timer) clearTimeout(this.timer);
         this.runInstanceId++; 
         
@@ -71,25 +81,11 @@ class Simulation {
     }
 
     replayStep() {
-        if (this.status === 'PAUSED' && this.lastProcessedItem) {
-            this.clearPureNodeCache(this.lastProcessedItem.node);
-            this.executionQueue.unshift(this.lastProcessedItem);
+        if (this.status === 'PAUSED' && this.lastProcessedExec) {
+            const task = this.createTask('exec', this.lastProcessedExec.node, { conn: this.lastProcessedExec.conn });
+            this.executionQueue.unshift(task);
             this.processNext(true);
         }
-    }
-
-    clearPureNodeCache(node) {
-        node.inputs.forEach(pin => {
-            if (pin.type === 'exec') return;
-            const conn = this.graph.connections.find(c => c.toNode === node.id && c.toPin === pin.index);
-            if (conn) {
-                const src = this.graph.nodes.find(n => n.id === conn.fromNode);
-                if (this.isPureNode(src)) {
-                    src.executionResult = null; 
-                    this.clearPureNodeCache(src); 
-                }
-            }
-        });
     }
 
     setStatus(s) {
@@ -102,6 +98,97 @@ class Simulation {
         this.processNext(false);
     }
 
+    createTask(kind, node, extra = {}) {
+        const id = this.nextRequestId++;
+        const inputValues = new Array(node.inputs.length);
+        const inputReady = new Array(node.inputs.length).fill(false);
+        const inputScheduled = new Array(node.inputs.length).fill(false);
+
+        node.inputs.forEach((pin, idx) => {
+            if (pin.type === 'exec') inputReady[idx] = true;
+        });
+
+        this.pendingRequests.set(id, { node, inputValues, inputReady, inputScheduled });
+        return { id, kind, node, ...extra };
+    }
+
+    queueExec(node, conn, toFront = false) {
+        const task = this.createTask('exec', node, { conn });
+        if (toFront) this.executionQueue.unshift(task);
+        else this.executionQueue.push(task);
+        return task;
+    }
+
+    queuePure(node, deliverTo, toFront = false) {
+        const task = this.createTask('pure', node, { deliverTo });
+        if (toFront) this.executionQueue.unshift(task);
+        else this.executionQueue.push(task);
+        return task;
+    }
+
+    buildArgs(node, ctx) {
+        const args = [];
+        for (let i = 0; i < node.inputs.length; i++) {
+            const pin = node.inputs[i];
+            if (pin.type === 'exec') continue;
+            args.push(ctx.inputValues[i]);
+        }
+        return args;
+    }
+
+    resolveInputs(task) {
+        const ctx = this.pendingRequests.get(task.id);
+        if (!ctx) return { ready: false, deps: [] };
+
+        const deps = [];
+        const node = task.node;
+
+        for (let i = 0; i < node.inputs.length; i++) {
+            const pin = node.inputs[i];
+            if (pin.type === 'exec') continue;
+            if (ctx.inputReady[i]) continue;
+
+            const conn = this.graph.connections.find(c => c.toNode === node.id && c.toPin === i);
+
+            if (!conn) {
+                const rawVal = node.getInputValue(i);
+                ctx.inputValues[i] = this.castValue(rawVal, pin.type);
+                ctx.inputReady[i] = true;
+                continue;
+            }
+
+            const sourceNode = this.graph.nodes.find(n => n.id === conn.fromNode);
+            if (!sourceNode) {
+                ctx.inputValues[i] = this.castValue(null, pin.type);
+                ctx.inputReady[i] = true;
+                continue;
+            }
+
+            if (this.isPureNode(sourceNode)) {
+                if (!ctx.inputScheduled[i]) {
+                    ctx.inputScheduled[i] = true;
+                    const pureTask = this.createTask('pure', sourceNode, {
+                        deliverTo: { requestId: task.id, inputIndex: i, conn }
+                    });
+                    deps.push(pureTask);
+                }
+            } else {
+                ctx.inputValues[i] = this.castValue(sourceNode.executionResult, pin.type);
+                ctx.inputReady[i] = true;
+            }
+        }
+
+        const ready = node.inputs.every((pin, idx) => pin.type === 'exec' || ctx.inputReady[idx]);
+        return { ready, deps };
+    }
+
+    deliverInput(deliverTo, value) {
+        const targetCtx = this.pendingRequests.get(deliverTo.requestId);
+        if (!targetCtx) return;
+        targetCtx.inputValues[deliverTo.inputIndex] = value;
+        targetCtx.inputReady[deliverTo.inputIndex] = true;
+    }
+
     async processNext(isSingleStep) {
         const currentRunId = this.runInstanceId;
         if (this.executionQueue.length === 0) {
@@ -110,192 +197,157 @@ class Simulation {
         }
 
         const item = this.executionQueue.shift();
-        this.lastProcessedItem = item; 
         if (this.onStateChange) this.onStateChange(this.status);
-
-        // --- GLOBAL VISUAL CLEANUP ---
-        // We only clear the previous step's visuals (wires/labels) when we officially 
-        // start processing the NEXT Execution Node.
-        this.clearStepVisuals();
-
-        const { node, conn } = item;
-
-        // Animate Wire (Execution Flow)
-        if (conn && this.renderer) {
-            this.renderer.animateExecWire(conn);
-            // Visual pause for the execution wire flowing to this node
-            await new Promise(r => setTimeout(r, 1500));
-            if (this.runInstanceId !== currentRunId) return;
-        }
 
         if (this.status === 'PAUSED' && !isSingleStep) {
             this.executionQueue.unshift(item); 
             return;
         }
 
-        this.highlightNode(node.id, '#ffffff'); 
-        node.setError(null);
+        const ctx = this.pendingRequests.get(item.id);
+        if (!ctx) {
+            if (this.status === 'RUNNING' && !isSingleStep) {
+                this.timer = setTimeout(() => this.tick(), 100);
+            }
+            return;
+        }
 
-        if (node.jsFunctionRef) {
-            try {
-                const args = await this.gatherInputs(node, currentRunId);
+        if (item.kind === 'exec') {
+            if (!item.execWireDone && item.conn && this.renderer) {
+                this.renderer.animateExecWire(item.conn);
+                await new Promise(r => setTimeout(r, 1500));
                 if (this.runInstanceId !== currentRunId) return;
-                
-                if (args === null) {
+                item.execWireDone = true;
+            } else if (!item.execWireDone) {
+                item.execWireDone = true;
+            }
+
+            if (!item.stepVisualsCleared) {
+                this.clearStepVisuals();
+                item.stepVisualsCleared = true;
+            }
+
+            if (!item.waitingHighlight) {
+                this.setNodeHighlight(item.node.id, '#ffffff');
+                item.waitingHighlight = true;
+            }
+        }
+
+        const { ready, deps } = this.resolveInputs(item);
+        if (!ready) {
+            if (deps.length > 0) {
+                this.executionQueue = deps.concat([item], this.executionQueue);
+            } else {
+                this.executionQueue.push(item);
+            }
+
+            if (this.status === 'RUNNING' && !isSingleStep) {
+                this.timer = setTimeout(() => this.tick(), 100);
+            }
+            return;
+        }
+
+        if (item.kind === 'exec') {
+            const node = item.node;
+
+            if (this.status === 'PAUSED' && !isSingleStep) {
+                this.executionQueue.unshift(item);
+                return;
+            }
+
+            node.setError(null);
+
+            if (node.jsFunctionRef) {
+                try {
+                    const args = this.buildArgs(node, ctx);
+                    this.highlightNode(node.id, '#ff9900');
+                    node.executionResult = node.jsFunctionRef.apply(node, args);
+                } catch (err) {
+                    if (err.isBlueprintError) node.setError(err.message);
+                    else console.error(err);
+                    this.stop(); 
+                    return;
+                }
+            } else {
+                this.highlightNode(node.id, '#ff9900');
+            }
+
+            // Branching Logic
+            let targetPinName = null;
+            if (node.name === "Branch") {
+                targetPinName = node.executionResult ? "True" : "False";
+            }
+
+            let outExecPin = null;
+            if (targetPinName) {
+                outExecPin = node.outputs.find(p => p.type === 'exec' && p.name === targetPinName);
+            } else {
+                outExecPin = node.outputs.find(p => p.type === 'exec');
+            }
+
+            if (outExecPin) {
+                const nextConn = this.graph.connections.find(c => c.fromNode === node.id && c.fromPin === outExecPin.index);
+                if (nextConn) {
+                    const nextNode = this.graph.nodes.find(n => n.id === nextConn.toNode);
+                    if (nextNode) {
+                        this.queueExec(nextNode, nextConn);
+                    }
+                }
+            }
+
+            this.pendingRequests.delete(item.id);
+            this.lastProcessedItem = item;
+            this.lastProcessedExec = item;
+            if (this.onStateChange) this.onStateChange(this.status);
+        } else if (item.kind === 'pure') {
+            const node = item.node;
+            node.setError(null);
+
+            let result = null;
+            const args = this.buildArgs(node, ctx);
+
+            if (node.jsFunctionRef) {
+                try {
+                    const rawRes = node.jsFunctionRef.apply(node, args);
+                    const outPinIndex = item.deliverTo && item.deliverTo.conn ? item.deliverTo.conn.fromPin : 0;
+                    const outPin = node.outputs[outPinIndex];
+                    result = this.castValue(rawRes, outPin ? outPin.type : 'wildcard');
+
+                    node.executionResult = result;
+
+                    if (item.deliverTo) {
+                        const targetCtx = this.pendingRequests.get(item.deliverTo.requestId);
+                        if (targetCtx) {
+                            const targetNode = targetCtx.node;
+                            const targetPin = targetNode.inputs[item.deliverTo.inputIndex];
+                            const valueForTarget = this.castValue(result, targetPin ? targetPin.type : 'wildcard');
+                            this.deliverInput(item.deliverTo, valueForTarget);
+                        }
+
+                        if (this.renderer) {
+                            const debugLabel = window.FunctionRegistry.getVisualDebug(node, args, result);
+                            const visualObj = this.renderer.animateDataWire(item.deliverTo.conn, debugLabel);
+                            this.addStepVisual(visualObj);
+                            await new Promise(r => setTimeout(r, 2000));
+                            if (this.runInstanceId !== currentRunId) return;
+                        }
+                    }
+                } catch (err) {
+                    if (err.isBlueprintError) node.setError(err.message);
+                    else console.error(err);
                     this.stop();
                     return;
                 }
-
-                if (args !== null) {
-                    this.highlightNode(node.id, '#ff9900'); 
-                    
-                    // --- CLEAR LABELS HERE ---
-                    // The labels are cleared exactly when the node starts "running".
-                    this.clearStepVisuals(); 
-
-                    // Execution Phase
-                    node.executionResult = node.jsFunctionRef.apply(node, args);
-                }
-            } catch (err) {
-                if (err.isBlueprintError) node.setError(err.message);
-                else console.error(err);
-                this.stop(); 
-                return;
+            } else if (item.deliverTo) {
+                this.deliverInput(item.deliverTo, null);
             }
-        } else {
-            this.highlightNode(node.id, '#ff9900');
-            // If it's a dummy node or event, still clear old visuals
-            this.clearStepVisuals(); 
-        }
 
-        // Branching Logic
-        let targetPinName = null;
-        if (node.name === "Branch") {
-            targetPinName = node.executionResult ? "True" : "False";
-        }
-
-        let outExecPin = null;
-        if (targetPinName) {
-            outExecPin = node.outputs.find(p => p.type === 'exec' && p.name === targetPinName);
-        } else {
-            outExecPin = node.outputs.find(p => p.type === 'exec');
-        }
-
-        if (outExecPin) {
-            const nextConn = this.graph.connections.find(c => c.fromNode === node.id && c.fromPin === outExecPin.index);
-            if (nextConn) {
-                const nextNode = this.graph.nodes.find(n => n.id === nextConn.toNode);
-                if (nextNode) {
-                    this.executionQueue.push({ node: nextNode, conn: nextConn });
-                }
-            }
+            this.pendingRequests.delete(item.id);
         }
 
         if (this.status === 'RUNNING' && !isSingleStep) {
             this.timer = setTimeout(() => this.tick(), 100);
         }
-    }
-
-    async gatherInputs(node, runId) {
-        const args = [];
-        
-        // --- VISUALIZATION: BACKTRACK HIGHLIGHT ---
-        let dependencyConnections = [];
-        if (!this.isPureNode(node)) {
-            const { nodes, connections } = this.collectPureDependencyChain(node);
-            dependencyConnections = connections;
-            if (nodes.length > 0) {
-                this.highlightElements(nodes, connections, '#ffffff');
-                await new Promise(r => setTimeout(r, 600)); 
-                if (this.runInstanceId !== runId) return null;
-            }
-        }
-
-        for(let i = 0; i < node.inputs.length; i++) {
-            const pin = node.inputs[i];
-            if (pin.type === 'exec') continue; 
-
-            const conn = this.graph.connections.find(c => c.toNode === node.id && c.toPin === pin.index);
-            let val = null;
-
-            if (conn) {
-                const sourceNode = this.graph.nodes.find(n => n.id === conn.fromNode);
-                
-                if (this.isPureNode(sourceNode)) {
-                    try {
-                        // FORCE RE-EVALUATION for Variable.Get
-                        const isVariableGet = sourceNode.functionId === 'Variable.Get';
-
-                        if (sourceNode.executionResult === null || isVariableGet) {
-                            if (this.runInstanceId !== runId) return null;
-
-                            const sourceArgs = await this.gatherInputs(sourceNode, runId);
-                            if (sourceArgs === null) return null; 
-                            if (this.runInstanceId !== runId) return null;
-
-                            sourceNode.setError(null);
-                            
-                            // Calculate
-                            const rawRes = sourceNode.jsFunctionRef.apply(sourceNode, sourceArgs);
-                            
-                            const outPin = sourceNode.outputs[0];
-                            sourceNode.executionResult = this.castValue(rawRes, outPin ? outPin.type : 'wildcard');
-                            
-                            // Execution triggers the Orange flash
-                            this.highlightNode(sourceNode.id, '#ff9900');
-                            
-                            // DO NOT CLEAR LABELS/WIRES HERE. 
-
-                        } else {
-                            // If cached, just clear the "highlight" effect (white box) 
-                            this.clearNodeHighlight(sourceNode.id);
-                            this.resetInputWiresRecursively(sourceNode);
-                        }
-                    } catch (err) {
-                        sourceNode.setError(err.message || "Error");
-                        return null;
-                    }
-                }
-                
-                val = sourceNode.executionResult;
-
-                if (this.renderer) {
-                    this.resetWireColor(conn);
-
-                    let debugInputs = [];
-                    for(let k=0; k<sourceNode.inputs.length; k++) {
-                        const inputConn = this.graph.connections.find(c => c.toNode === sourceNode.id && c.toPin === k);
-                        if (inputConn) {
-                            const upNode = this.graph.nodes.find(n => n.id === inputConn.fromNode);
-                            debugInputs.push(upNode.executionResult);
-                        } else {
-                            debugInputs.push(sourceNode.getInputValue(k));
-                        }
-                    }
-
-                    const debugLabel = window.FunctionRegistry.getVisualDebug(sourceNode, debugInputs, val);
-                    
-                    // --- ANIMATE LABEL ON WIRE ---
-                    const visualObj = this.renderer.animateDataWire(conn, debugLabel);
-                    this.addStepVisual(visualObj);
-                    
-                    // Wait 1s for the "travel" animation
-                    await new Promise(r => setTimeout(r, 2000)); 
-                    if (this.runInstanceId !== runId) return null;
-                }
-            } else {
-                val = node.getInputValue(i);
-            }
-
-            args.push(this.castValue(val, pin.type));
-        }
-
-        // --- CLEANUP OF HIGHLIGHTS ---
-        if (!this.isPureNode(node) && dependencyConnections.length > 0) {
-            dependencyConnections.forEach(c => this.resetWireColor(c));
-        }
-
-        return args;
     }
 
     castValue(val, type) {
@@ -336,6 +388,14 @@ class Simulation {
         }
     }
 
+    setNodeHighlight(id, color = '#ffffff') {
+        const el = document.getElementById(`node-${id}`);
+        if (el) {
+            el.style.transition = "box-shadow 0.2s ease-out";
+            el.style.boxShadow = `0 0 0 4px ${color}`;
+        }
+    }
+
     // --- HELPER METHODS ---
 
     addStepVisual(visualObj) {
@@ -354,70 +414,6 @@ class Simulation {
             });
             this.activeStepVisuals = [];
         }
-    }
-
-    collectPureDependencyChain(rootNode) {
-        let nodes = new Set();
-        let connections = new Set();
-        
-        const traverse = (n) => {
-            n.inputs.forEach(pin => {
-                if (pin.type === 'exec') return; 
-                const conn = this.graph.connections.find(c => c.toNode === n.id && c.toPin === pin.index);
-                if (conn) {
-                    const src = this.graph.nodes.find(node => node.id === conn.fromNode);
-                    if (this.isPureNode(src)) {
-                        connections.add(conn);
-                        if (!nodes.has(src)) {
-                            nodes.add(src);
-                            traverse(src);
-                        }
-                    }
-                }
-            });
-        };
-        
-        traverse(rootNode);
-        return { nodes: Array.from(nodes), connections: Array.from(connections) };
-    }
-
-    resetInputWiresRecursively(node) {
-        node.inputs.forEach(pin => {
-            if (pin.type === 'exec') return;
-            const conn = this.graph.connections.find(c => c.toNode === node.id && c.toPin === pin.index);
-            if (conn) {
-                this.resetWireColor(conn);
-                const src = this.graph.nodes.find(n => n.id === conn.fromNode);
-                if (src && this.isPureNode(src)) {
-                    this.clearNodeHighlight(src.id);
-                    this.resetInputWiresRecursively(src);
-                }
-            }
-        });
-    }
-
-    highlightElements(nodes, connections, color) {
-        nodes.forEach(n => {
-            const el = document.getElementById(`node-${n.id}`);
-            if(el) {
-                el.style.transition = "box-shadow 0.2s ease-out";
-                el.style.boxShadow = `0 0 0 4px ${color}`;
-            }
-        });
-        connections.forEach(c => {
-            const path = document.getElementById(`conn-${c.id}`);
-            if(path) {
-                if (!path.dataset.originalColor) {
-                    path.dataset.originalColor = path.style.stroke;
-                }
-                path.style.stroke = color;
-            }
-        });
-    }
-
-    clearNodeHighlight(id) {
-        const el = document.getElementById(`node-${id}`);
-        if(el) el.style.boxShadow = "";
     }
 
     resetWireColor(conn) {
