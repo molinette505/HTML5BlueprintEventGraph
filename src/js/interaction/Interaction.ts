@@ -77,6 +77,7 @@ export class Interaction {
         this.touchLongPressTimer = null;
         this.touchSingleTapTimer = null;
         this.pendingDoubleTap = { nodeId: null, time: 0 };
+        this.pendingCanvasTap = { time: 0, x: 0, y: 0 };
         this.lastTouchTimestamp = 0;
         this.pinchState = null;
 
@@ -124,7 +125,7 @@ export class Interaction {
                 }
             }
             else if (this.mode === 'DRAG_WIRE') {
-                const target = e.target.closest('.pin');
+                const target = e.target.closest('.pin') || this.connectionManager.getSnapTargetElement();
                 if (target) {
                     this.connectionManager.commit(target);
                 } else {
@@ -351,13 +352,21 @@ export class Interaction {
 
         if (state.type === 'canvas') {
             if (!state.dragStarted && distance > this.touchConfig.dragThreshold) {
-                this.selectionManager.startBox(this._asPointerEvent(state.startX, state.startY));
+                if (state.boxSelectArmed) {
+                    this.selectionManager.startBox(this._asPointerEvent(state.startX, state.startY));
+                    this.mode = 'BOX_SELECT';
+                } else {
+                    this.viewportManager.startPan(this._asPointerEvent(state.startX, state.startY));
+                    this.mode = 'PANNING';
+                }
                 state.dragStarted = true;
-                this.mode = 'BOX_SELECT';
             }
             if (state.dragStarted && this.mode === 'BOX_SELECT') {
                 e.preventDefault();
                 this.selectionManager.updateBox(this._asPointerEvent(touch.clientX, touch.clientY));
+            } else if (state.dragStarted && this.mode === 'PANNING') {
+                e.preventDefault();
+                this.viewportManager.updatePan(this._asPointerEvent(touch.clientX, touch.clientY));
             }
         }
     }
@@ -388,7 +397,7 @@ export class Interaction {
 
         if (state.type === 'pin') {
             if (state.dragStarted && this.mode === 'DRAG_WIRE') {
-                const targetPin = this._pinFromPoint(state.lastX, state.lastY);
+                const targetPin = this._pinFromPoint(state.lastX, state.lastY) || this.connectionManager.getSnapTargetElement();
                 if (targetPin) {
                     this.connectionManager.commit(targetPin);
                 } else if (state.startedFromConnected) {
@@ -413,6 +422,8 @@ export class Interaction {
         else if (state.type === 'canvas') {
             if (state.dragStarted && this.mode === 'BOX_SELECT') {
                 this.selectionManager.endBox();
+            } else if (state.dragStarted && this.mode === 'PANNING') {
+                // No-op: panning state already updated continuously in move.
             } else if (!state.hasMoved && !state.longPressTriggered) {
                 this.selectionManager.clear();
             }
@@ -489,6 +500,16 @@ export class Interaction {
     }
 
     _beginCanvasTouch(touch) {
+        const now = Date.now();
+        const distFromLastTap = Math.hypot(touch.clientX - this.pendingCanvasTap.x, touch.clientY - this.pendingCanvasTap.y);
+        const isDoubleTap = (now - this.pendingCanvasTap.time) <= this.touchConfig.doubleTapMs && distFromLastTap <= 32;
+
+        if (isDoubleTap) {
+            this.pendingCanvasTap = { time: 0, x: 0, y: 0 };
+        } else {
+            this.pendingCanvasTap = { time: now, x: touch.clientX, y: touch.clientY };
+        }
+
         this.touchState = {
             type: 'canvas',
             touchId: touch.identifier,
@@ -498,12 +519,15 @@ export class Interaction {
             lastY: touch.clientY,
             hasMoved: false,
             dragStarted: false,
-            longPressTriggered: false
+            longPressTriggered: false,
+            boxSelectArmed: isDoubleTap
         };
 
-        this._armTouchLongPress(() => {
-            this.contextMenu.show(this.touchState.lastX, this.touchState.lastY, 'canvas', { graph: this.graph });
-        });
+        if (!isDoubleTap) {
+            this._armTouchLongPress(() => {
+                this.contextMenu.show(this.touchState.lastX, this.touchState.lastY, 'canvas', { graph: this.graph });
+            });
+        }
     }
 
     _startPinchPan(e) {
@@ -608,7 +632,10 @@ export class Interaction {
         this.touchSingleTapTimer = window.setTimeout(() => {
             if (this.pendingDoubleTap.nodeId !== nodeId) return;
 
-            if (this.selectionManager.selected.has(nodeId)) {
+            if (this.selectionManager.selected.size > 1) {
+                this.selectionManager.clear();
+                this.selectionManager.add(nodeId);
+            } else if (this.selectionManager.selected.has(nodeId)) {
                 this.selectionManager.remove(nodeId);
             } else {
                 this.selectionManager.clear();

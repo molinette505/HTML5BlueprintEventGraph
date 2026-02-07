@@ -15,6 +15,8 @@ export class ConnectionManager {
         /** @type {Object|null} - State of the wire currently being dragged by the user */
         this.dragWire = null;
         this.pendingSpawnWire = null;
+        this.snapTarget = null;
+        this.snapDistancePx = 42;
     }
 
     buildSpawnContext() {
@@ -43,6 +45,7 @@ export class ConnectionManager {
 
     clearDrag() {
         this.dragWire = null;
+        this._clearSnapVisual();
     }
 
     beginPendingSpawn(clientX, clientY) {
@@ -63,6 +66,7 @@ export class ConnectionManager {
         };
 
         this.dragWire = null;
+        this._clearSnapVisual();
         return spawnContext;
     }
 
@@ -82,6 +86,7 @@ export class ConnectionManager {
     clearPendingSpawn(render = true) {
         const hadPendingSpawn = !!this.pendingSpawnWire;
         this.pendingSpawnWire = null;
+        this._clearSnapVisual();
         if (render && hadPendingSpawn) {
             this.renderer.render();
         }
@@ -230,13 +235,15 @@ export class ConnectionManager {
         const rect = this.dom.container.getBoundingClientRect();
         const mx = (e.clientX - rect.left - this.graph.pan.x) / this.graph.scale;
         const my = (e.clientY - rect.top - this.graph.pan.y) / this.graph.scale;
+        const snap = this._findBestSnapTarget(mx, my);
+        this._setSnapTarget(snap);
         
         // Clear the overlay and redraw existing connections + the current preview
         this.dom.connectionsLayer.innerHTML = '';
         this.graph.connections.forEach(cx => this.renderer.drawConnection(cx));
         
         const p1 = { x: this.dragWire.startX, y: this.dragWire.startY };
-        const p2 = { x: mx, y: my };
+        const p2 = snap ? { x: snap.x, y: snap.y } : { x: mx, y: my };
         
         // Orient the curve correctly (always Output -> Input for curvature math)
         if (this.dragWire.sourceType === 'output') {
@@ -251,8 +258,16 @@ export class ConnectionManager {
      * Handles complex logic like Type Conversions and Wildcard updates.
      * @param {HTMLElement} targetElement - The pin element the user released on.
      */
-    commit(targetElement) {
+    commit(targetElement = null) {
         if (!this.dragWire) return;
+        if (!targetElement && this.snapTarget && this.snapTarget.element) {
+            targetElement = this.snapTarget.element;
+        }
+        if (!targetElement) {
+            this.dragWire = null;
+            this._clearSnapVisual();
+            return;
+        }
 
         const s = this.dragWire;
         const t = {
@@ -263,6 +278,7 @@ export class ConnectionManager {
         };
 
         this.dragWire = null; // Reset dragging state immediately
+        this._clearSnapVisual();
 
         // --- VALIDATION ---
         if (s.sourceNode === t.nodeId) return; // Prevent connecting a node to itself
@@ -333,6 +349,10 @@ export class ConnectionManager {
         this.graph.addConnection(fromNode, fromPin, toNode, toPin, s.dataType);
     }
 
+    getSnapTargetElement() {
+        return this.snapTarget ? this.snapTarget.element : null;
+    }
+
     /**
      * Sever connections for a specific pin.
      * @param {HTMLElement} pinElement 
@@ -373,5 +393,89 @@ export class ConnectionManager {
             return !Array.isArray(outputPin.allowedTypes) || outputPin.allowedTypes.includes(targetType);
         }
         return Array.isArray(outputPin.allowedTypes) && outputPin.allowedTypes.includes(targetType);
+    }
+
+    _findBestSnapTarget(mx, my) {
+        if (!this.dragWire) return null;
+
+        const threshold = this.snapDistancePx / Math.max(this.graph.scale, 0.01);
+        const pins = this.dom.nodesLayer.querySelectorAll('.pin');
+        let best = null;
+
+        pins.forEach((pinEl) => {
+            const target = {
+                nodeId: parseInt(pinEl.dataset.node),
+                index: parseInt(pinEl.dataset.index),
+                type: pinEl.dataset.type,
+                dataType: pinEl.dataset.dataType
+            };
+
+            if (!this._isCandidateCompatible(this.dragWire, target)) return;
+
+            const pos = this.renderer.getPinPos(target.nodeId, target.index, target.type);
+            if (!pos) return;
+
+            const distance = Math.hypot(pos.x - mx, pos.y - my);
+            if (distance > threshold) return;
+            if (!best || distance < best.distance) {
+                best = {
+                    element: pinEl,
+                    nodeId: target.nodeId,
+                    index: target.index,
+                    type: target.type,
+                    dataType: target.dataType,
+                    x: pos.x,
+                    y: pos.y,
+                    distance
+                };
+            }
+        });
+
+        return best;
+    }
+
+    _setSnapTarget(nextTarget) {
+        if (this.snapTarget && this.snapTarget.element && this.snapTarget.element !== (nextTarget && nextTarget.element)) {
+            this.snapTarget.element.classList.remove('snapped');
+        }
+        this.snapTarget = nextTarget || null;
+        if (this.snapTarget && this.snapTarget.element) {
+            this.snapTarget.element.classList.add('snapped');
+        }
+    }
+
+    _clearSnapVisual() {
+        if (this.snapTarget && this.snapTarget.element) {
+            this.snapTarget.element.classList.remove('snapped');
+        }
+        this.snapTarget = null;
+    }
+
+    _isCandidateCompatible(source, target) {
+        if (!source || !target) return false;
+        if (source.sourceNode === target.nodeId) return false;
+        if (source.sourceType === target.type) return false;
+
+        if (source.sourceType === 'output') {
+            const targetNode = this.graph.nodes.find(n => n.id === target.nodeId);
+            const inputPin = targetNode && targetNode.inputs ? targetNode.inputs[target.index] : null;
+            if (!inputPin) return false;
+            if (this._isInputCompatible(inputPin, source.dataType)) return true;
+            return this._hasConversion(source.dataType, target.dataType);
+        }
+
+        const outputNode = this.graph.nodes.find(n => n.id === target.nodeId);
+        const outputPin = outputNode && outputNode.outputs ? outputNode.outputs[target.index] : null;
+        if (!outputPin) return false;
+        if (this._isOutputCompatible(outputPin, source.dataType)) return true;
+        return this._hasConversion(target.dataType, source.dataType);
+    }
+
+    _hasConversion(fromType, toType) {
+        if (!fromType || !toType) return false;
+        if (fromType === toType) return false;
+        if (fromType === 'exec' || toType === 'exec') return false;
+        const key = `${fromType}->${toType}`;
+        return !!(window.nodeConversions && window.nodeConversions[key]);
     }
 }

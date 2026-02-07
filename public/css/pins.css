@@ -18,14 +18,23 @@
     cursor: crosshair;
     margin-top: 1px; flex-shrink: 0;
     pointer-events: all;
+    position: relative;
     transition: transform 0.1s;
+}
+
+.pin::before {
+    content: '';
+    position: absolute;
+    inset: -8px;
+    border-radius: inherit;
+    background: transparent;
 }
 
 .pin:hover { transform: scale(1.3); background-color: var(--pin-hover); }
 .pin.connected { background-color: var(--pin-color); }
 .pin.snapped {
-    transform: scale(1.6);
-    box-shadow: 0 0 10px var(--pin-snap);
+    transform: scale(1.8);
+    box-shadow: 0 0 14px var(--pin-snap);
     background-color: var(--pin-color) !important;
     border-color: var(--pin-snap) !important;
 }
