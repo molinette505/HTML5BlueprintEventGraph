@@ -62,6 +62,7 @@ export class Interaction {
             }, 
             {
                 onSpawn: (tmpl, x, y, spawnContext = null) => {
+                     this.connectionManager.clearPendingSpawn(false);
                      const node = this.nodeManager.createNode(tmpl, x, y);
                      if (spawnContext) {
                         this.connectionManager.connectSpawnedNode(spawnContext, node);
@@ -79,7 +80,8 @@ export class Interaction {
                     pin.setType(newType);
                     this.graph.disconnectPin(node.id, index, dir);
                     this.renderer.refreshNode(node);
-                }
+                },
+                onHide: () => this.connectionManager.clearPendingSpawn()
             }
         );
 
@@ -156,13 +158,11 @@ export class Interaction {
                 if (target) {
                     this.connectionManager.commit(target);
                 } else {
-                    const spawnContext = this.connectionManager.buildSpawnContext();
-                    this.connectionManager.clearDrag();
+                    const spawnContext = this.connectionManager.beginPendingSpawn(e.clientX, e.clientY);
                     if (spawnContext) {
                         this.contextMenu.show(e.clientX, e.clientY, 'canvas', { graph: this.graph, spawnContext });
                     }
                 }
-                this.renderer.render(); // Redraw to finalize wire
             }
             else if (this.mode === 'BOX_SELECT') {
                 this.selectionManager.endBox();
@@ -171,7 +171,8 @@ export class Interaction {
             // Reset State
             this.mode = 'IDLE';
             this.renderer.dom.connectionsLayer.innerHTML = ''; // Clear temporary drag lines
-            this.renderer.render(); 
+            this.renderer.render();
+            this.connectionManager.renderPendingSpawnPreview();
         });
 
         // --- MISC EVENTS ---

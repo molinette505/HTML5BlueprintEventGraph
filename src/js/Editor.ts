@@ -9,6 +9,7 @@ import { Renderer } from "./view/Renderer";
 import { Interaction } from "./interaction/Interaction";
 import { Simulation } from "./Simulation";
 import { VariableManager } from "./VariableManager";
+import starterGraph from "../data/starter-graph.json";
 
 export class Editor {
     constructor() {
@@ -238,60 +239,72 @@ export class Editor {
         }
     }
 
-    /**
-     * HARDCODED DEMO
-     * Creates the initial "Event BeginPlay -> Loop" example graph.
-     */
     initDemo() {
-        if(!window.nodeTemplates) return;
-        
-        // 1. Find Templates
-        const tEvent = window.nodeTemplates.find(n => n.name === "Event BeginPlay");
-        const tMakeFloat = window.nodeTemplates.find(n => n.name === "Make Float");
-        const tAdd = window.nodeTemplates.find(n => n.name === "Add");
-        const tGeq = window.nodeTemplates.find(n => n.name === "Greater Equal (>=)");
-        const tBranch = window.nodeTemplates.find(n => n.name === "Branch");
-        const tPrint = window.nodeTemplates.find(n => n.name === "Print String");
+        this._loadStarterGraph(starterGraph);
+    }
 
-        if(!tEvent || !tMakeFloat || !tAdd || !tGeq || !tBranch) return;
+    _loadStarterGraph(serializedGraph) {
+        if (!window.nodeTemplates) return;
 
-        // 2. Create Nodes
-        const nEvent = this.graph.addNode(tEvent, 50, 50);
-        const nBranch = this.graph.addNode(tBranch, 300, 50);
-        
-        const nFloat = this.graph.addNode(tMakeFloat, 50, 200);
-        if(nFloat.inputs[0].widget) nFloat.inputs[0].widget.value = 5.0; 
+        const nodes = Array.isArray(serializedGraph) ? serializedGraph : (serializedGraph.nodes || []);
+        const connections = Array.isArray(serializedGraph) ? [] : (serializedGraph.connections || []);
+        if (!nodes.length) return;
 
-        const nAdd = this.graph.addNode(tAdd, 250, 200);
-        nAdd.inputs.forEach(p => p.setType('float')); // Change wildcard pins to float
-        nAdd.outputs.forEach(p => p.setType('float'));
-        if(nAdd.inputs[1].widget) nAdd.inputs[1].widget.value = 10.0; 
+        const idMap = new Map();
+        nodes.forEach(nodeData => {
+            const template = this._resolveTemplateForSerializedNode(nodeData);
+            if (!template) return;
 
-        const nGeq = this.graph.addNode(tGeq, 450, 200);
-        if(nGeq.inputs[1].widget) nGeq.inputs[1].widget.value = 12.0; 
+            const node = this.graph.addNode(template, nodeData.x || 0, nodeData.y || 0);
+            idMap.set(nodeData.id, node.id);
 
-        let nTrue, nFalse;
-        if(tPrint) {
-            nTrue = this.graph.addNode(tPrint, 550, 20);
-            if(nTrue.inputs[1].widget) nTrue.inputs[1].widget.value = "True: >= 12";
-            nFalse = this.graph.addNode(tPrint, 550, 150);
-            if(nFalse.inputs[1].widget) nFalse.inputs[1].widget.value = "False: < 12";
-        }
+            if (nodeData.varName) {
+                node.varName = nodeData.varName;
+            }
 
-        // 3. Render Nodes to DOM
-        [nEvent, nBranch, nFloat, nAdd, nGeq, nTrue, nFalse].forEach(n => {
-            if(n) this.renderer.createNodeElement(n, (e,id) => this.interaction.handleNodeDown(e,id));
+            this._restoreNodeState(node, nodeData);
+            this.renderer.createNodeElement(node, (e, id) => this.interaction.handleNodeDown(e, id));
         });
 
-        // 4. Create Connections
-        this.graph.addConnection(nEvent.id, 0, nBranch.id, 0, 'exec');
-        if(nTrue) this.graph.addConnection(nBranch.id, 0, nTrue.id, 0, 'exec'); 
-        if(nFalse) this.graph.addConnection(nBranch.id, 1, nFalse.id, 0, 'exec'); 
-        this.graph.addConnection(nFloat.id, 0, nAdd.id, 0, 'float');
-        this.graph.addConnection(nAdd.id, 0, nGeq.id, 0, 'float');
-        this.graph.addConnection(nGeq.id, 0, nBranch.id, 1, 'boolean');
+        connections.forEach(conn => {
+            const fromNode = idMap.get(conn.fromNode);
+            const toNode = idMap.get(conn.toNode);
+            if (!fromNode || !toNode) return;
+            this.graph.addConnection(fromNode, conn.fromPin, toNode, conn.toPin, conn.type);
+        });
 
-        // Force a final render to draw the wires
         setTimeout(() => this.renderer.render(), 50);
+    }
+
+    _resolveTemplateForSerializedNode(nodeData) {
+        if (nodeData.varName && this.variableManager) {
+            if (nodeData.functionId === 'Variable.Get') return this.variableManager.createGetTemplate(nodeData.varName);
+            if (nodeData.functionId === 'Variable.Set') return this.variableManager.createSetTemplate(nodeData.varName);
+        }
+        return (window.nodeTemplates || []).find(template => template.name === nodeData.name);
+    }
+
+    _restoreNodeState(node, nodeData) {
+        if (nodeData.pinTypes) {
+            ['inputs', 'outputs'].forEach(dir => {
+                const pins = nodeData.pinTypes[dir];
+                if (!pins) return;
+
+                pins.forEach((type, index) => {
+                    if (node[dir][index] && type) {
+                        node[dir][index].setType(type);
+                    }
+                });
+            });
+        }
+
+        if (nodeData.inputs) {
+            nodeData.inputs.forEach((savedPin, index) => {
+                const pin = node.inputs[index];
+                if (!pin || savedPin.value === undefined) return;
+                pin.value = savedPin.value;
+                if (pin.widget) pin.widget.value = savedPin.value;
+            });
+        }
     }
 }

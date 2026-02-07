@@ -1,4 +1,4 @@
-import { findBestInputForSpawn } from "./ContextSensitiveConfig";
+import { findBestInputForSpawn, findBestOutputForSpawn } from "./ContextSensitiveConfig";
 
 /**
  * ConnectionManager
@@ -14,17 +14,17 @@ export class ConnectionManager {
         
         /** @type {Object|null} - State of the wire currently being dragged by the user */
         this.dragWire = null;
+        this.pendingSpawnWire = null;
     }
 
     buildSpawnContext() {
-        if (!this.dragWire || this.dragWire.sourceType !== 'output') return null;
+        if (!this.dragWire) return null;
 
         const sourceNode = this.graph.nodes.find(node => node.id === this.dragWire.sourceNode);
-        const sourcePin = sourceNode && sourceNode.outputs
-            ? sourceNode.outputs[this.dragWire.sourcePin]
-            : null;
+        const sourcePins = this.dragWire.sourceType === 'output' ? sourceNode && sourceNode.outputs : sourceNode && sourceNode.inputs;
+        const sourcePin = sourcePins ? sourcePins[this.dragWire.sourcePin] : null;
 
-        return {
+        const context = {
             sourceNodeId: this.dragWire.sourceNode,
             sourcePinIndex: this.dragWire.sourcePin,
             sourceType: this.dragWire.sourceType,
@@ -32,45 +32,131 @@ export class ConnectionManager {
             sourceNodeName: sourceNode ? sourceNode.name : null,
             sourcePinName: sourcePin ? sourcePin.name : null
         };
+
+        if (this.dragWire.sourceType === 'input') {
+            context.targetNodeId = this.dragWire.sourceNode;
+            context.targetPinIndex = this.dragWire.sourcePin;
+        }
+
+        return context;
     }
 
     clearDrag() {
         this.dragWire = null;
     }
 
-    connectSpawnedNode(spawnContext, targetNode) {
-        if (!spawnContext || !targetNode || spawnContext.sourceType !== 'output') return;
+    beginPendingSpawn(clientX, clientY) {
+        const spawnContext = this.buildSpawnContext();
+        if (!spawnContext || !this.dragWire) return null;
 
-        const preferredInputIndex = Number.isInteger(spawnContext.preferredInputIndex)
-            ? spawnContext.preferredInputIndex
-            : null;
+        const rect = this.dom.container.getBoundingClientRect();
+        const endX = (clientX - rect.left - this.graph.pan.x) / this.graph.scale;
+        const endY = (clientY - rect.top - this.graph.pan.y) / this.graph.scale;
 
-        let inputIndex = -1;
-        if (
-            preferredInputIndex !== null &&
-            this._isInputCompatible(targetNode.inputs[preferredInputIndex], spawnContext.dataType)
-        ) {
-            inputIndex = preferredInputIndex;
+        this.pendingSpawnWire = {
+            sourceType: this.dragWire.sourceType,
+            dataType: this.dragWire.dataType,
+            startX: this.dragWire.startX,
+            startY: this.dragWire.startY,
+            endX,
+            endY
+        };
+
+        this.dragWire = null;
+        return spawnContext;
+    }
+
+    renderPendingSpawnPreview() {
+        if (!this.pendingSpawnWire) return;
+
+        const p1 = { x: this.pendingSpawnWire.startX, y: this.pendingSpawnWire.startY };
+        const p2 = { x: this.pendingSpawnWire.endX, y: this.pendingSpawnWire.endY };
+
+        if (this.pendingSpawnWire.sourceType === 'output') {
+            this.renderer.drawCurve(p1, p2, this.pendingSpawnWire.dataType, true);
         } else {
-            const best = findBestInputForSpawn({ inputs: targetNode.inputs }, spawnContext);
-            inputIndex = best ? best.index : -1;
+            this.renderer.drawCurve(p2, p1, this.pendingSpawnWire.dataType, true);
+        }
+    }
+
+    clearPendingSpawn(render = true) {
+        const hadPendingSpawn = !!this.pendingSpawnWire;
+        this.pendingSpawnWire = null;
+        if (render && hadPendingSpawn) {
+            this.renderer.render();
+        }
+    }
+
+    connectSpawnedNode(spawnContext, targetNode) {
+        if (!spawnContext || !targetNode) return;
+
+        if (spawnContext.sourceType === 'output') {
+            const preferredInputIndex = Number.isInteger(spawnContext.preferredInputIndex)
+                ? spawnContext.preferredInputIndex
+                : null;
+
+            let inputIndex = -1;
+            if (
+                preferredInputIndex !== null &&
+                this._isInputCompatible(targetNode.inputs[preferredInputIndex], spawnContext.dataType)
+            ) {
+                inputIndex = preferredInputIndex;
+            } else {
+                const best = findBestInputForSpawn({ inputs: targetNode.inputs }, spawnContext);
+                inputIndex = best ? best.index : -1;
+            }
+
+            if (inputIndex < 0) return;
+
+            const inputPin = targetNode.inputs[inputIndex];
+            if (inputPin && inputPin.type === 'wildcard' && spawnContext.dataType !== 'wildcard' && spawnContext.dataType !== 'exec') {
+                this._applyWildcardTypes(targetNode, spawnContext.dataType);
+                this.renderer.refreshNode(targetNode);
+            }
+
+            this.graph.addConnection(
+                spawnContext.sourceNodeId,
+                spawnContext.sourcePinIndex,
+                targetNode.id,
+                inputIndex,
+                spawnContext.dataType
+            );
+        } else if (spawnContext.sourceType === 'input') {
+            const preferredOutputIndex = Number.isInteger(spawnContext.preferredOutputIndex)
+                ? spawnContext.preferredOutputIndex
+                : null;
+
+            let outputIndex = -1;
+            if (
+                preferredOutputIndex !== null &&
+                this._isOutputCompatible(targetNode.outputs[preferredOutputIndex], spawnContext.dataType)
+            ) {
+                outputIndex = preferredOutputIndex;
+            } else {
+                const best = findBestOutputForSpawn({ outputs: targetNode.outputs }, spawnContext);
+                outputIndex = best ? best.index : -1;
+            }
+
+            if (outputIndex < 0) return;
+
+            const outputPin = targetNode.outputs[outputIndex];
+            if (outputPin && outputPin.type === 'wildcard' && spawnContext.dataType !== 'wildcard' && spawnContext.dataType !== 'exec') {
+                this._applyWildcardTypes(targetNode, spawnContext.dataType);
+                this.renderer.refreshNode(targetNode);
+            }
+
+            this.graph.addConnection(
+                targetNode.id,
+                outputIndex,
+                spawnContext.targetNodeId,
+                spawnContext.targetPinIndex,
+                spawnContext.dataType
+            );
+        } else {
+            return;
         }
 
-        if (inputIndex < 0) return;
-
-        const inputPin = targetNode.inputs[inputIndex];
-        if (inputPin && inputPin.type === 'wildcard' && spawnContext.dataType !== 'wildcard' && spawnContext.dataType !== 'exec') {
-            this._applyWildcardTypes(targetNode, spawnContext.dataType);
-            this.renderer.refreshNode(targetNode);
-        }
-
-        this.graph.addConnection(
-            spawnContext.sourceNodeId,
-            spawnContext.sourcePinIndex,
-            targetNode.id,
-            inputIndex,
-            spawnContext.dataType
-        );
+        this.pendingSpawnWire = null;
         this.renderer.render();
     }
 
@@ -266,5 +352,17 @@ export class ConnectionManager {
             return !Array.isArray(inputPin.allowedTypes) || inputPin.allowedTypes.includes(sourceType);
         }
         return Array.isArray(inputPin.allowedTypes) && inputPin.allowedTypes.includes(sourceType);
+    }
+
+    _isOutputCompatible(outputPin, targetType) {
+        if (!outputPin) return false;
+        if (targetType === 'exec') return outputPin.type === 'exec';
+        if (outputPin.type === 'exec') return false;
+        if (targetType === 'wildcard') return true;
+        if (outputPin.type === targetType) return true;
+        if (outputPin.type === 'wildcard') {
+            return !Array.isArray(outputPin.allowedTypes) || outputPin.allowedTypes.includes(targetType);
+        }
+        return Array.isArray(outputPin.allowedTypes) && outputPin.allowedTypes.includes(targetType);
     }
 }

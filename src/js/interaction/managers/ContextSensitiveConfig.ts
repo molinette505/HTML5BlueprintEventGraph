@@ -184,6 +184,64 @@ export const findBestInputForSpawn = (template, spawnContext) => {
     return best;
 };
 
+const evaluateDataOutputCompatibility = (outputPin, targetType) => {
+    if (!outputPin || outputPin.type === "exec") return null;
+
+    const allowedTypes = getAllowedTypes(outputPin);
+    const outputType = outputPin.type;
+
+    if (targetType === "wildcard") {
+        if (outputType === "wildcard") return { score: 150, kind: "wildcard-wildcard" };
+        return { score: 80, kind: "wildcard-generic" };
+    }
+
+    if (outputType === targetType) {
+        return { score: 220, kind: "exact" };
+    }
+
+    if (outputType === "wildcard" && (!allowedTypes || allowedTypes.includes(targetType))) {
+        return { score: 180, kind: "wildcard" };
+    }
+
+    if (allowedTypes && allowedTypes.includes(targetType)) {
+        return { score: 140, kind: "allowed" };
+    }
+
+    return null;
+};
+
+export const findBestOutputForSpawn = (template, spawnContext) => {
+    if (!template || !spawnContext || spawnContext.sourceType !== "input") return null;
+
+    const outputs = Array.isArray(template.outputs) ? template.outputs : [];
+    if (spawnContext.dataType === "exec") {
+        for (let index = 0; index < outputs.length; index += 1) {
+            if (outputs[index].type === "exec") {
+                return { index, score: 300 - index, kind: "exec" };
+            }
+        }
+        return null;
+    }
+
+    let best = null;
+    for (let index = 0; index < outputs.length; index += 1) {
+        const compatibility = evaluateDataOutputCompatibility(outputs[index], spawnContext.dataType);
+        if (!compatibility) continue;
+
+        const candidate = {
+            index,
+            score: compatibility.score - index,
+            kind: compatibility.kind
+        };
+
+        if (!best || candidate.score > best.score) {
+            best = candidate;
+        }
+    }
+
+    return best;
+};
+
 export const scoreTemplateForSpawn = (template, spawnContext, compatibility = null) => {
     if (!spawnContext) return 0;
 
@@ -200,4 +258,3 @@ export const scoreTemplateForSpawn = (template, spawnContext, compatibility = nu
 
     return score;
 };
-

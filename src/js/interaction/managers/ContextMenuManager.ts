@@ -1,4 +1,4 @@
-import { contextSensitiveNodeConfig, findBestInputForSpawn, scoreTemplateForSpawn } from "./ContextSensitiveConfig";
+import { contextSensitiveNodeConfig, findBestInputForSpawn, findBestOutputForSpawn, scoreTemplateForSpawn } from "./ContextSensitiveConfig";
 
 /**
  * ContextMenuManager
@@ -133,6 +133,9 @@ export class ContextMenuManager {
             this.dom.menu.classList.remove('visible');
         }
         this.activeCanvasContext = null;
+        if (this.callbacks.onHide) {
+            this.callbacks.onHide();
+        }
     }
 
     /**
@@ -228,7 +231,6 @@ export class ContextMenuManager {
         if (!list) return;
         
         const isSearching = !!options.isSearching;
-        const forceFlat = !!options.forceFlat;
         const contextualSpawn = !!options.contextualSpawn;
 
         list.innerHTML = '';
@@ -243,7 +245,7 @@ export class ContextMenuManager {
             return;
         }
 
-        if (!isSearching && !forceFlat) {
+        if (!isSearching) {
             // Group items by their 'category' property
             const grouped = {};
             items.forEach(item => {
@@ -253,8 +255,15 @@ export class ContextMenuManager {
                 grouped[cat].push(item);
             });
 
-            // Sort categories alphabetically
-            Object.keys(grouped).sort().forEach(cat => {
+            const categorySort = Object.keys(grouped).sort((a, b) => {
+                if (!contextualSpawn) return a.localeCompare(b);
+                const scoreA = Math.max(...grouped[a].map(entry => entry.score || 0));
+                const scoreB = Math.max(...grouped[b].map(entry => entry.score || 0));
+                if (scoreA !== scoreB) return scoreB - scoreA;
+                return a.localeCompare(b);
+            });
+
+            categorySort.forEach(cat => {
                 // Create Category Header (Folder)
                 const header = document.createElement('li');
                 header.className = `ctx-category ${this.collapsedCategories.has(cat) ? 'collapsed' : ''}`;
@@ -272,7 +281,10 @@ export class ContextMenuManager {
                 // If not collapsed, render the items inside this category
                 if (!this.collapsedCategories.has(cat)) {
                     grouped[cat]
-                        .sort((a, b) => a.template.name.localeCompare(b.template.name))
+                        .sort((a, b) => {
+                            if (contextualSpawn && a.score !== b.score) return b.score - a.score;
+                            return a.template.name.localeCompare(b.template.name);
+                        })
                         .forEach(entry => this._createMenuItem(entry, true));
                 }
             });
@@ -310,7 +322,11 @@ export class ContextMenuManager {
                 ? { ...this.activeCanvasContext.spawnContext }
                 : null;
             if (spawnContext && entry.compatibility) {
-                spawnContext.preferredInputIndex = entry.compatibility.index;
+                if (spawnContext.sourceType === 'output') {
+                    spawnContext.preferredInputIndex = entry.compatibility.index;
+                } else {
+                    spawnContext.preferredOutputIndex = entry.compatibility.index;
+                }
             }
             this.callbacks.onSpawn(tmpl, this.activePos.x, this.activePos.y, spawnContext);
             this.hide();
@@ -340,7 +356,12 @@ export class ContextMenuManager {
         allTemplates.forEach(template => {
             if (lower && !template.name.toLowerCase().includes(lower)) return;
 
-            const compatibility = spawnContext ? findBestInputForSpawn(template, spawnContext) : null;
+            let compatibility = null;
+            if (spawnContext) {
+                compatibility = spawnContext.sourceType === 'output'
+                    ? findBestInputForSpawn(template, spawnContext)
+                    : findBestOutputForSpawn(template, spawnContext);
+            }
             if (contextualSpawn && !compatibility) return;
 
             entries.push({
@@ -353,7 +374,6 @@ export class ContextMenuManager {
         const shouldShowPaste = !spawnContext && !query;
         const options = {
             isSearching: !!query,
-            forceFlat: contextualSpawn,
             contextualSpawn
         };
 
