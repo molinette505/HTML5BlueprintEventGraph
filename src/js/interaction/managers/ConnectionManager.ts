@@ -167,7 +167,16 @@ export class ConnectionManager {
      * @param {MouseEvent} e 
      */
     startDrag(e) {
-        const pin = e.target;
+        this.startDragFromElement(e.target);
+    }
+
+    /**
+     * Initiates a wire drag using a pin DOM element.
+     * Useful for touch interactions where we don't always have a MouseEvent.
+     * @param {HTMLElement} pin
+     */
+    startDragFromElement(pin) {
+        if (!pin || !pin.dataset) return;
         const nodeId = parseInt(pin.dataset.node);
         const index = parseInt(pin.dataset.index);
         const type = pin.dataset.type; // 'input' or 'output'

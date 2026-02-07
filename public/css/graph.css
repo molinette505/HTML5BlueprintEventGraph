@@ -26,6 +26,8 @@ body, html {
     cursor: default;
     position: relative;
     overflow: hidden;
+    touch-action: none;
+    -webkit-touch-callout: none;
 }
 #graph-container:active { cursor: grabbing; }
 

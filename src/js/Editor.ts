@@ -26,6 +26,7 @@ export class Editor {
             contextSensitiveToggle: document.getElementById('context-sensitive-toggle'),
             variablePanel: document.getElementById('variable-panel'),
             btnToggleVars: document.getElementById('btn-toggle-vars'),
+            variableDrawerHandle: document.getElementById('variable-drawer-handle'),
             
             // Simulation Toolbar Buttons
             btnPlay: document.getElementById('btn-play'),
@@ -65,17 +66,29 @@ export class Editor {
      * Wires up the buttons in the top toolbar (Variables, Play, Pause, etc.)
      */
     setupToolbar() {
-        // Toggle the Variable Side Panel
+        const setVariablePanelVisible = (isVisible) => {
+            if (!this.dom.variablePanel) return;
+            this.dom.variablePanel.classList.toggle('visible', isVisible);
+
+            if (this.dom.btnToggleVars) {
+                this.dom.btnToggleVars.style.background = isVisible ? '#36a55d' : '';
+            }
+            if (this.dom.variableDrawerHandle) {
+                this.dom.variableDrawerHandle.classList.toggle('open', isVisible);
+            }
+        };
+
+        const toggleVariablePanel = () => {
+            if (!this.dom.variablePanel) return;
+            setVariablePanelVisible(!this.dom.variablePanel.classList.contains('visible'));
+        };
+
         if (this.dom.btnToggleVars) {
-            this.dom.btnToggleVars.onclick = () => {
-                this.dom.variablePanel.classList.toggle('visible');
-                // Change button color to indicate active state
-                if(this.dom.variablePanel.classList.contains('visible')) {
-                    this.dom.btnToggleVars.style.background = '#36a55d';
-                } else {
-                    this.dom.btnToggleVars.style.background = '';
-                }
-            };
+            this.dom.btnToggleVars.onclick = () => toggleVariablePanel();
+        }
+
+        if (this.dom.variableDrawerHandle) {
+            this.dom.variableDrawerHandle.onclick = () => toggleVariablePanel();
         }
 
         // Play Button Logic
