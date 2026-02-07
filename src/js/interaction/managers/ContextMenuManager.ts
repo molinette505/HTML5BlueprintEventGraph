@@ -23,6 +23,7 @@ export class ContextMenuManager {
         
         // Keeps track of which categories (e.g., "Math", "Logic") are closed in the menu
         this.collapsedCategories = new Set();
+        this.menuAnchor = { x: 0, y: 0 };
 
         this.activeCanvasContext = null;
         this.contextSettingKey = "blueprint.contextSensitive.enabled";
@@ -62,15 +63,8 @@ export class ContextMenuManager {
             return;
         }
 
-        // --- 1. Position Logic (Boundary Check) ---
-        // Ensure the menu doesn't flow off the right or bottom edge of the screen
-        let drawX = x; 
-        let drawY = y;
-        if (x + 200 > window.innerWidth) drawX -= 200;  // Shift left if too far right
-        if (y + 300 > window.innerHeight) drawY -= 300; // Shift up if too far down
-        
-        menu.style.left = `${drawX}px`;
-        menu.style.top = `${drawY}px`;
+        this.menuAnchor = { x, y };
+        menu.style.maxHeight = `${Math.min(400, Math.max(160, window.innerHeight - 16))}px`;
         menu.classList.add('visible'); // CSS class to fade/pop it in
 
         // --- 2. Reset Content ---
@@ -123,6 +117,8 @@ export class ContextMenuManager {
 
             this._renderCanvasNodeList('');
         }
+
+        this._positionMenuWithinViewport();
     }
 
     /**
@@ -287,22 +283,30 @@ export class ContextMenuManager {
                 if (!this.collapsedCategories.has(cat)) {
                     grouped[cat]
                         .sort((a, b) => {
+                            const explicitOrderA = this._getEntryExplicitOrder(a, cat);
+                            const explicitOrderB = this._getEntryExplicitOrder(b, cat);
+                            if (explicitOrderA !== explicitOrderB) return explicitOrderA - explicitOrderB;
                             if (contextualSpawn && a.score !== b.score) return b.score - a.score;
                             return a.template.name.localeCompare(b.template.name);
                         })
                         .forEach(entry => this._createMenuItem(entry, true));
                 }
             });
+            this._positionMenuWithinViewport();
             return;
         }
 
         const sorted = items
             .slice()
             .sort((a, b) => {
+                const explicitOrderA = this._getEntryExplicitOrder(a, null);
+                const explicitOrderB = this._getEntryExplicitOrder(b, null);
+                if (explicitOrderA !== explicitOrderB) return explicitOrderA - explicitOrderB;
                 if (contextualSpawn && a.score !== b.score) return b.score - a.score;
                 return a.template.name.localeCompare(b.template.name);
             });
         sorted.forEach(entry => this._createMenuItem(entry, false));
+        this._positionMenuWithinViewport();
     }
 
     /**
@@ -396,6 +400,7 @@ export class ContextMenuManager {
             };
             list.insertBefore(liPaste, list.firstChild);
         }
+        this._positionMenuWithinViewport();
     }
 
     _collectContextTemplates() {
@@ -408,16 +413,18 @@ export class ContextMenuManager {
         if (!variableManager || !Array.isArray(variableManager.variables)) return [];
 
         const templates = [];
-        variableManager.variables.forEach(variable => {
+        variableManager.variables.forEach((variable, index) => {
             const getTemplate = variableManager.createGetTemplate(variable.name);
             if (getTemplate) {
                 if (!getTemplate.category) getTemplate.category = "My Blueprint";
+                getTemplate.__ctxOrder = (index * 2);
                 templates.push(getTemplate);
             }
 
             const setTemplate = variableManager.createSetTemplate(variable.name);
             if (setTemplate) {
                 if (!setTemplate.category) setTemplate.category = "My Blueprint";
+                setTemplate.__ctxOrder = (index * 2) + 1;
                 templates.push(setTemplate);
             }
         });
@@ -427,6 +434,55 @@ export class ContextMenuManager {
     _getCategoryRoot(categoryName) {
         if (!categoryName) return "General";
         return String(categoryName).split("|")[0].trim();
+    }
+
+    _getEntryExplicitOrder(entry, categoryName) {
+        const template = entry && entry.template ? entry.template : null;
+        if (!template) return Number.MAX_SAFE_INTEGER;
+
+        if (typeof template.__ctxOrder === "number") {
+            return template.__ctxOrder;
+        }
+
+        const rootCategory = this._getCategoryRoot(categoryName || template.category || "General");
+        if (rootCategory !== "Logic") return Number.MAX_SAFE_INTEGER;
+
+        const logicOrder = {
+            "Logic.And": 100,
+            "Logic.Or": 101,
+            "Logic.Not": 102,
+            "Logic.Equal": 200,
+            "Logic.NotEqual": 201,
+            "Logic.StrictEqual": 202,
+            "Logic.StrictNotEqual": 203,
+            "Logic.Greater": 300,
+            "Logic.GreaterEqual": 301,
+            "Logic.Less": 302,
+            "Logic.LessEqual": 303
+        };
+
+        const functionId = template.functionId || "";
+        if (Object.prototype.hasOwnProperty.call(logicOrder, functionId)) {
+            return logicOrder[functionId];
+        }
+        return Number.MAX_SAFE_INTEGER;
+    }
+
+    _positionMenuWithinViewport() {
+        const menu = this.dom.menu;
+        if (!menu || !menu.classList.contains('visible')) return;
+
+        const margin = 8;
+        const width = menu.offsetWidth || 240;
+        const height = menu.offsetHeight || 300;
+
+        const maxX = Math.max(margin, window.innerWidth - width - margin);
+        const maxY = Math.max(margin, window.innerHeight - height - margin);
+        const clampedX = Math.max(margin, Math.min(this.menuAnchor.x, maxX));
+        const clampedY = Math.max(margin, Math.min(this.menuAnchor.y, maxY));
+
+        menu.style.left = `${clampedX}px`;
+        menu.style.top = `${clampedY}px`;
     }
 
     _loadContextSensitiveSetting() {
