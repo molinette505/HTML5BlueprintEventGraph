@@ -24,6 +24,7 @@ export class Simulation {
 
         this.execPolicies = {
             "For Loop": (node, ctx, item, continuations, currentRunId) => this.runForLoop(node, ctx, continuations, !!item.isLoopContinuation),
+            "While Loop": (node, ctx, item, continuations, currentRunId) => this.runWhileLoop(node, ctx, continuations),
             "WhileLoop": (node, ctx, item, continuations, currentRunId) => this.runWhileLoop(node, ctx, continuations),
             "Do Once": (node, ctx, item, continuations, currentRunId) => this.runDoOnce(node, item.conn ? item.conn.toPin : null, continuations),
             "Delay": (node, ctx, item, continuations, currentRunId) => this.runDelay(node, ctx, continuations, currentRunId),

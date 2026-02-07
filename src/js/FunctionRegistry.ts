@@ -88,6 +88,9 @@ export const FunctionRegistry = {
         "Logic.NotEqual": (inputs, result) => `(${formatValueForDisplay(inputs[0])} != ${formatValueForDisplay(inputs[1])}) = ${formatBoolean(result)}`,
         "Logic.StrictEqual": (inputs, result) => `(${formatValueForDisplay(inputs[0])} === ${formatValueForDisplay(inputs[1])}) = ${formatBoolean(result)}`,
         "Logic.StrictNotEqual": (inputs, result) => `(${formatValueForDisplay(inputs[0])} !== ${formatValueForDisplay(inputs[1])}) = ${formatBoolean(result)}`,
+        "Logic.And": (inputs, result) => `(${formatBoolean(!!inputs[0])} AND ${formatBoolean(!!inputs[1])}) = ${formatBoolean(result)}`,
+        "Logic.Or": (inputs, result) => `(${formatBoolean(!!inputs[0])} OR ${formatBoolean(!!inputs[1])}) = ${formatBoolean(result)}`,
+        "Logic.Not": (inputs, result) => `(NOT ${formatBoolean(!!inputs[0])}) = ${formatBoolean(result)}`,
         
         // Vector Operations
         "Vector.Make": (inputs, result) => `Vec(${inputs[0]}, ${inputs[1]}, ${inputs[2]})`,
@@ -175,6 +178,9 @@ export const FunctionRegistry = {
         const b = coerceNumber(rightOperand);
         return a <= b;
     },
+    "Logic.And": (leftOperand, rightOperand) => !!leftOperand && !!rightOperand,
+    "Logic.Or": (leftOperand, rightOperand) => !!leftOperand || !!rightOperand,
+    "Logic.Not": (value) => !value,
 
     // Vector Logic
     "Vector.Make": (xInput, yInput, zInput) => ({ 

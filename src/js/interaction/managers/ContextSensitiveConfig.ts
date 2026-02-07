@@ -31,7 +31,10 @@ export const contextSensitiveNodeConfig = {
                 ["Multiply", 38],
                 ["Divide", 38],
                 ["Equal (==)", 34],
-                ["Not Equal (!=)", 34]
+                ["Not Equal (!=)", 34],
+                ["AND", 30],
+                ["OR", 30],
+                ["NOT", 28]
             ])
         },
         execOutput: {
@@ -51,7 +54,7 @@ export const contextSensitiveNodeConfig = {
                 nodePriority: buildNodePriority([
                     ["Branch", 240],
                     ["For Loop", 220],
-                    ["WhileLoop", 210],
+                    ["While Loop", 210],
                     ["Do Once", 200],
                     ["Delay", 190]
                 ])

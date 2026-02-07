@@ -11,6 +11,7 @@ export class VariableManager {
         this.editor = editor;
         this.variables = []; // { name, type, defaultValue }
         this.runtimeValues = {};
+        this.lastAddedType = 'boolean';
 
         // Helper to render widgets in the sidebar
         this.widgetRenderer = new WidgetRenderer();
@@ -37,13 +38,18 @@ export class VariableManager {
             name = `NewVar_${count}`;
         }
 
+        const selectedType = this.variables.length === 0
+            ? 'boolean'
+            : (this.lastAddedType || 'boolean');
+
         const newVar = {
             name: name,
-            type: 'boolean',
-            defaultValue: false
+            type: selectedType,
+            defaultValue: this.getTypeDefault(selectedType)
         };
 
         this.variables.push(newVar);
+        this.lastAddedType = selectedType;
         this.renderList();
     }
 
@@ -75,13 +81,22 @@ export class VariableManager {
         if(!v) return;
 
         v[key] = value;
+        let shouldRenderList = false;
         
         if (key === 'type') {
             v.defaultValue = this.getTypeDefault(value);
+            this.lastAddedType = value;
             this.updateGraphNodes(v.name, value);
+            shouldRenderList = true;
         }
 
-        this.renderList();
+        if (key === 'name') {
+            shouldRenderList = true;
+        }
+
+        if (shouldRenderList) {
+            this.renderList();
+        }
     }
 
     updateGraphNodes(varName, newType) {
@@ -284,7 +299,8 @@ export class VariableManager {
         if(!v) return null;
 
         return {
-            name: "", 
+            name: `Get ${v.name}`,
+            category: "My Blueprint",
             color: this.getTypeColor(v.type), 
             functionId: "Variable.Get",
             varName: varName, // Ensure this is in template so copy/paste works immediately on creation
@@ -302,7 +318,8 @@ export class VariableManager {
         const widgetConfig = this.getWidgetConfig(v.type, v.defaultValue);
 
         return {
-            name: "Set",
+            name: `Set ${v.name}`,
+            category: "My Blueprint",
             color: this.getTypeColor(v.type), 
             functionId: "Variable.Set",
             varName: varName, // Ensure this is in template

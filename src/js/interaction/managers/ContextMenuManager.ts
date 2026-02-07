@@ -256,6 +256,11 @@ export class ContextMenuManager {
             });
 
             const categorySort = Object.keys(grouped).sort((a, b) => {
+                const rootA = this._getCategoryRoot(a);
+                const rootB = this._getCategoryRoot(b);
+                if (rootA === "My Blueprint" && rootB !== "My Blueprint") return 1;
+                if (rootB === "My Blueprint" && rootA !== "My Blueprint") return -1;
+
                 if (!contextualSpawn) return a.localeCompare(b);
                 const scoreA = Math.max(...grouped[a].map(entry => entry.score || 0));
                 const scoreB = Math.max(...grouped[b].map(entry => entry.score || 0));
@@ -350,7 +355,7 @@ export class ContextMenuManager {
         const lower = query.toLowerCase();
         const spawnContext = this.activeCanvasContext.spawnContext;
         const contextualSpawn = !!spawnContext && this.contextSensitiveEnabled;
-        const allTemplates = window.nodeTemplates || [];
+        const allTemplates = this._collectContextTemplates();
         const entries = [];
 
         allTemplates.forEach(template => {
@@ -391,6 +396,37 @@ export class ContextMenuManager {
             };
             list.insertBefore(liPaste, list.firstChild);
         }
+    }
+
+    _collectContextTemplates() {
+        const templates = Array.isArray(window.nodeTemplates) ? [...window.nodeTemplates] : [];
+        return templates.concat(this._buildVariableContextTemplates());
+    }
+
+    _buildVariableContextTemplates() {
+        const variableManager = window.App && window.App.variableManager;
+        if (!variableManager || !Array.isArray(variableManager.variables)) return [];
+
+        const templates = [];
+        variableManager.variables.forEach(variable => {
+            const getTemplate = variableManager.createGetTemplate(variable.name);
+            if (getTemplate) {
+                if (!getTemplate.category) getTemplate.category = "My Blueprint";
+                templates.push(getTemplate);
+            }
+
+            const setTemplate = variableManager.createSetTemplate(variable.name);
+            if (setTemplate) {
+                if (!setTemplate.category) setTemplate.category = "My Blueprint";
+                templates.push(setTemplate);
+            }
+        });
+        return templates;
+    }
+
+    _getCategoryRoot(categoryName) {
+        if (!categoryName) return "General";
+        return String(categoryName).split("|")[0].trim();
     }
 
     _loadContextSensitiveSetting() {

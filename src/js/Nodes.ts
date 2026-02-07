@@ -65,7 +65,7 @@ export const globalNodes = [
         ]
     },
     {
-        "name": "WhileLoop",
+        "name": "While Loop",
         "category": "Flow Control",
         "color": "var(--header-default)",
         "functionId": "Flow.WhileLoop",
@@ -272,6 +272,44 @@ export const globalNodes = [
         "inputs": [
             { "name": "A", "type": "wildcard", "allowedTypes": ["float", "int", "string"] },
             { "name": "B", "type": "wildcard", "allowedTypes": ["float", "int", "string"] }
+        ],
+        "outputs": [{ "name": "Result", "type": "boolean" }]
+    },
+    {
+        "name": "AND",
+        "category": "Logic",
+        "color": "var(--n-pure)",
+        "hideHeader": true,
+        "functionId": "Logic.And",
+        "centerLabel": "AND",
+        "inputs": [
+            { "name": "A", "type": "boolean", "default": false },
+            { "name": "B", "type": "boolean", "default": false }
+        ],
+        "outputs": [{ "name": "Result", "type": "boolean" }]
+    },
+    {
+        "name": "OR",
+        "category": "Logic",
+        "color": "var(--n-pure)",
+        "hideHeader": true,
+        "functionId": "Logic.Or",
+        "centerLabel": "OR",
+        "inputs": [
+            { "name": "A", "type": "boolean", "default": false },
+            { "name": "B", "type": "boolean", "default": false }
+        ],
+        "outputs": [{ "name": "Result", "type": "boolean" }]
+    },
+    {
+        "name": "NOT",
+        "category": "Logic",
+        "color": "var(--n-pure)",
+        "hideHeader": true,
+        "functionId": "Logic.Not",
+        "centerLabel": "NOT",
+        "inputs": [
+            { "name": "A", "type": "boolean", "default": false }
         ],
         "outputs": [{ "name": "Result", "type": "boolean" }]
     },
