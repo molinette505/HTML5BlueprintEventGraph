@@ -535,6 +535,7 @@ export class Simulation {
     runDoOnce(node, incomingPinIndex, continuations) {
         if (incomingPinIndex !== null && node.inputs[incomingPinIndex] && node.inputs[incomingPinIndex].name === "Reset") {
             node.doOnceFired = false;
+            this.enqueueContinuation(continuations);
             return;
         }
 
