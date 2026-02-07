@@ -1,3 +1,5 @@
+import { findBestInputForSpawn } from "./ContextSensitiveConfig";
+
 /**
  * ConnectionManager
  * Manages the lifecycle of "Wires" (connections).
@@ -12,6 +14,64 @@ export class ConnectionManager {
         
         /** @type {Object|null} - State of the wire currently being dragged by the user */
         this.dragWire = null;
+    }
+
+    buildSpawnContext() {
+        if (!this.dragWire || this.dragWire.sourceType !== 'output') return null;
+
+        const sourceNode = this.graph.nodes.find(node => node.id === this.dragWire.sourceNode);
+        const sourcePin = sourceNode && sourceNode.outputs
+            ? sourceNode.outputs[this.dragWire.sourcePin]
+            : null;
+
+        return {
+            sourceNodeId: this.dragWire.sourceNode,
+            sourcePinIndex: this.dragWire.sourcePin,
+            sourceType: this.dragWire.sourceType,
+            dataType: this.dragWire.dataType,
+            sourceNodeName: sourceNode ? sourceNode.name : null,
+            sourcePinName: sourcePin ? sourcePin.name : null
+        };
+    }
+
+    clearDrag() {
+        this.dragWire = null;
+    }
+
+    connectSpawnedNode(spawnContext, targetNode) {
+        if (!spawnContext || !targetNode || spawnContext.sourceType !== 'output') return;
+
+        const preferredInputIndex = Number.isInteger(spawnContext.preferredInputIndex)
+            ? spawnContext.preferredInputIndex
+            : null;
+
+        let inputIndex = -1;
+        if (
+            preferredInputIndex !== null &&
+            this._isInputCompatible(targetNode.inputs[preferredInputIndex], spawnContext.dataType)
+        ) {
+            inputIndex = preferredInputIndex;
+        } else {
+            const best = findBestInputForSpawn({ inputs: targetNode.inputs }, spawnContext);
+            inputIndex = best ? best.index : -1;
+        }
+
+        if (inputIndex < 0) return;
+
+        const inputPin = targetNode.inputs[inputIndex];
+        if (inputPin && inputPin.type === 'wildcard' && spawnContext.dataType !== 'wildcard' && spawnContext.dataType !== 'exec') {
+            this._applyWildcardTypes(targetNode, spawnContext.dataType);
+            this.renderer.refreshNode(targetNode);
+        }
+
+        this.graph.addConnection(
+            spawnContext.sourceNodeId,
+            spawnContext.sourcePinIndex,
+            targetNode.id,
+            inputIndex,
+            spawnContext.dataType
+        );
+        this.renderer.render();
     }
 
     /**
@@ -116,15 +176,10 @@ export class ConnectionManager {
         // --- WILDCARD PROPAGATION ---
         // If one of the nodes is a generic "Wildcard" node (like a 'Print' node),
         // it adopts the data type of the node it is being connected to.
-        const applyWildcardTypes = (node, newType) => {
-            node.inputs.forEach(p => { if (p.type === 'wildcard') p.setType(newType); });
-            node.outputs.forEach(p => { if (p.type === 'wildcard') p.setType(newType); });
-        };
-
         if (s.dataType !== 'wildcard' && t.dataType === 'wildcard') {
             const targetNode = this.graph.nodes.find(n => n.id === t.nodeId);
             if (targetNode) {
-                applyWildcardTypes(targetNode, s.dataType);
+                this._applyWildcardTypes(targetNode, s.dataType);
                 t.dataType = s.dataType; 
                 this.renderer.refreshNode(targetNode);
             }
@@ -132,7 +187,7 @@ export class ConnectionManager {
         else if (s.dataType === 'wildcard' && t.dataType !== 'wildcard') {
             const sourceNode = this.graph.nodes.find(n => n.id === s.sourceNode);
             if (sourceNode) {
-                applyWildcardTypes(sourceNode, t.dataType);
+                this._applyWildcardTypes(sourceNode, t.dataType);
                 s.dataType = t.dataType; 
                 this.renderer.refreshNode(sourceNode);
             }
@@ -194,5 +249,22 @@ export class ConnectionManager {
             pinElement.dataset.type
         );
         this.renderer.render();
+    }
+
+    _applyWildcardTypes(node, newType) {
+        node.inputs.forEach(pin => { if (pin.type === 'wildcard') pin.setType(newType); });
+        node.outputs.forEach(pin => { if (pin.type === 'wildcard') pin.setType(newType); });
+    }
+
+    _isInputCompatible(inputPin, sourceType) {
+        if (!inputPin) return false;
+        if (sourceType === 'exec') return inputPin.type === 'exec';
+        if (inputPin.type === 'exec') return false;
+        if (sourceType === 'wildcard') return true;
+        if (inputPin.type === sourceType) return true;
+        if (inputPin.type === 'wildcard') {
+            return !Array.isArray(inputPin.allowedTypes) || inputPin.allowedTypes.includes(sourceType);
+        }
+        return Array.isArray(inputPin.allowedTypes) && inputPin.allowedTypes.includes(sourceType);
     }
 }

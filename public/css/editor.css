@@ -139,6 +139,28 @@
 }
 #context-menu.visible { display: flex; }
 
+#context-controls {
+    display: none;
+    align-items: center;
+    justify-content: flex-end;
+    padding: 8px 10px 6px;
+    background: #2b2b2b;
+    border-bottom: 1px solid #333;
+}
+
+#context-sensitive-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: #d0d0d0;
+    user-select: none;
+}
+
+#context-sensitive-toggle {
+    margin: 0;
+}
+
 #context-search {
     background: #1e1e1e; border: none; color: white;
     padding: 10px; font-size: 13px; border-bottom: 1px solid #333;

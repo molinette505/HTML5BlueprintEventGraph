@@ -56,11 +56,16 @@ export class Interaction {
                 menu: dom.contextMenu, 
                 list: dom.contextList, 
                 search: dom.contextSearch,
+                contextControls: dom.contextControls,
+                contextSensitiveToggle: dom.contextSensitiveToggle,
                 container: dom.container
             }, 
             {
-                onSpawn: (tmpl, x, y) => {
+                onSpawn: (tmpl, x, y, spawnContext = null) => {
                      const node = this.nodeManager.createNode(tmpl, x, y);
+                     if (spawnContext) {
+                        this.connectionManager.connectSpawnedNode(spawnContext, node);
+                     }
                      // UX Polish: Auto-select the newly created node
                      this.selectionManager.clear();
                      this.selectionManager.add(node.id);
@@ -148,7 +153,15 @@ export class Interaction {
             else if (this.mode === 'DRAG_WIRE') {
                 // Check if we dropped the wire on a valid pin
                 const target = e.target.closest('.pin');
-                if (target) this.connectionManager.commit(target);
+                if (target) {
+                    this.connectionManager.commit(target);
+                } else {
+                    const spawnContext = this.connectionManager.buildSpawnContext();
+                    this.connectionManager.clearDrag();
+                    if (spawnContext) {
+                        this.contextMenu.show(e.clientX, e.clientY, 'canvas', { graph: this.graph, spawnContext });
+                    }
+                }
                 this.renderer.render(); // Redraw to finalize wire
             }
             else if (this.mode === 'BOX_SELECT') {

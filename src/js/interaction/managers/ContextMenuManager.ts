@@ -1,3 +1,5 @@
+import { contextSensitiveNodeConfig, findBestInputForSpawn, scoreTemplateForSpawn } from "./ContextSensitiveConfig";
+
 /**
  * ContextMenuManager
  * Responsible for the visual presentation and logic of the right-click context menu.
@@ -21,10 +23,25 @@ export class ContextMenuManager {
         
         // Keeps track of which categories (e.g., "Math", "Logic") are closed in the menu
         this.collapsedCategories = new Set();
+
+        this.activeCanvasContext = null;
+        this.contextSettingKey = "blueprint.contextSensitive.enabled";
+        this.contextSensitiveEnabled = this._loadContextSensitiveSetting();
         
         // Bind the search input listener immediately
         if (this.dom.search) {
             this.dom.search.oninput = (e) => this.filter(e.target.value);
+        }
+
+        if (this.dom.contextSensitiveToggle) {
+            this.dom.contextSensitiveToggle.checked = this.contextSensitiveEnabled;
+            this.dom.contextSensitiveToggle.onchange = (e) => {
+                this.contextSensitiveEnabled = !!e.target.checked;
+                this._saveContextSensitiveSetting();
+                if (this.activeCanvasContext) {
+                    this._renderCanvasNodeList(this.dom.search ? this.dom.search.value : "");
+                }
+            };
         }
     }
 
@@ -64,12 +81,16 @@ export class ContextMenuManager {
         // CASE A: Right-clicked a Pin (Input/Output circle)
         if (type === 'pin') {
             if(search) search.style.display = 'none'; // No search needed for pin actions
+            this._setCanvasControlsVisible(false);
+            this.activeCanvasContext = null;
             this._buildPinMenu(graph, targetId, pinIndex, pinDir);
         } 
         
         // CASE B: Right-clicked a Node header/body
         else if (type === 'node') {
             if(search) search.style.display = 'none'; // No search needed for node actions
+            this._setCanvasControlsVisible(false);
+            this.activeCanvasContext = null;
             this._buildNodeMenu(targetId, contextData.selectedCount);
         } 
         
@@ -82,6 +103,7 @@ export class ContextMenuManager {
                 // Small delay to ensure CSS transition finishes before focusing
                 setTimeout(() => search.focus(), 50);
             }
+            this._setCanvasControlsVisible(true);
 
             // Math: Convert Screen Coordinates (Pixels) -> Graph Coordinates (World Space)
             // formula: (Mouse - ContainerOffset - PanOffset) / Scale
@@ -93,20 +115,13 @@ export class ContextMenuManager {
                 };
             }
 
-            // Add 'Paste' option at the very top
-            const liPaste = document.createElement('li');
-            liPaste.className = 'ctx-item';
-            liPaste.innerHTML = `<span>Paste</span>`;
-            liPaste.style.borderBottom = '1px solid #444'; // Visual separator
-            liPaste.style.marginBottom = '5px';
-            liPaste.onclick = () => {
-                this.callbacks.onPaste(x, y);
-                this.hide();
+            this.activeCanvasContext = {
+                graph,
+                clickPos: { x, y },
+                spawnContext: contextData.spawnContext || null
             };
-            if(list) list.appendChild(liPaste);
 
-            // Render the full list of available nodes from the global template
-            this._renderNodeList(window.nodeTemplates || []);
+            this._renderCanvasNodeList('');
         }
     }
 
@@ -117,6 +132,7 @@ export class ContextMenuManager {
         if (this.dom.menu) {
             this.dom.menu.classList.remove('visible');
         }
+        this.activeCanvasContext = null;
     }
 
     /**
@@ -124,11 +140,8 @@ export class ContextMenuManager {
      * @param {string} query - The search text
      */
     filter(query) {
-        const lower = query.toLowerCase();
-        // Filter the global templates array
-        const filtered = (window.nodeTemplates || []).filter(n => n.name.toLowerCase().includes(lower));
-        // Re-render list (passing 'true' for isSearching to disable categories)
-        this._renderNodeList(filtered, !!query);
+        if (!this.activeCanvasContext) return;
+        this._renderCanvasNodeList(query || "");
     }
 
     // =========================================
@@ -210,21 +223,34 @@ export class ContextMenuManager {
      * Renders the list of create-able nodes.
      * Handles Categorization (Folders) vs Flat List (Search Results).
      */
-    _renderNodeList(items, isSearching = false) {
+    _renderNodeList(items, options = {}) {
         const list = this.dom.list;
         if (!list) return;
         
-        // Clear list if we are rebuilding it (filtering)
-        if (!isSearching) list.innerHTML = ''; 
+        const isSearching = !!options.isSearching;
+        const forceFlat = !!options.forceFlat;
+        const contextualSpawn = !!options.contextualSpawn;
 
-        // CASE 1: Standard View (Categorized)
-        if (!isSearching) {
+        list.innerHTML = '';
+
+        if (items.length === 0) {
+            const empty = document.createElement('li');
+            empty.className = 'ctx-item';
+            empty.style.opacity = '0.75';
+            empty.style.cursor = 'default';
+            empty.innerHTML = `<span>No matching nodes</span>`;
+            list.appendChild(empty);
+            return;
+        }
+
+        if (!isSearching && !forceFlat) {
             // Group items by their 'category' property
             const grouped = {};
-            items.forEach(tmpl => {
+            items.forEach(item => {
+                const tmpl = item.template;
                 const cat = tmpl.category || "General";
                 if (!grouped[cat]) grouped[cat] = [];
-                grouped[cat].push(tmpl);
+                grouped[cat].push(item);
             });
 
             // Sort categories alphabetically
@@ -239,31 +265,37 @@ export class ContextMenuManager {
                     e.stopPropagation();
                     if (this.collapsedCategories.has(cat)) this.collapsedCategories.delete(cat);
                     else this.collapsedCategories.add(cat);
-                    this._renderNodeList(items, false); // Re-render to show/hide items
+                    this._renderCanvasNodeList(this.dom.search ? this.dom.search.value : "");
                 };
                 list.appendChild(header);
 
                 // If not collapsed, render the items inside this category
                 if (!this.collapsedCategories.has(cat)) {
-                    grouped[cat].forEach(tmpl => this._createMenuItem(tmpl, true));
+                    grouped[cat]
+                        .sort((a, b) => a.template.name.localeCompare(b.template.name))
+                        .forEach(entry => this._createMenuItem(entry, true));
                 }
             });
-        } 
-        // CASE 2: Search View (Flat List)
-        else {
-            // Clear list if user just started typing
-            if(this.dom.search && this.dom.search.value !== '') list.innerHTML = '';
-            items.forEach(tmpl => this._createMenuItem(tmpl, false));
+            return;
         }
+
+        const sorted = items
+            .slice()
+            .sort((a, b) => {
+                if (contextualSpawn && a.score !== b.score) return b.score - a.score;
+                return a.template.name.localeCompare(b.template.name);
+            });
+        sorted.forEach(entry => this._createMenuItem(entry, false));
     }
 
     /**
      * Creates a single clickable menu item for a Node Template.
      */
-    _createMenuItem(tmpl, isIndent) {
+    _createMenuItem(entry, isIndent) {
         const list = this.dom.list;
         if (!list) return;
 
+        const tmpl = entry.template;
         const li = document.createElement('li');
         // Add 'ctx-folder' class to indent items if they are inside a category
         li.className = `ctx-item ${isIndent ? 'ctx-folder' : ''}`;
@@ -274,9 +306,87 @@ export class ContextMenuManager {
         
         // Click -> Trigger Spawn Callback
         li.onclick = () => {
-            this.callbacks.onSpawn(tmpl, this.activePos.x, this.activePos.y);
+            const spawnContext = this.activeCanvasContext && this.activeCanvasContext.spawnContext
+                ? { ...this.activeCanvasContext.spawnContext }
+                : null;
+            if (spawnContext && entry.compatibility) {
+                spawnContext.preferredInputIndex = entry.compatibility.index;
+            }
+            this.callbacks.onSpawn(tmpl, this.activePos.x, this.activePos.y, spawnContext);
             this.hide();
         };
         list.appendChild(li);
+    }
+
+    _setCanvasControlsVisible(isVisible) {
+        if (this.dom.contextControls) {
+            this.dom.contextControls.style.display = isVisible ? 'flex' : 'none';
+        }
+        if (this.dom.contextSensitiveToggle) {
+            this.dom.contextSensitiveToggle.checked = this.contextSensitiveEnabled;
+        }
+    }
+
+    _renderCanvasNodeList(query = "") {
+        const list = this.dom.list;
+        if (!list || !this.activeCanvasContext) return;
+
+        const lower = query.toLowerCase();
+        const spawnContext = this.activeCanvasContext.spawnContext;
+        const contextualSpawn = !!spawnContext && this.contextSensitiveEnabled;
+        const allTemplates = window.nodeTemplates || [];
+        const entries = [];
+
+        allTemplates.forEach(template => {
+            if (lower && !template.name.toLowerCase().includes(lower)) return;
+
+            const compatibility = spawnContext ? findBestInputForSpawn(template, spawnContext) : null;
+            if (contextualSpawn && !compatibility) return;
+
+            entries.push({
+                template,
+                compatibility,
+                score: contextualSpawn ? scoreTemplateForSpawn(template, spawnContext, compatibility) : 0
+            });
+        });
+
+        const shouldShowPaste = !spawnContext && !query;
+        const options = {
+            isSearching: !!query,
+            forceFlat: contextualSpawn,
+            contextualSpawn
+        };
+
+        this._renderNodeList(entries, options);
+
+        if (shouldShowPaste) {
+            const liPaste = document.createElement('li');
+            liPaste.className = 'ctx-item';
+            liPaste.innerHTML = `<span>Paste</span>`;
+            liPaste.style.borderBottom = '1px solid #444';
+            liPaste.style.marginBottom = '5px';
+            liPaste.onclick = () => {
+                this.callbacks.onPaste(this.activeCanvasContext.clickPos.x, this.activeCanvasContext.clickPos.y);
+                this.hide();
+            };
+            list.insertBefore(liPaste, list.firstChild);
+        }
+    }
+
+    _loadContextSensitiveSetting() {
+        try {
+            const raw = localStorage.getItem(this.contextSettingKey);
+            if (raw === "true") return true;
+            if (raw === "false") return false;
+        } catch (err) {
+        }
+        return !!contextSensitiveNodeConfig.enabledByDefault;
+    }
+
+    _saveContextSensitiveSetting() {
+        try {
+            localStorage.setItem(this.contextSettingKey, String(this.contextSensitiveEnabled));
+        } catch (err) {
+        }
     }
 }

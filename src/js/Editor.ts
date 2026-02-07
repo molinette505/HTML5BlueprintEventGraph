@@ -21,6 +21,8 @@ export class Editor {
             contextMenu: document.getElementById('context-menu'),
             contextList: document.getElementById('context-list'),
             contextSearch: document.getElementById('context-search'),
+            contextControls: document.getElementById('context-controls'),
+            contextSensitiveToggle: document.getElementById('context-sensitive-toggle'),
             variablePanel: document.getElementById('variable-panel'),
             btnToggleVars: document.getElementById('btn-toggle-vars'),
             
@@ -157,6 +159,7 @@ export class Editor {
         
         // Hide search for this specific menu (we only have 2 options)
         if(search) search.style.display = 'none';
+        if(this.dom.contextControls) this.dom.contextControls.style.display = 'none';
         list.innerHTML = '';
 
         // Helper to create the menu items
