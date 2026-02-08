@@ -11,6 +11,7 @@ export class Simulation {
         this.status = 'STOPPED';
         this.executionQueue = [];
         this.timer = null;
+        this.isProcessingNext = false;
         this.runInstanceId = 0;
         this.lastProcessedItem = null;
         this.lastProcessedExec = null;
@@ -254,6 +255,9 @@ export class Simulation {
     }
 
     async processNext(isSingleStep) {
+        if (this.isProcessingNext) return;
+        this.isProcessingNext = true;
+        try {
         const currentRunId = this.runInstanceId;
         if (this.executionQueue.length === 0) {
             if (this.status === 'RUNNING') {
@@ -378,6 +382,9 @@ export class Simulation {
 
         if (this.status === 'RUNNING' && !isSingleStep) {
             this.timer = setTimeout(() => this.tick(), 100);
+        }
+        } finally {
+            this.isProcessingNext = false;
         }
     }
 
