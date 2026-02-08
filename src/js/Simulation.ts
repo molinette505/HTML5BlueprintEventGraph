@@ -2,6 +2,8 @@
  * Simulation Class
  * Manages the execution flow of the blueprint graph.
  */
+import { createExecPolicies } from "./simulation/ExecPolicies";
+
 export class Simulation {
     constructor(graph, renderer) {
         this.graph = graph;
@@ -23,20 +25,24 @@ export class Simulation {
         this.activeStepVisuals = [];
         this.connectionVisuals = new Map();
 
-        this.execPolicies = {
-            "For Loop": (node, ctx, item, continuations, currentRunId) => this.runForLoop(node, ctx, continuations, !!item.isLoopContinuation),
-            "Flow.ForLoop": (node, ctx, item, continuations, currentRunId) => this.runForLoop(node, ctx, continuations, !!item.isLoopContinuation),
-            "While Loop": (node, ctx, item, continuations, currentRunId) => this.runWhileLoop(node, ctx, continuations),
-            "WhileLoop": (node, ctx, item, continuations, currentRunId) => this.runWhileLoop(node, ctx, continuations),
-            "Flow.WhileLoop": (node, ctx, item, continuations, currentRunId) => this.runWhileLoop(node, ctx, continuations),
-            "Do Once": (node, ctx, item, continuations, currentRunId) => this.runDoOnce(node, item.conn ? item.conn.toPin : null, continuations),
-            "Flow.DoOnce": (node, ctx, item, continuations, currentRunId) => this.runDoOnce(node, item.conn ? item.conn.toPin : null, continuations),
-            "Delay": (node, ctx, item, continuations, currentRunId) => this.runDelay(node, ctx, continuations, currentRunId),
-            "Flow.Delay": (node, ctx, item, continuations, currentRunId) => this.runDelay(node, ctx, continuations, currentRunId),
-            "Branch": (node, ctx, item, continuations, currentRunId) => this.runDefaultExec(node, ctx, continuations),
-            "Flow.Branch": (node, ctx, item, continuations, currentRunId) => this.runDefaultExec(node, ctx, continuations),
-            "Flow.CallCustomEvent": (node, ctx, item, continuations, currentRunId) => this.runCallCustomEvent(node, ctx, continuations)
-        };
+        this.execPolicies = createExecPolicies({
+            graph: this.graph,
+            pushExecutionTask: (task) => { this.executionQueue.push(task); },
+            getStatus: () => this.status,
+            buildArgs: (node, ctx) => this.buildArgs(node, ctx),
+            castValue: (val, type) => this.castValue(val, type),
+            createTask: (kind, node, extra = {}) => this.createTask(kind, node, extra),
+            queueExec: (node, conn, toFront = false, continuations = null) => this.queueExec(node, conn, toFront, continuations),
+            enqueueContinuation: (continuations) => this.enqueueContinuation(continuations),
+            getNextExecConnection: (node) => this.getNextExecConnection(node),
+            setNodeHighlight: (id, color) => this.setNodeHighlight(id, color),
+            highlightNode: (id, color) => this.highlightNode(id, color),
+            beginAsyncExec: () => { this.pendingAsyncExecCount += 1; },
+            endAsyncExec: () => { this.pendingAsyncExecCount = Math.max(0, this.pendingAsyncExecCount - 1); },
+            isRunActive: (runId) => this.runInstanceId === runId,
+            tick: () => this.tick(),
+            stop: () => this.stop()
+        });
         this.purePolicies = {
             "default": (node, ctx, item, currentRunId) => this.runDefaultPure(node, ctx, item, currentRunId)
         };
@@ -301,7 +307,7 @@ export class Simulation {
 
         let ready = false;
         let deps = [];
-        if (item.kind === 'exec' && item.node.name === "For Loop" && item.isLoopContinuation) {
+        if (this.execPolicies.shouldSkipInputResolution(item)) {
             ready = true;
         } else {
             const res = this.resolveInputs(item);
@@ -354,8 +360,6 @@ export class Simulation {
 
             const continuations = item.continuations ? item.continuations.slice() : [];
 
-            const incomingPinIndex = item.conn ? item.conn.toPin : null;
-
             this.executeExecNode(node, ctx, item, continuations, currentRunId);
 
             this.pendingRequests.delete(item.id);
@@ -398,101 +402,6 @@ export class Simulation {
         return { nextConn, nextNode };
     }
 
-    runForLoop(node, ctx, continuations, isContinuation) {
-        if (!isContinuation) {
-            const args = this.buildArgs(node, ctx);
-            const firstIndex = this.castValue(args[0], 'int') ?? 0;
-            const lastIndex = this.castValue(args[1], 'int') ?? 0;
-            node.loopState = { current: firstIndex, last: lastIndex, active: true };
-        } else if (!node.loopState || node.loopState.active !== true) {
-            // If continuation arrives without valid state, do nothing.
-            return;
-        }
-
-        const state = node.loopState;
-        if (state.current <= state.last) {
-            node.executionResult = state.current;
-            this.setNodeHighlight(node.id, '#ffffff');
-
-            const loopBodyPin = node.outputs.find(p => p.type === 'exec' && p.name === "Loop Body");
-            const loopConn = loopBodyPin
-                ? this.graph.connections.find(c => c.fromNode === node.id && c.fromPin === loopBodyPin.index)
-                : null;
-            const loopNode = loopConn ? this.graph.nodes.find(n => n.id === loopConn.toNode) : null;
-
-            const loopContinuation = this.createTask('exec', node, { conn: null, isLoopContinuation: true });
-            const chainContinuations = continuations.slice();
-            chainContinuations.push(loopContinuation);
-
-            state.current += 1;
-
-            if (loopNode) {
-                this.queueExec(loopNode, loopConn, false, chainContinuations);
-            } else {
-                loopContinuation.continuations = chainContinuations.slice(0, -1);
-                this.executionQueue.push(loopContinuation);
-            }
-        } else {
-            state.active = false;
-            node.executionResult = state.last;
-            this.highlightNode(node.id, '#ff9900');
-
-            const completedPin = node.outputs.find(p => p.type === 'exec' && p.name === "Completed");
-            const completedConn = completedPin
-                ? this.graph.connections.find(c => c.fromNode === node.id && c.fromPin === completedPin.index)
-                : null;
-            const completedNode = completedConn ? this.graph.nodes.find(n => n.id === completedConn.toNode) : null;
-
-            if (completedNode) {
-                this.queueExec(completedNode, completedConn, false, continuations);
-            } else {
-                this.enqueueContinuation(continuations);
-            }
-        }
-    }
-
-    runWhileLoop(node, ctx, continuations) {
-        const args = this.buildArgs(node, ctx);
-        const condition = Boolean(args[0]);
-
-        if (condition) {
-            node.executionResult = condition;
-            this.setNodeHighlight(node.id, '#ffffff');
-
-            const loopBodyPin = node.outputs.find(p => p.type === 'exec' && p.name === "Loop Body");
-            const loopConn = loopBodyPin
-                ? this.graph.connections.find(c => c.fromNode === node.id && c.fromPin === loopBodyPin.index)
-                : null;
-            const loopNode = loopConn ? this.graph.nodes.find(n => n.id === loopConn.toNode) : null;
-
-            const loopContinuation = this.createTask('exec', node, { conn: null });
-            const chainContinuations = continuations.slice();
-            chainContinuations.push(loopContinuation);
-
-            if (loopNode) {
-                this.queueExec(loopNode, loopConn, false, chainContinuations);
-            } else {
-                loopContinuation.continuations = chainContinuations.slice(0, -1);
-                this.executionQueue.push(loopContinuation);
-            }
-        } else {
-            node.executionResult = null;
-            this.highlightNode(node.id, '#ff9900');
-
-            const completedPin = node.outputs.find(p => p.type === 'exec' && p.name === "Completed");
-            const completedConn = completedPin
-                ? this.graph.connections.find(c => c.fromNode === node.id && c.fromPin === completedPin.index)
-                : null;
-            const completedNode = completedConn ? this.graph.nodes.find(n => n.id === completedConn.toNode) : null;
-
-            if (completedNode) {
-                this.queueExec(completedNode, completedConn, false, continuations);
-            } else {
-                this.enqueueContinuation(continuations);
-            }
-        }
-    }
-
     emitOutputData(node) {
         if (!this.renderer) return;
         node.outputs.forEach((pin) => {
@@ -507,103 +416,11 @@ export class Simulation {
         });
     }
 
-    runDoOnce(node, incomingPinIndex, continuations) {
-        if (incomingPinIndex !== null && node.inputs[incomingPinIndex] && node.inputs[incomingPinIndex].name === "Reset") {
-            node.doOnceFired = false;
-            this.enqueueContinuation(continuations);
-            return;
-        }
-
-        if (!node.doOnceFired) {
-            node.doOnceFired = true;
-            this.highlightNode(node.id, '#ff9900');
-
-            const nextInfo = this.getNextExecConnection(node);
-            if (nextInfo) {
-                const { nextConn, nextNode } = nextInfo;
-                this.queueExec(nextNode, nextConn, false, continuations);
-            } else {
-                this.enqueueContinuation(continuations);
-            }
-        }
-    }
-
-    runDelay(node, ctx, continuations, currentRunId) {
-        const args = this.buildArgs(node, ctx);
-        const durationSeconds = this.castValue(args[0], 'float') ?? 0;
-        const delayMs = Math.max(0, durationSeconds * 1000);
-        this.setNodeHighlight(node.id, '#ffffff');
-
-        const nextInfo = this.getNextExecConnection(node);
-        if (!nextInfo) {
-            this.enqueueContinuation(continuations);
-            return;
-        }
-
-        const { nextConn, nextNode } = nextInfo;
-        this.pendingAsyncExecCount += 1;
-        setTimeout(() => {
-            try {
-                if (this.runInstanceId !== currentRunId) return;
-                this.highlightNode(node.id, '#ff9900');
-                this.queueExec(nextNode, nextConn, false, continuations);
-                if (this.status === 'RUNNING') this.tick();
-            } finally {
-                this.pendingAsyncExecCount = Math.max(0, this.pendingAsyncExecCount - 1);
-            }
-        }, delayMs);
-    }
-
     executeExecNode(node, ctx, item, continuations, currentRunId) {
-        const policy = this.execPolicies[node.functionId] || this.execPolicies[node.name] || ((n, c, i, cont, runId) => this.runDefaultExec(n, c, cont));
+        const policy = this.execPolicies.byFunctionId[node.functionId]
+            || this.execPolicies.byNodeName[node.name]
+            || this.execPolicies.default;
         return policy(node, ctx, item, continuations, currentRunId);
-    }
-
-    runCallCustomEvent(node, ctx, continuations) {
-        this.highlightNode(node.id, '#ff9900');
-
-        const eventName = node.customEventName || '';
-        if (eventName) {
-            const targets = this.graph.nodes.filter(
-                (candidate) => candidate.functionId === 'Flow.CustomEvent' && candidate.customEventName === eventName
-            );
-            targets.forEach((targetNode) => {
-                this.queueExec(targetNode, null, false, null);
-            });
-        }
-
-        const nextInfo = this.getNextExecConnection(node);
-        if (nextInfo) {
-            const { nextConn, nextNode } = nextInfo;
-            this.queueExec(nextNode, nextConn, false, continuations);
-        } else {
-            this.enqueueContinuation(continuations);
-        }
-    }
-
-    runDefaultExec(node, ctx, continuations) {
-        if (node.jsFunctionRef) {
-            try {
-                const args = this.buildArgs(node, ctx);
-                this.highlightNode(node.id, '#ff9900');
-                node.executionResult = node.jsFunctionRef.apply(node, args);
-            } catch (err) {
-                if (err.isBlueprintError) node.setError(err.message);
-                else console.error(err);
-                this.stop();
-                return;
-            }
-        } else {
-            this.highlightNode(node.id, '#ff9900');
-        }
-
-        const nextInfo = this.getNextExecConnection(node);
-        if (nextInfo) {
-            const { nextConn, nextNode } = nextInfo;
-            this.queueExec(nextNode, nextConn, false, continuations);
-        } else {
-            this.enqueueContinuation(continuations);
-        }
     }
 
     async executePureNode(node, ctx, item, currentRunId) {
