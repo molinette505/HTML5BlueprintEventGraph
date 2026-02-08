@@ -84,6 +84,7 @@ export class Interaction {
         this.pendingNodeSingleAction = null;
         this.pendingCanvasClearAction = null;
         this.connectionPointDrag = null;
+        this.connectionPointDragFrame = null;
 
         this.bindEvents();
         this.bindKeyboardEvents();
@@ -1066,6 +1067,8 @@ export class Interaction {
             pointIndex,
             startX: event.clientX,
             startY: event.clientY,
+            latestX: event.clientX,
+            latestY: event.clientY,
             hasMoved: false
         };
         this.mode = 'DRAG_CONN_POINT';
@@ -1084,11 +1087,27 @@ export class Interaction {
         const drag = this.connectionPointDrag;
         const distance = Math.hypot(clientX - drag.startX, clientY - drag.startY);
         if (distance > 3) drag.hasMoved = true;
-        this._updateConnectionPointByIndex(drag.connId, drag.pointIndex, clientX, clientY);
+        drag.latestX = clientX;
+        drag.latestY = clientY;
+        if (this.connectionPointDragFrame !== null) return;
+        this.connectionPointDragFrame = requestAnimationFrame(() => {
+            this.connectionPointDragFrame = null;
+            if (!this.connectionPointDrag) return;
+            this._updateConnectionPointByIndex(
+                this.connectionPointDrag.connId,
+                this.connectionPointDrag.pointIndex,
+                this.connectionPointDrag.latestX,
+                this.connectionPointDrag.latestY
+            );
+        });
     }
 
     _endConnectionPointDrag() {
         if (!this.connectionPointDrag) return;
+        if (this.connectionPointDragFrame !== null) {
+            cancelAnimationFrame(this.connectionPointDragFrame);
+            this.connectionPointDragFrame = null;
+        }
         this.connectionPointDrag = null;
     }
 

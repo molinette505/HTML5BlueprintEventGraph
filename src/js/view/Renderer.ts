@@ -160,7 +160,7 @@ export class Renderer {
                 const handle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
                 handle.setAttribute('cx', String(point.x));
                 handle.setAttribute('cy', String(point.y));
-                handle.setAttribute('r', '7');
+                handle.setAttribute('r', '9');
                 handle.setAttribute('class', 'connection-point');
                 handle.dataset.connId = String(id);
                 handle.dataset.pointIndex = String(index);

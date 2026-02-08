@@ -23,7 +23,7 @@ path.connection:hover {
 path.connection-hit {
     fill: none;
     stroke: transparent;
-    stroke-width: 20px;
+    stroke-width: 28px;
     stroke-linecap: round;
     pointer-events: stroke;
     cursor: pointer;
@@ -65,7 +65,7 @@ path.connection.data-flow {
 .connection-point {
     fill: #171717;
     stroke: #d4d4d4;
-    stroke-width: 1.5;
+    stroke-width: 1.8;
     opacity: 0.95;
     cursor: grab;
     pointer-events: all;
