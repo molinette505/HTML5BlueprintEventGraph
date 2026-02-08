@@ -269,8 +269,11 @@ export class Renderer {
         const el = this.dom.nodesLayer.querySelector(selector);
         
         if(!el) return null;
-        
-        const r = el.getBoundingClientRect();
+
+        const nodeEl = document.getElementById(`node-${nid}`);
+        const r = (nodeEl && nodeEl.classList.contains('reroute'))
+            ? nodeEl.getBoundingClientRect()
+            : el.getBoundingClientRect();
         const c = this.dom.container.getBoundingClientRect();
         
         return { 

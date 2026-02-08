@@ -412,7 +412,7 @@ export class Simulation {
         const state = node.loopState;
         if (state.current <= state.last) {
             node.executionResult = state.current;
-            this.highlightNode(node.id, '#ff9900');
+            this.setNodeHighlight(node.id, '#ffffff');
 
             const loopBodyPin = node.outputs.find(p => p.type === 'exec' && p.name === "Loop Body");
             const loopConn = loopBodyPin
@@ -457,7 +457,7 @@ export class Simulation {
 
         if (condition) {
             node.executionResult = condition;
-            this.highlightNode(node.id, '#ff9900');
+            this.setNodeHighlight(node.id, '#ffffff');
 
             const loopBodyPin = node.outputs.find(p => p.type === 'exec' && p.name === "Loop Body");
             const loopConn = loopBodyPin
