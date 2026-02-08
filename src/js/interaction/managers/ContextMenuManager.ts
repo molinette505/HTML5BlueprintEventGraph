@@ -28,6 +28,7 @@ export class ContextMenuManager {
         this.activeCanvasContext = null;
         this.contextSettingKey = "blueprint.contextSensitive.enabled";
         this.contextSensitiveEnabled = this._loadContextSensitiveSetting();
+        this.suppressClickUntil = 0;
         
         // Bind the search input listener immediately
         if (this.dom.search) {
@@ -516,12 +517,34 @@ export class ContextMenuManager {
 
         element.onclick = (e) => {
             if (e) e.stopPropagation();
+            if (Date.now() < this.suppressClickUntil) return;
             action();
         };
 
+        let touchStartX = 0;
+        let touchStartY = 0;
+        let touchMoved = false;
+
+        element.addEventListener('touchstart', (e) => {
+            const touch = e.changedTouches && e.changedTouches[0];
+            if (!touch) return;
+            touchStartX = touch.clientX;
+            touchStartY = touch.clientY;
+            touchMoved = false;
+        }, { passive: true });
+
+        element.addEventListener('touchmove', (e) => {
+            const touch = e.changedTouches && e.changedTouches[0];
+            if (!touch) return;
+            const distance = Math.hypot(touch.clientX - touchStartX, touch.clientY - touchStartY);
+            if (distance > 8) touchMoved = true;
+        }, { passive: true });
+
         element.addEventListener('touchend', (e) => {
-            e.preventDefault();
             e.stopPropagation();
+            if (touchMoved) return;
+            e.preventDefault();
+            this.suppressClickUntil = Date.now() + 350;
             action();
         }, { passive: false });
     }
