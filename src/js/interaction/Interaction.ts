@@ -81,6 +81,7 @@ export class Interaction {
 
         this.pendingTap = null;
         this.pendingPinSingleAction = null;
+        this.pendingCanvasClearAction = null;
 
         this.bindEvents();
         this.bindKeyboardEvents();
@@ -464,7 +465,9 @@ export class Interaction {
                     meta: { nodeId: state.nodeId }
                 };
                 const usedForContext = this._registerTouchTap(tap);
-                if (!usedForContext) this._handleNodeTap(state.nodeId);
+                if (!usedForContext) {
+                    // Node selection is now long-press based.
+                }
             }
         }
         else if (state.type === 'canvas') {
@@ -482,8 +485,17 @@ export class Interaction {
                     meta: null
                 };
                 const usedForContext = this._registerTouchTap(tap);
-                if (!usedForContext && !state.closedDrawerOnTouchStart) {
-                    this.selectionManager.clear();
+                if (!usedForContext) {
+                    if (this.pendingCanvasClearAction && this.pendingCanvasClearAction.timer) {
+                        clearTimeout(this.pendingCanvasClearAction.timer);
+                    }
+                    const timer = setTimeout(() => {
+                        if (this.pendingCanvasClearAction && this.pendingCanvasClearAction.tapTime === tap.time) {
+                            this.selectionManager.clear();
+                            this.pendingCanvasClearAction = null;
+                        }
+                    }, this.touchConfig.doubleTapMs + 20);
+                    this.pendingCanvasClearAction = { tapTime: tap.time, timer };
                 }
             }
         }
@@ -667,6 +679,10 @@ export class Interaction {
                 clearTimeout(this.pendingPinSingleAction.timer);
                 this.pendingPinSingleAction = null;
             }
+            if (this.pendingCanvasClearAction && this.pendingCanvasClearAction.timer) {
+                clearTimeout(this.pendingCanvasClearAction.timer);
+                this.pendingCanvasClearAction = null;
+            }
             this._showTouchContextMenu(tap);
             return true;
         }
@@ -691,6 +707,7 @@ export class Interaction {
         if (!tap) return;
 
         if (tap.type === 'pin' && tap.meta) {
+            if (!this._canOpenPinContextMenu(tap.meta)) return;
             this.contextMenu.show(tap.x, tap.y, 'pin', {
                 graph: this.graph,
                 targetId: tap.meta.nodeId,
@@ -701,6 +718,18 @@ export class Interaction {
         }
 
         if (tap.type === 'node' && tap.meta) {
+            const selectedIds = Array.from(this.selectionManager.selected);
+            if (selectedIds.length > 1) {
+                const targetId = this.selectionManager.selected.has(tap.meta.nodeId)
+                    ? tap.meta.nodeId
+                    : selectedIds[0];
+                this.contextMenu.show(tap.x, tap.y, 'node', {
+                    targetId,
+                    selectedCount: this.selectionManager.selected.size
+                });
+                return;
+            }
+
             if (!this.selectionManager.selected.has(tap.meta.nodeId)) {
                 this.selectionManager.clear();
                 this.selectionManager.add(tap.meta.nodeId);
@@ -712,7 +741,31 @@ export class Interaction {
             return;
         }
 
+        if (tap.type === 'canvas' && this.selectionManager.selected.size > 1) {
+            const selectedIds = Array.from(this.selectionManager.selected);
+            const targetId = selectedIds.length > 0 ? selectedIds[0] : null;
+            if (targetId !== null) {
+                this.contextMenu.show(tap.x, tap.y, 'node', {
+                    targetId,
+                    selectedCount: this.selectionManager.selected.size
+                });
+                return;
+            }
+        }
+
         this.contextMenu.show(tap.x, tap.y, 'canvas', { graph: this.graph });
+    }
+
+    _canOpenPinContextMenu(pinMeta) {
+        if (!pinMeta) return false;
+        const node = this.graph.nodes.find(n => n.id === pinMeta.nodeId);
+        if (!node) return false;
+
+        const pins = pinMeta.dir === 'input' ? node.inputs : node.outputs;
+        const pin = pins && pins[pinMeta.index] ? pins[pinMeta.index] : null;
+        if (!pin) return false;
+
+        return Array.isArray(pin.allowedTypes) && pin.allowedTypes.length > 0;
     }
 
     _handleAssistMultiSelectTouch(e) {

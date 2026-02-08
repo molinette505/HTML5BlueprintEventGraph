@@ -210,19 +210,20 @@ export class Renderer {
         // 3. Animate Label along path with DELAY
         const totalLen = path.getTotalLength();
         const startPoint = path.getPointAtLength(0);
+        const startDelay = 80;
+        const pxPerSecond = 180;
+        const travelMs = Math.max(320, Math.min(2400, (totalLen / pxPerSecond) * 1000));
         
         // Set initial position immediately so it appears at the start
         label.style.left = `${startPoint.x}px`;
         label.style.top = `${startPoint.y}px`;
 
-        // Wait 300ms before moving, then travel for 700ms (Total ~1s)
         setTimeout(() => {
-            const duration = 1000; 
             const start = performance.now();
 
             const animate = (time) => {
                 const elapsed = time - start;
-                const progress = Math.min(elapsed / duration, 1);
+                const progress = Math.min(elapsed / travelMs, 1);
                 
                 const point = path.getPointAtLength(progress * totalLen);
                 
@@ -235,10 +236,10 @@ export class Renderer {
                 }
             };
             requestAnimationFrame(animate);
-        }, 1000);
+        }, startDelay);
 
         // Return object containing both visuals for tracking/cleanup
-        return { label: label, path: path, connId: conn.id };
+        return { label: label, path: path, connId: conn.id, durationMs: startDelay + travelMs };
     }
 
     /**

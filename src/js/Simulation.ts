@@ -33,6 +33,7 @@ export class Simulation {
         this.purePolicies = {
             "default": (node, ctx, item, currentRunId) => this.runDefaultPure(node, ctx, item, currentRunId)
         };
+        this.postInputSettleDelayMs = 140;
     }
 
     initialize() {
@@ -131,7 +132,7 @@ export class Simulation {
             if (pin.type === 'exec') inputReady[idx] = true;
         });
 
-        this.pendingRequests.set(id, { node, inputValues, inputReady, inputScheduled });
+        this.pendingRequests.set(id, { node, inputValues, inputReady, inputScheduled, inputVisualWaitMs: 0 });
         return { id, kind, node, ...extra };
     }
 
@@ -203,7 +204,8 @@ export class Simulation {
                     const debugLabel = window.FunctionRegistry.getVisualDebug(sourceNode, [], incomingVal);
                     const visualObj = this.renderer.animateDataWire(conn, debugLabel);
                     this.addStepVisual(visualObj);
-                    ctx.inputVisualDelay = true;
+                    const waitMs = visualObj && typeof visualObj.durationMs === 'number' ? visualObj.durationMs : 0;
+                    ctx.inputVisualWaitMs = Math.max(ctx.inputVisualWaitMs || 0, waitMs);
                 }
             }
         }
@@ -304,10 +306,20 @@ export class Simulation {
             return;
         }
 
-        if (ctx.inputVisualDelay && !item.inputVisualWaited) {
+        if ((ctx.inputVisualWaitMs || 0) > 0 && !item.inputVisualWaited) {
             item.inputVisualWaited = true;
-            ctx.inputVisualDelay = false;
-            await new Promise(r => setTimeout(r, 900));
+            const waitMs = ctx.inputVisualWaitMs;
+            ctx.inputVisualWaitMs = 0;
+            await new Promise(r => setTimeout(r, waitMs));
+            if (this.runInstanceId !== currentRunId) return;
+        }
+
+        const hasDataInputs = item.node && Array.isArray(item.node.inputs)
+            ? item.node.inputs.some(pin => pin.type !== 'exec')
+            : false;
+        if (hasDataInputs && !item.postInputSettleDone) {
+            item.postInputSettleDone = true;
+            await new Promise(r => setTimeout(r, this.postInputSettleDelayMs));
             if (this.runInstanceId !== currentRunId) return;
         }
 
@@ -383,7 +395,6 @@ export class Simulation {
         if (state.current <= state.last) {
             node.executionResult = state.current;
             this.highlightNode(node.id, '#ff9900');
-            this.emitOutputData(node);
 
             const loopBodyPin = node.outputs.find(p => p.type === 'exec' && p.name === "Loop Body");
             const loopConn = loopBodyPin
@@ -407,7 +418,6 @@ export class Simulation {
             state.active = false;
             node.executionResult = state.last;
             this.highlightNode(node.id, '#ff9900');
-            this.emitOutputData(node);
 
             const completedPin = node.outputs.find(p => p.type === 'exec' && p.name === "Completed");
             const completedConn = completedPin
@@ -581,7 +591,12 @@ export class Simulation {
                         const debugLabel = window.FunctionRegistry.getVisualDebug(node, args, result);
                         const visualObj = this.renderer.animateDataWire(item.deliverTo.conn, debugLabel);
                         this.addStepVisual(visualObj);
-                        await new Promise(r => setTimeout(r, 2000));
+                        const waitMs = visualObj && typeof visualObj.durationMs === 'number'
+                            ? visualObj.durationMs
+                            : 0;
+                        if (waitMs > 0) {
+                            await new Promise(r => setTimeout(r, waitMs));
+                        }
                         if (this.runInstanceId !== currentRunId) return;
                     }
                 }
