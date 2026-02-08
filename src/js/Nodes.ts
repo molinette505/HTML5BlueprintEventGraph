@@ -65,7 +65,7 @@ export const globalNodes = [
         ]
     },
     {
-        "name": "Reroute Exec",
+        "name": "Reroute Node (Exec)",
         "category": "Internal",
         "color": "var(--header-default)",
         "hideHeader": true,
@@ -80,7 +80,7 @@ export const globalNodes = [
         ]
     },
     {
-        "name": "Reroute Data",
+        "name": "Reroute Node (Data)",
         "category": "Internal",
         "color": "var(--n-pure)",
         "hideHeader": true,

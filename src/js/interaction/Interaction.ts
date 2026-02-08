@@ -47,6 +47,16 @@ export class Interaction {
                     this.selectionManager.clear();
                     this.selectionManager.add(node.id);
                 },
+                onSpawnReroute: (x, y, spawnContext = null) => {
+                    this.connectionManager.clearPendingSpawn(false);
+                    const node = this._spawnRerouteNodeAt(x, y, spawnContext);
+                    if (!node) return;
+                    if (spawnContext) {
+                        this.connectionManager.connectSpawnedNode(spawnContext, node);
+                    }
+                    this.selectionManager.clear();
+                    this.selectionManager.add(node.id);
+                },
                 onDelete: (targetId) => this.deleteWithSelectionCheck(targetId),
                 onCopy: () => this.clipboard.copy(),
                 onCut: () => this.cutSelection(),
@@ -97,10 +107,6 @@ export class Interaction {
 
             const wireEl = e.target.closest('path.connection-hit, path.connection');
             if (wireEl && !wireEl.classList.contains('dragging')) {
-                if (e.button === 0 && e.altKey) {
-                    e.preventDefault();
-                    this._insertRerouteAtClient(wireEl, e.clientX, e.clientY);
-                }
                 return;
             }
 
@@ -167,6 +173,14 @@ export class Interaction {
         c.addEventListener('wheel', e => {
             this.viewportManager.handleZoom(e);
             this.contextMenu.hide();
+        }, { passive: false });
+
+        c.addEventListener('dblclick', (e) => {
+            const wireEl = e.target.closest('path.connection-hit, path.connection');
+            if (!wireEl || wireEl.classList.contains('dragging')) return;
+            e.preventDefault();
+            e.stopPropagation();
+            this._insertRerouteAtClient(wireEl, e.clientX, e.clientY);
         }, { passive: false });
     }
 
@@ -935,11 +949,34 @@ export class Interaction {
         return templates.find((template) => template.functionId === 'Flow.RerouteData') || null;
     }
 
+    _spawnRerouteNodeAt(x, y, spawnContext = null) {
+        const rerouteType = spawnContext && spawnContext.dataType === 'exec' ? 'exec' : 'wildcard';
+        const template = this._getRerouteTemplate(rerouteType);
+        if (!template) return null;
+
+        const node = this.nodeManager.createNode(template, x, y);
+        if (!node) return null;
+
+        if (rerouteType !== 'exec') {
+            const sourceDataType = spawnContext && spawnContext.dataType
+                ? spawnContext.dataType
+                : 'wildcard';
+            if (sourceDataType && sourceDataType !== 'exec' && sourceDataType !== 'wildcard') {
+                node.inputs.forEach((pin) => {
+                    if (pin.type === 'wildcard') pin.setType(sourceDataType);
+                });
+                node.outputs.forEach((pin) => {
+                    if (pin.type === 'wildcard') pin.setType(sourceDataType);
+                });
+                this.renderer.refreshNode(node);
+            }
+        }
+
+        return node;
+    }
+
     _insertRerouteForConnection(connection, graphPoint) {
         if (!connection || !graphPoint) return false;
-
-        const template = this._getRerouteTemplate(connection.type);
-        if (!template) return false;
 
         const oldFromNode = connection.fromNode;
         const oldFromPin = connection.fromPin;
@@ -949,18 +986,8 @@ export class Interaction {
 
         this.graph.removeConnection(connection.id);
 
-        const rerouteNode = this.nodeManager.createNode(template, graphPoint.x, graphPoint.y);
+        const rerouteNode = this._spawnRerouteNodeAt(graphPoint.x, graphPoint.y, { dataType: connectionType });
         if (!rerouteNode) return false;
-
-        if (connectionType !== 'exec') {
-            rerouteNode.inputs.forEach((pin) => {
-                if (pin.type === 'wildcard') pin.setType(connectionType);
-            });
-            rerouteNode.outputs.forEach((pin) => {
-                if (pin.type === 'wildcard') pin.setType(connectionType);
-            });
-            this.renderer.refreshNode(rerouteNode);
-        }
 
         this.graph.addConnection(oldFromNode, oldFromPin, rerouteNode.id, 0, connectionType);
         this.graph.addConnection(rerouteNode.id, 0, oldToNode, oldToPin, connectionType);

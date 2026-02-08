@@ -20,9 +20,13 @@ export class NodeRenderer {
     createElement(node) {
         const el = document.createElement('div');
         const isRerouteNode = node.functionId === 'Flow.RerouteData' || node.functionId === 'Flow.RerouteExec';
+
+        if (isRerouteNode) {
+            return this.createRerouteElement(node, el);
+        }
         
         // Apply classes: 'compact' for math nodes, 'expanded' for advanced view
-        el.className = `node ${node.hideHeader ? 'compact' : ''} ${node.showAdvanced ? 'expanded' : ''} ${isRerouteNode ? 'reroute' : ''}`;
+        el.className = `node ${node.hideHeader ? 'compact' : ''} ${node.showAdvanced ? 'expanded' : ''}`;
         el.id = `node-${node.id}`;
         
         // Positioning
@@ -92,6 +96,30 @@ export class NodeRenderer {
         return el;
     }
 
+    createRerouteElement(node, el) {
+        el.className = 'node reroute';
+        el.id = `node-${node.id}`;
+        el.style.left = `${node.x}px`;
+        el.style.top = `${node.y}px`;
+
+        const rerouteType = (node.outputs && node.outputs[0] && node.outputs[0].type)
+            || (node.inputs && node.inputs[0] && node.inputs[0].type)
+            || 'wildcard';
+        const typeDef = window.typeDefinitions[rerouteType] || window.typeDefinitions.wildcard || { color: '#fff' };
+        el.style.setProperty('--reroute-color', typeDef.color);
+
+        const dot = document.createElement('div');
+        dot.className = 'reroute-dot';
+        el.appendChild(dot);
+
+        const inPin = this.renderReroutePin(node.inputs[0], 'reroute-pin-in');
+        const outPin = this.renderReroutePin(node.outputs[0], 'reroute-pin-out');
+        if (inPin) el.appendChild(inPin);
+        if (outPin) el.appendChild(outPin);
+
+        return el;
+    }
+
     /**
      * Helper to create a column div.
      * @param {String} cls - CSS class name.
@@ -148,5 +176,21 @@ export class NodeRenderer {
             row.append(shape);
         }
         return row;
+    }
+
+    renderReroutePin(pin, sideClass) {
+        if (!pin) return null;
+
+        const shape = document.createElement('div');
+        shape.className = `pin ${pin.type} reroute-pin ${sideClass}`;
+        shape.dataset.node = pin.nodeId;
+        shape.dataset.index = pin.index;
+        shape.dataset.type = pin.direction;
+        shape.dataset.dataType = pin.dataType;
+        shape.dataset.id = pin.id;
+
+        const typeDef = window.typeDefinitions[pin.type] || { color: '#999' };
+        shape.style.setProperty('--pin-color', typeDef.color);
+        return shape;
     }
 }

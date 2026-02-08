@@ -91,26 +91,72 @@
 .node.expanded .advanced-arrow::after { transform: rotate(180deg); }
 
 .node.reroute {
-    min-width: 42px;
-    width: 42px !important;
-    border-radius: 999px;
+    min-width: 24px;
+    width: 24px !important;
+    height: 24px;
+    background: transparent;
+    border-radius: 50%;
+    box-shadow: none;
+    backdrop-filter: none;
 }
 
-.node.reroute .node-body {
-    padding: 8px 0;
-    grid-template-columns: auto auto;
-    column-gap: 8px;
-    align-items: center;
+.node.reroute:hover {
+    box-shadow: none;
 }
 
-.node.reroute .col-center {
-    display: none;
+.node.reroute.selected {
+    box-shadow: 0 0 0 2px var(--wire-highlight), 0 0 0 5px rgba(255,255,255,0.15);
 }
 
-.node.reroute .col-left {
-    padding-left: 8px;
+.node.reroute .reroute-dot {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--reroute-color, #ffffff);
+    border: 1px solid rgba(0, 0, 0, 0.55);
+    transform: translate(-50%, -50%);
+    filter: drop-shadow(0 0 6px var(--reroute-color, #ffffff));
 }
 
-.node.reroute .col-right {
-    padding-right: 8px;
+.node.reroute .reroute-pin {
+    position: absolute;
+    top: 50%;
+    width: 22px;
+    height: 22px;
+    transform: translateY(-50%);
+    opacity: 0;
+    border: none;
+    background: transparent;
+    margin: 0;
+    cursor: crosshair;
+    pointer-events: all;
+}
+
+.node.reroute .reroute-pin.exec {
+    clip-path: none;
+    border-radius: 0;
+}
+
+.node.reroute .reroute-pin:hover,
+.node.reroute .reroute-pin.snapped,
+.node.reroute .reroute-pin.connected {
+    transform: translateY(-50%);
+    box-shadow: none;
+    background: transparent !important;
+    border-color: transparent !important;
+}
+
+.node.reroute .reroute-pin::before {
+    inset: -6px;
+}
+
+.node.reroute .reroute-pin-in {
+    left: -11px;
+}
+
+.node.reroute .reroute-pin-out {
+    right: -11px;
 }

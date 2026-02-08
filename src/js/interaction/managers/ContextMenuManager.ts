@@ -327,12 +327,15 @@ export class ContextMenuManager {
         if (!list) return;
 
         const tmpl = entry.template;
+        const isRerouteAction = tmpl.functionId === 'Internal.AddRerouteNode';
         const li = document.createElement('li');
         // Add 'ctx-folder' class to indent items if they are inside a category
         li.className = `ctx-item ${isIndent ? 'ctx-folder' : ''}`;
         
         // Check if node is Flow (Exec) or Pure Data for visual hint
-        const isFlow = (tmpl.outputs || []).some(o => o.type === 'exec');
+        const isFlow = isRerouteAction
+            ? (entry.spawnDataType === 'exec')
+            : (tmpl.outputs || []).some(o => o.type === 'exec');
         li.innerHTML = `<span>${tmpl.name}</span> <span style="font-size:10px; opacity:0.5">${isFlow ? 'Flow' : 'Data'}</span>`;
         
         // Click -> Trigger Spawn Callback
@@ -347,7 +350,11 @@ export class ContextMenuManager {
                     spawnContext.preferredOutputIndex = entry.compatibility.index;
                 }
             }
-            this.callbacks.onSpawn(tmpl, this.activePos.x, this.activePos.y, spawnContext);
+            if (isRerouteAction && this.callbacks.onSpawnReroute) {
+                this.callbacks.onSpawnReroute(this.activePos.x, this.activePos.y, spawnContext);
+            } else {
+                this.callbacks.onSpawn(tmpl, this.activePos.x, this.activePos.y, spawnContext);
+            }
             this.hide();
         });
         list.appendChild(li);
@@ -389,6 +396,22 @@ export class ContextMenuManager {
                 score: contextualSpawn ? scoreTemplateForSpawn(template, spawnContext, compatibility) : 0
             });
         });
+
+        if (spawnContext) {
+            const rerouteActionName = 'Add Reroute Node';
+            if (!lower || rerouteActionName.toLowerCase().includes(lower)) {
+                entries.unshift({
+                    template: {
+                        name: rerouteActionName,
+                        category: spawnContext.dataType === 'exec' ? 'Flow Control' : 'Variables',
+                        functionId: 'Internal.AddRerouteNode'
+                    },
+                    compatibility: { index: 0 },
+                    spawnDataType: spawnContext.dataType || 'wildcard',
+                    score: 10000
+                });
+            }
+        }
 
         const shouldShowPaste = !spawnContext && !query;
         const options = {
