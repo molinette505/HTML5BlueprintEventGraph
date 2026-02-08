@@ -619,6 +619,7 @@ export class Editor {
                 node.customEventName = nodeData.customEventName;
             }
 
+            this._restoreDynamicPins(node, nodeData);
             this._restoreNodeState(node, nodeData);
             this.renderer.createNodeElement(node, (e, id) => this.interaction.handleNodeDown(e, id));
         });
@@ -732,6 +733,24 @@ export class Editor {
                 pin.value = savedPin.value;
                 if (pin.widget) pin.widget.value = savedPin.value;
             });
+        }
+    }
+
+    _restoreDynamicPins(node, nodeData) {
+        if (!node || !nodeData) return;
+        if (typeof node.addMakeArrayPin !== 'function') return;
+
+        const pinTypeCount = nodeData.pinTypes && Array.isArray(nodeData.pinTypes.inputs)
+            ? nodeData.pinTypes.inputs.length
+            : 0;
+        const savedInputCount = Array.isArray(nodeData.inputs) ? nodeData.inputs.length : 0;
+        const explicitCount = Number(nodeData.dynamicInputCount);
+        const requestedCount = Number.isFinite(explicitCount)
+            ? explicitCount
+            : Math.max(pinTypeCount, savedInputCount);
+
+        while (node.inputs.length < requestedCount) {
+            node.addMakeArrayPin();
         }
     }
 

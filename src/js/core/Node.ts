@@ -38,6 +38,8 @@ export class GraphNode {
         this.functionId = nodeTemplate.functionId || null;
         this.jsFunctionRef = window.FunctionRegistry ? window.FunctionRegistry[this.functionId] : null;
         this.executionResult = null; 
+        this.dynamicInputCount = 0;
+        this.arrayElementAllowedTypes = null;
 
         // Initialize Input Pins
         this.inputs = (nodeTemplate.inputs || []).map((pinDefinition, pinIndex) => {
@@ -48,6 +50,14 @@ export class GraphNode {
         this.outputs = (nodeTemplate.outputs || []).map((pinDefinition, pinIndex) => {
             return new Pin(this, pinIndex, 'output', pinDefinition);
         });
+
+        if (this.functionId === "Array.Make") {
+            this.dynamicInputCount = this.inputs.length;
+            const firstInput = this.inputs[0];
+            this.arrayElementAllowedTypes = firstInput && Array.isArray(firstInput.allowedTypes)
+                ? firstInput.allowedTypes.slice()
+                : null;
+        }
     }
 
     /**
@@ -63,7 +73,42 @@ export class GraphNode {
         if (inputPin.widget) {
             return inputPin.widget.value;
         }
-        return null; 
+        return inputPin.value;
+    }
+
+    reindexPins(direction) {
+        const pins = direction === "output" ? this.outputs : this.inputs;
+        pins.forEach((pin, index) => {
+            pin.index = index;
+        });
+    }
+
+    getArrayMakeElementType() {
+        if (this.functionId !== "Array.Make") return "wildcard";
+        const outputPin = this.outputs[0];
+        const typeName = outputPin && outputPin.type ? outputPin.type : "wildcard[]";
+        if (typeName === "wildcard[]") return "wildcard";
+        if (typeof typeName === "string" && typeName.endsWith("[]")) return typeName.slice(0, -2);
+        if (typeName === "wildcard") return "wildcard";
+        return typeName;
+    }
+
+    addMakeArrayPin() {
+        if (this.functionId !== "Array.Make") return null;
+
+        const nextIndex = this.inputs.length;
+        const elementType = this.getArrayMakeElementType();
+        const pinTemplate = {
+            name: `[${nextIndex}]`,
+            type: elementType,
+            allowedTypes: this.arrayElementAllowedTypes ? this.arrayElementAllowedTypes.slice() : null
+        };
+
+        const pin = new Pin(this, nextIndex, "input", pinTemplate);
+        this.inputs.push(pin);
+        this.dynamicInputCount = this.inputs.length;
+        this.reindexPins("input");
+        return pin;
     }
     
     /**
@@ -113,7 +158,7 @@ export class GraphNode {
      * @returns {Object} The serialized node data.
      */
     toJSON() {
-        return {
+        const result = {
             id: this.id,
             name: this.name,
             x: this.x,
@@ -133,5 +178,10 @@ export class GraphNode {
                 value: pin.widget ? pin.widget.value : pin.value 
             }))
         };
+
+        if (this.dynamicInputCount > 0) {
+            result.dynamicInputCount = this.dynamicInputCount;
+        }
+        return result;
     }
 }

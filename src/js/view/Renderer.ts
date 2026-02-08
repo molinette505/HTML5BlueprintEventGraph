@@ -26,6 +26,12 @@ export class Renderer {
             const node = this.graph.nodes.find(n => n.id === e.detail.nodeId);
             if (node) this.refreshNode(node);
         });
+        window.addEventListener('node-add-make-array-pin', (e) => {
+            const node = this.graph.nodes.find(n => n.id === e.detail.nodeId);
+            if (!node || typeof node.addMakeArrayPin !== "function") return;
+            node.addMakeArrayPin();
+            this.refreshNode(node);
+        });
     }
 
     /**

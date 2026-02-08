@@ -482,6 +482,21 @@ export class Simulation {
     }
 
     castValue(val, type) {
+        if (type === 'wildcard[]') {
+            if (Array.isArray(val)) return val;
+            if (val === null || val === undefined) return [];
+            return [val];
+        }
+
+        if (typeof type === 'string' && type.endsWith('[]')) {
+            const elementType = type.slice(0, -2);
+            if (Array.isArray(val)) {
+                return val.map((entry) => this.castValue(entry, elementType));
+            }
+            if (val === null || val === undefined) return [];
+            return [this.castValue(val, elementType)];
+        }
+
         if (val === null || val === undefined) return val;
         if (type === 'wildcard') return val;
 

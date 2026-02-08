@@ -9,10 +9,11 @@ import { WidgetRenderer } from "./view/WidgetRenderer";
 export class VariableManager {
     constructor(editor) {
         this.editor = editor;
-        this.variables = []; // { name, type, defaultValue }
+        this.variables = []; // { name, type, isArray, defaultValue }
         this.customEvents = []; // { name }
         this.runtimeValues = {};
         this.lastAddedType = 'boolean';
+        this.lastAddedIsArray = false;
         this.activeTouchVariableDrag = null;
         this.touchVariableDragThreshold = 8;
 
@@ -38,6 +39,90 @@ export class VariableManager {
         }
     }
 
+    getSupportedScalarTypes() {
+        return ['boolean', 'int', 'float', 'string', 'vector'];
+    }
+
+    getVariablePinType(variable) {
+        if (!variable) return 'wildcard';
+        return variable.isArray ? `${variable.type}[]` : variable.type;
+    }
+
+    cloneValue(value) {
+        if (typeof value === 'object' && value !== null) {
+            return JSON.parse(JSON.stringify(value));
+        }
+        return value;
+    }
+
+    coerceScalarValue(type, value) {
+        if (value === undefined || value === null) return this.getTypeDefault(type);
+        switch (type) {
+            case 'boolean':
+                return !!value;
+            case 'int': {
+                const parsedInt = Number.parseInt(value, 10);
+                return Number.isFinite(parsedInt) ? parsedInt : 0;
+            }
+            case 'float': {
+                const parsedFloat = Number.parseFloat(value);
+                return Number.isFinite(parsedFloat) ? parsedFloat : 0.0;
+            }
+            case 'string':
+                return String(value);
+            case 'vector':
+                if (typeof value === 'object' && value !== null) {
+                    const x = Number(value.x);
+                    const y = Number(value.y);
+                    const z = Number(value.z);
+                    return {
+                        x: Number.isFinite(x) ? x : 0,
+                        y: Number.isFinite(y) ? y : 0,
+                        z: Number.isFinite(z) ? z : 0
+                    };
+                }
+                return this.getTypeDefault('vector');
+            default:
+                return value;
+        }
+    }
+
+    normalizeVariableDefinition(rawVariable) {
+        const supportedTypes = this.getSupportedScalarTypes();
+        const variable = rawVariable && typeof rawVariable === 'object' ? rawVariable : {};
+        const rawType = String(variable.type || 'boolean');
+        const isArray = !!variable.isArray || rawType.endsWith('[]');
+        let scalarType = rawType.endsWith('[]') ? rawType.slice(0, -2) : rawType;
+        if (!supportedTypes.includes(scalarType)) scalarType = 'boolean';
+
+        let defaultValue;
+        if (isArray) {
+            const incoming = Array.isArray(variable.defaultValue) ? variable.defaultValue : [];
+            defaultValue = incoming.map((entry) => this.coerceScalarValue(scalarType, entry));
+        } else if (variable.defaultValue !== undefined) {
+            defaultValue = this.coerceScalarValue(scalarType, variable.defaultValue);
+        } else {
+            defaultValue = this.getTypeDefault(scalarType);
+        }
+
+        return {
+            name: String(variable.name || '').trim(),
+            type: scalarType,
+            isArray,
+            defaultValue
+        };
+    }
+
+    normalizeVariableDefaultValue(variable) {
+        if (!variable) return;
+        if (variable.isArray) {
+            const incoming = Array.isArray(variable.defaultValue) ? variable.defaultValue : [];
+            variable.defaultValue = incoming.map((entry) => this.coerceScalarValue(variable.type, entry));
+        } else {
+            variable.defaultValue = this.coerceScalarValue(variable.type, variable.defaultValue);
+        }
+    }
+
     serializeDefinitions() {
         return {
             customEvents: JSON.parse(JSON.stringify(this.customEvents || [])),
@@ -54,18 +139,15 @@ export class VariableManager {
             .filter((evt) => !!evt.name);
 
         this.variables = incomingVariables
-            .map((variable) => ({
-                name: String(variable && variable.name ? variable.name : "").trim(),
-                type: variable && variable.type ? variable.type : 'boolean',
-                defaultValue: variable && variable.defaultValue !== undefined
-                    ? variable.defaultValue
-                    : this.getTypeDefault(variable && variable.type ? variable.type : 'boolean')
-            }))
+            .map((variable) => this.normalizeVariableDefinition(variable))
             .filter((variable) => !!variable.name);
 
         this.lastAddedType = this.variables.length > 0
             ? this.variables[this.variables.length - 1].type
             : 'boolean';
+        this.lastAddedIsArray = this.variables.length > 0
+            ? !!this.variables[this.variables.length - 1].isArray
+            : false;
         this.renderList();
     }
 
@@ -230,11 +312,14 @@ export class VariableManager {
         const newVar = {
             name: name,
             type: selectedType,
+            isArray: this.variables.length > 0 ? !!this.lastAddedIsArray : false,
             defaultValue: this.getTypeDefault(selectedType)
         };
+        if (newVar.isArray) newVar.defaultValue = [];
 
         this.variables.push(newVar);
         this.lastAddedType = selectedType;
+        this.lastAddedIsArray = !!newVar.isArray;
         this.renderList();
     }
 
@@ -265,17 +350,53 @@ export class VariableManager {
         const v = this.variables.find(i => i.name === oldName);
         if(!v) return;
 
+        const previousName = v.name;
         v[key] = value;
         let shouldRenderList = false;
         
         if (key === 'type') {
-            v.defaultValue = this.getTypeDefault(value);
+            this.normalizeVariableDefaultValue(v);
             this.lastAddedType = value;
-            this.updateGraphNodes(v.name, value);
+            this.lastAddedIsArray = !!v.isArray;
+            this.updateGraphNodes(v.name, value, !!v.isArray);
+            shouldRenderList = true;
+        }
+
+        if (key === 'isArray') {
+            v.isArray = !!value;
+            if (v.isArray) {
+                if (!Array.isArray(v.defaultValue)) v.defaultValue = [];
+                v.defaultValue = v.defaultValue.map((entry) => this.coerceScalarValue(v.type, entry));
+            } else {
+                if (Array.isArray(v.defaultValue)) {
+                    v.defaultValue = v.defaultValue.length > 0
+                        ? this.coerceScalarValue(v.type, v.defaultValue[0])
+                        : this.getTypeDefault(v.type);
+                } else {
+                    v.defaultValue = this.coerceScalarValue(v.type, v.defaultValue);
+                }
+            }
+            this.lastAddedIsArray = v.isArray;
+            this.updateGraphNodes(v.name, v.type, !!v.isArray);
             shouldRenderList = true;
         }
 
         if (key === 'name') {
+            const nextName = String(value || '').trim();
+            if (!nextName || (nextName !== previousName && this.variables.some((candidate) => candidate !== v && candidate.name === nextName))) {
+                v.name = previousName;
+                shouldRenderList = true;
+            } else if (nextName !== previousName) {
+                v.name = nextName;
+                this.editor.graph.nodes.forEach((node) => {
+                    if (node.varName !== previousName) return;
+                    node.varName = nextName;
+                    node.name = node.functionId === "Variable.Set"
+                        ? `Set ${nextName}`
+                        : `Get ${nextName}`;
+                    this.editor.renderer.refreshNode(node);
+                });
+            }
             shouldRenderList = true;
         }
 
@@ -284,11 +405,12 @@ export class VariableManager {
         }
     }
 
-    updateGraphNodes(varName, newType) {
+    updateGraphNodes(varName, newType, isArray = false) {
         const graph = this.editor.graph;
         const renderer = this.editor.renderer;
         const color = this.getTypeColor(newType);
-        const defaultValue = this.getTypeDefault(newType);
+        const pinType = isArray ? `${newType}[]` : newType;
+        const defaultValue = isArray ? [] : this.getTypeDefault(newType);
 
         graph.nodes.forEach(node => {
             if (node.varName === varName) {
@@ -297,26 +419,30 @@ export class VariableManager {
 
                 if (node.functionId === "Variable.Get") {
                     if(node.outputs[0]) {
-                        node.outputs[0].type = newType;
-                        node.outputs[0].dataType = newType;
+                        node.outputs[0].isArray = isArray;
+                        node.outputs[0].setType(pinType);
+                        graph.disconnectPin(node.id, node.outputs[0].index, 'output');
                     }
                 } 
                 else if (node.functionId === "Variable.Set") {
                     if(node.inputs[1]) {
                         const pin = node.inputs[1];
-                        pin.type = newType;
-                        pin.dataType = newType;
+                        pin.isArray = isArray;
+                        pin.setType(pinType);
                         
-                        const config = this.getWidgetConfig(newType, defaultValue);
+                        const config = isArray ? null : this.getWidgetConfig(newType, defaultValue);
                         if (config) {
                             pin.widget = new Widget(config.type, config.value);
                         } else {
                             pin.widget = null;
+                            pin.value = this.cloneValue(defaultValue);
                         }
+                        graph.disconnectPin(node.id, pin.index, 'input');
                     }
                     if(node.outputs[1]) {
-                        node.outputs[1].type = newType;
-                        node.outputs[1].dataType = newType;
+                        node.outputs[1].isArray = isArray;
+                        node.outputs[1].setType(pinType);
+                        graph.disconnectPin(node.id, node.outputs[1].index, 'output');
                     }
                 }
                 renderer.refreshNode(node);
@@ -457,36 +583,113 @@ export class VariableManager {
                     });
                     typeSelect.onchange = (e) => this.updateVariable(v.name, 'type', e.target.value);
 
+                    const kindSelect = document.createElement('select');
+                    kindSelect.className = 'var-type';
+                    kindSelect.style.width = '92px';
+                    [
+                        { value: 'scalar', label: 'Variable' },
+                        { value: 'array', label: 'Array' }
+                    ].forEach((entry) => {
+                        const opt = document.createElement('option');
+                        opt.value = entry.value;
+                        opt.innerText = entry.label;
+                        if ((v.isArray ? 'array' : 'scalar') === entry.value) opt.selected = true;
+                        kindSelect.appendChild(opt);
+                    });
+                    kindSelect.onchange = (e) => this.updateVariable(v.name, 'isArray', e.target.value === 'array');
+
                     const defContainer = document.createElement('div');
                     defContainer.className = 'var-default';
                     defContainer.style.flexGrow = '1'; 
                     defContainer.style.display = 'flex';
                     defContainer.style.justifyContent = 'flex-start';
-                    
-                    const widgetConfig = this.getWidgetConfig(v.type, v.defaultValue);
-                    if (widgetConfig) {
-                        const widgetEl = this.widgetRenderer.render(widgetConfig, (newVal) => {
-                            this.updateVariable(v.name, 'defaultValue', newVal);
+                    defContainer.style.minWidth = '0';
+                    defContainer.style.flexDirection = 'column';
+                    defContainer.style.gap = '6px';
+
+                    if (v.isArray) {
+                        const arrayList = document.createElement('div');
+                        arrayList.className = 'var-array-list';
+
+                        if (!Array.isArray(v.defaultValue)) v.defaultValue = [];
+                        v.defaultValue.forEach((entryValue, entryIndex) => {
+                            const arrayRow = document.createElement('div');
+                            arrayRow.className = 'var-array-item';
+
+                            const indexLabel = document.createElement('span');
+                            indexLabel.className = 'var-array-index';
+                            indexLabel.innerText = `[${entryIndex}]`;
+
+                            const widgetConfig = this.getWidgetConfig(v.type, entryValue);
+                            let widgetEl = null;
+                            if (widgetConfig) {
+                                widgetEl = this.widgetRenderer.render(widgetConfig, (newVal) => {
+                                    const currentVar = this.variables.find((variable) => variable.name === v.name);
+                                    if (!currentVar || !Array.isArray(currentVar.defaultValue)) return;
+                                    currentVar.defaultValue[entryIndex] = this.coerceScalarValue(currentVar.type, newVal);
+                                });
+                            }
+                            if (!widgetEl) {
+                                const fallback = document.createElement('span');
+                                fallback.innerText = String(entryValue);
+                                widgetEl = fallback;
+                            }
+                            widgetEl.classList.add('var-array-widget');
+
+                            const removeElementBtn = document.createElement('button');
+                            removeElementBtn.type = 'button';
+                            removeElementBtn.className = 'var-array-remove';
+                            removeElementBtn.innerText = '×';
+                            removeElementBtn.onclick = () => {
+                                const currentVar = this.variables.find((variable) => variable.name === v.name);
+                                if (!currentVar || !Array.isArray(currentVar.defaultValue)) return;
+                                currentVar.defaultValue.splice(entryIndex, 1);
+                                this.renderList();
+                            };
+
+                            arrayRow.append(indexLabel, widgetEl, removeElementBtn);
+                            arrayList.appendChild(arrayRow);
                         });
-                        
-                        if (widgetEl) {
-                            if (v.type === 'string' || v.type === 'int' || v.type === 'float') {
-                                widgetEl.style.width = '60px'; 
-                                widgetEl.style.minWidth = '40px';
-                            } 
-                            else if (v.type === 'boolean') {
-                                widgetEl.style.width = 'auto';
-                            }
-                            else if (v.type === 'vector') {
-                                widgetEl.style.width = '100%';
-                                widgetEl.style.minWidth = '120px';
-                            }
+
+                        const addElementBtn = document.createElement('button');
+                        addElementBtn.type = 'button';
+                        addElementBtn.className = 'btn-small var-array-add';
+                        addElementBtn.innerText = '+ Elem';
+                        addElementBtn.onclick = () => {
+                            const currentVar = this.variables.find((variable) => variable.name === v.name);
+                            if (!currentVar) return;
+                            if (!Array.isArray(currentVar.defaultValue)) currentVar.defaultValue = [];
+                            currentVar.defaultValue.push(this.getTypeDefault(currentVar.type));
+                            this.renderList();
+                        };
+
+                        defContainer.append(arrayList, addElementBtn);
+                    } else {
+                        const widgetConfig = this.getWidgetConfig(v.type, v.defaultValue);
+                        if (widgetConfig) {
+                            const widgetEl = this.widgetRenderer.render(widgetConfig, (newVal) => {
+                                this.updateVariable(v.name, 'defaultValue', this.coerceScalarValue(v.type, newVal));
+                            });
                             
-                            defContainer.appendChild(widgetEl);
+                            if (widgetEl) {
+                                if (v.type === 'string' || v.type === 'int' || v.type === 'float') {
+                                    widgetEl.style.width = '60px'; 
+                                    widgetEl.style.minWidth = '40px';
+                                } 
+                                else if (v.type === 'boolean') {
+                                    widgetEl.style.width = 'auto';
+                                }
+                                else if (v.type === 'vector') {
+                                    widgetEl.style.width = '100%';
+                                    widgetEl.style.minWidth = '120px';
+                                }
+                                
+                                defContainer.appendChild(widgetEl);
+                            }
                         }
                     }
 
-                botRow.append(typeSelect, defContainer);
+                botRow.append(kindSelect, typeSelect, defContainer);
 
             col.append(topRow, botRow);
 
@@ -495,13 +698,13 @@ export class VariableManager {
                 e.dataTransfer.setData('application/json', JSON.stringify({
                     type: 'variable',
                     name: v.name,
-                    varType: v.type
+                    varType: this.getVariablePinType(v)
                 }));
             };
             row.addEventListener('touchstart', (e) => this._beginTouchVariableDrag(e, {
                 itemType: 'variable',
                 itemName: v.name,
-                itemSubType: v.type
+                itemSubType: this.getVariablePinType(v)
             }), { passive: true });
             row.addEventListener('touchmove', (e) => this._updateTouchVariableDrag(e), { passive: false });
             row.addEventListener('touchend', (e) => this._endTouchVariableDrag(e), { passive: false });
@@ -515,9 +718,7 @@ export class VariableManager {
     resetRuntime() {
         this.runtimeValues = {};
         this.variables.forEach(v => {
-            this.runtimeValues[v.name] = (typeof v.defaultValue === 'object' && v.defaultValue !== null) 
-                ? JSON.parse(JSON.stringify(v.defaultValue))
-                : v.defaultValue;
+            this.runtimeValues[v.name] = this.cloneValue(v.defaultValue);
         });
     }
 
@@ -533,7 +734,7 @@ export class VariableManager {
             varName: varName, // Ensure this is in template so copy/paste works immediately on creation
             inputs: [], 
             outputs: [
-                { name: v.name, type: v.type }
+                { name: v.name, type: this.getVariablePinType(v), isArray: !!v.isArray }
             ]
         };
     }
@@ -542,9 +743,9 @@ export class VariableManager {
         const v = this.variables.find(i => i.name === varName);
         if(!v) return null;
 
-        const widgetConfig = this.getWidgetConfig(v.type, v.defaultValue);
+        const widgetConfig = v.isArray ? null : this.getWidgetConfig(v.type, v.defaultValue);
         const widgetType = widgetConfig ? widgetConfig.type : null;
-        const widgetDefault = widgetConfig ? widgetConfig.value : this.getTypeDefault(v.type);
+        const widgetDefault = widgetConfig ? widgetConfig.value : (v.isArray ? [] : this.getTypeDefault(v.type));
 
         return {
             name: `Set ${v.name}`,
@@ -554,11 +755,11 @@ export class VariableManager {
             varName: varName, // Ensure this is in template
             inputs: [
                 { name: "Exec", type: "exec" },
-                { name: v.name, type: v.type, widget: widgetType, default: widgetDefault } 
+                { name: v.name, type: this.getVariablePinType(v), isArray: !!v.isArray, widget: widgetType, default: widgetDefault } 
             ],
             outputs: [
                 { name: "Out", type: "exec" },
-                { name: "", type: v.type } 
+                { name: "", type: this.getVariablePinType(v), isArray: !!v.isArray } 
             ]
         };
     }

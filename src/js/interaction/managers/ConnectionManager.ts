@@ -31,6 +31,7 @@ export class ConnectionManager {
             sourcePinIndex: this.dragWire.sourcePin,
             sourceType: this.dragWire.sourceType,
             dataType: this.dragWire.dataType,
+            isArray: !!this.dragWire.isArray,
             sourceNodeName: sourceNode ? sourceNode.name : null,
             sourcePinName: sourcePin ? sourcePin.name : null
         };
@@ -59,6 +60,7 @@ export class ConnectionManager {
         this.pendingSpawnWire = {
             sourceType: this.dragWire.sourceType,
             dataType: this.dragWire.dataType,
+            isArray: !!this.dragWire.isArray,
             startX: this.dragWire.startX,
             startY: this.dragWire.startY,
             endX,
@@ -103,7 +105,7 @@ export class ConnectionManager {
             let inputIndex = -1;
             if (
                 preferredInputIndex !== null &&
-                this._isInputCompatible(targetNode.inputs[preferredInputIndex], spawnContext.dataType)
+                this._isInputCompatible(targetNode.inputs[preferredInputIndex], spawnContext.dataType, !!spawnContext.isArray)
             ) {
                 inputIndex = preferredInputIndex;
             } else {
@@ -114,8 +116,8 @@ export class ConnectionManager {
             if (inputIndex < 0) return;
 
             const inputPin = targetNode.inputs[inputIndex];
-            if (inputPin && inputPin.type === 'wildcard' && spawnContext.dataType !== 'wildcard' && spawnContext.dataType !== 'exec') {
-                this._applyWildcardTypes(targetNode, spawnContext.dataType);
+            if (inputPin && this._isWildcardType(inputPin.type) && !this._isWildcardType(spawnContext.dataType) && spawnContext.dataType !== 'exec') {
+                this._applyWildcardTypes(targetNode, spawnContext.dataType, !!spawnContext.isArray);
                 this.renderer.refreshNode(targetNode);
             }
 
@@ -134,7 +136,7 @@ export class ConnectionManager {
             let outputIndex = -1;
             if (
                 preferredOutputIndex !== null &&
-                this._isOutputCompatible(targetNode.outputs[preferredOutputIndex], spawnContext.dataType)
+                this._isOutputCompatible(targetNode.outputs[preferredOutputIndex], spawnContext.dataType, !!spawnContext.isArray)
             ) {
                 outputIndex = preferredOutputIndex;
             } else {
@@ -145,8 +147,8 @@ export class ConnectionManager {
             if (outputIndex < 0) return;
 
             const outputPin = targetNode.outputs[outputIndex];
-            if (outputPin && outputPin.type === 'wildcard' && spawnContext.dataType !== 'wildcard' && spawnContext.dataType !== 'exec') {
-                this._applyWildcardTypes(targetNode, spawnContext.dataType);
+            if (outputPin && this._isWildcardType(outputPin.type) && !this._isWildcardType(spawnContext.dataType) && spawnContext.dataType !== 'exec') {
+                this._applyWildcardTypes(targetNode, spawnContext.dataType, !!spawnContext.isArray);
                 this.renderer.refreshNode(targetNode);
             }
 
@@ -186,6 +188,7 @@ export class ConnectionManager {
         const index = parseInt(pin.dataset.index);
         const type = pin.dataset.type; // 'input' or 'output'
         const dataType = pin.dataset.dataType;
+        const isArray = pin.dataset.isArray === 'true' || this._isArrayType(dataType);
         
         // --- SOCKET STEALING LOGIC ---
         // If the user clicks an input that is already occupied, we allow them to 
@@ -203,6 +206,7 @@ export class ConnectionManager {
                         sourcePin: conn.fromPin, 
                         sourceType: 'output',
                         dataType: conn.type, 
+                        isArray: this._isArrayType(conn.type),
                         startX: srcPos.x, startY: srcPos.y
                     };
                 }
@@ -219,6 +223,7 @@ export class ConnectionManager {
             sourcePin: index, 
             sourceType: type, 
             dataType: dataType,
+            isArray: isArray,
             // Map screen coordinates to the transformed graph space
             startX: (rect.left + rect.width/2 - cRect.left - this.graph.pan.x) / this.graph.scale,
             startY: (rect.top + rect.height/2 - cRect.top - this.graph.pan.y) / this.graph.scale
@@ -274,7 +279,8 @@ export class ConnectionManager {
             nodeId: parseInt(targetElement.dataset.node),
             index: parseInt(targetElement.dataset.index),
             type: targetElement.dataset.type,
-            dataType: targetElement.dataset.dataType
+            dataType: targetElement.dataset.dataType,
+            isArray: targetElement.dataset.isArray === 'true' || this._isArrayType(targetElement.dataset.dataType)
         };
 
         this.dragWire = null; // Reset dragging state immediately
@@ -287,19 +293,21 @@ export class ConnectionManager {
         // --- WILDCARD PROPAGATION ---
         // If one of the nodes is a generic "Wildcard" node (like a 'Print' node),
         // it adopts the data type of the node it is being connected to.
-        if (s.dataType !== 'wildcard' && t.dataType === 'wildcard') {
+        if (!this._isWildcardType(s.dataType) && this._isWildcardType(t.dataType)) {
             const targetNode = this.graph.nodes.find(n => n.id === t.nodeId);
             if (targetNode) {
-                this._applyWildcardTypes(targetNode, s.dataType);
+                this._applyWildcardTypes(targetNode, s.dataType, s.isArray);
                 t.dataType = s.dataType; 
+                t.isArray = this._isArrayType(s.dataType);
                 this.renderer.refreshNode(targetNode);
             }
         }
-        else if (s.dataType === 'wildcard' && t.dataType !== 'wildcard') {
+        else if (this._isWildcardType(s.dataType) && !this._isWildcardType(t.dataType)) {
             const sourceNode = this.graph.nodes.find(n => n.id === s.sourceNode);
             if (sourceNode) {
-                this._applyWildcardTypes(sourceNode, t.dataType);
+                this._applyWildcardTypes(sourceNode, t.dataType, t.isArray);
                 s.dataType = t.dataType; 
+                s.isArray = this._isArrayType(t.dataType);
                 this.renderer.refreshNode(sourceNode);
             }
         }
@@ -366,33 +374,67 @@ export class ConnectionManager {
         this.renderer.render();
     }
 
-    _applyWildcardTypes(node, newType) {
-        node.inputs.forEach(pin => { if (pin.type === 'wildcard') pin.setType(newType); });
-        node.outputs.forEach(pin => { if (pin.type === 'wildcard') pin.setType(newType); });
+    _applyWildcardTypes(node, newType, newTypeIsArray = false) {
+        const inferredArray = newTypeIsArray || this._isArrayType(newType);
+        const elementType = this._getElementType(newType);
+        const arrayType = this._ensureArrayType(newType);
+
+        node.inputs.forEach((pin) => {
+            if (!this._isWildcardType(pin.type)) return;
+            const mirrorsArray = Array.isArray(pin.allowedTypes) && pin.allowedTypes.includes('wildcard');
+            const shouldUseArrayType = !!pin.isArray || this._isArrayType(pin.type) || (inferredArray && mirrorsArray);
+            pin.setType(shouldUseArrayType ? arrayType : elementType);
+        });
+        node.outputs.forEach((pin) => {
+            if (!this._isWildcardType(pin.type)) return;
+            const mirrorsArray = Array.isArray(pin.allowedTypes) && pin.allowedTypes.includes('wildcard');
+            const shouldUseArrayType = !!pin.isArray || this._isArrayType(pin.type) || (inferredArray && mirrorsArray);
+            pin.setType(shouldUseArrayType ? arrayType : elementType);
+        });
     }
 
-    _isInputCompatible(inputPin, sourceType) {
+    _isInputCompatible(inputPin, sourceType, sourceIsArray = false) {
         if (!inputPin) return false;
         if (sourceType === 'exec') return inputPin.type === 'exec';
         if (inputPin.type === 'exec') return false;
-        if (sourceType === 'wildcard') return true;
-        if (inputPin.type === sourceType) return true;
-        if (inputPin.type === 'wildcard') {
-            return !Array.isArray(inputPin.allowedTypes) || inputPin.allowedTypes.includes(sourceType);
+        const srcArray = sourceIsArray || this._isArrayType(sourceType);
+        const pinArray = !!inputPin.isArray || this._isArrayType(inputPin.type);
+        if (this._isWildcardType(sourceType)) {
+            if (sourceType === 'wildcard[]' && !pinArray) return false;
+            if (sourceType === 'wildcard' && srcArray !== pinArray) return false;
+            return true;
         }
-        return Array.isArray(inputPin.allowedTypes) && inputPin.allowedTypes.includes(sourceType);
+        if (inputPin.type === sourceType) return true;
+        if (this._isWildcardType(inputPin.type)) {
+            const mirrorsArray = Array.isArray(inputPin.allowedTypes) && inputPin.allowedTypes.includes('wildcard');
+            if (!mirrorsArray && (inputPin.type === 'wildcard[]' || pinArray) !== srcArray) return false;
+            if (!Array.isArray(inputPin.allowedTypes)) return true;
+            return inputPin.allowedTypes.includes(this._getElementType(sourceType));
+        }
+        if (pinArray !== srcArray) return false;
+        return Array.isArray(inputPin.allowedTypes) && inputPin.allowedTypes.includes(this._getElementType(sourceType));
     }
 
-    _isOutputCompatible(outputPin, targetType) {
+    _isOutputCompatible(outputPin, targetType, targetIsArray = false) {
         if (!outputPin) return false;
         if (targetType === 'exec') return outputPin.type === 'exec';
         if (outputPin.type === 'exec') return false;
-        if (targetType === 'wildcard') return true;
-        if (outputPin.type === targetType) return true;
-        if (outputPin.type === 'wildcard') {
-            return !Array.isArray(outputPin.allowedTypes) || outputPin.allowedTypes.includes(targetType);
+        const targetArray = targetIsArray || this._isArrayType(targetType);
+        const pinArray = !!outputPin.isArray || this._isArrayType(outputPin.type);
+        if (this._isWildcardType(targetType)) {
+            if (targetType === 'wildcard[]' && !pinArray) return false;
+            if (targetType === 'wildcard' && targetArray !== pinArray) return false;
+            return true;
         }
-        return Array.isArray(outputPin.allowedTypes) && outputPin.allowedTypes.includes(targetType);
+        if (outputPin.type === targetType) return true;
+        if (this._isWildcardType(outputPin.type)) {
+            const mirrorsArray = Array.isArray(outputPin.allowedTypes) && outputPin.allowedTypes.includes('wildcard');
+            if (!mirrorsArray && (outputPin.type === 'wildcard[]' || pinArray) !== targetArray) return false;
+            if (!Array.isArray(outputPin.allowedTypes)) return true;
+            return outputPin.allowedTypes.includes(this._getElementType(targetType));
+        }
+        if (pinArray !== targetArray) return false;
+        return Array.isArray(outputPin.allowedTypes) && outputPin.allowedTypes.includes(this._getElementType(targetType));
     }
 
     _findBestSnapTarget(mx, my) {
@@ -460,14 +502,14 @@ export class ConnectionManager {
             const targetNode = this.graph.nodes.find(n => n.id === target.nodeId);
             const inputPin = targetNode && targetNode.inputs ? targetNode.inputs[target.index] : null;
             if (!inputPin) return false;
-            if (this._isInputCompatible(inputPin, source.dataType)) return true;
+            if (this._isInputCompatible(inputPin, source.dataType, !!source.isArray)) return true;
             return this._hasConversion(source.dataType, target.dataType);
         }
 
         const outputNode = this.graph.nodes.find(n => n.id === target.nodeId);
         const outputPin = outputNode && outputNode.outputs ? outputNode.outputs[target.index] : null;
         if (!outputPin) return false;
-        if (this._isOutputCompatible(outputPin, source.dataType)) return true;
+        if (this._isOutputCompatible(outputPin, source.dataType, !!source.isArray)) return true;
         return this._hasConversion(target.dataType, source.dataType);
     }
 
@@ -475,7 +517,27 @@ export class ConnectionManager {
         if (!fromType || !toType) return false;
         if (fromType === toType) return false;
         if (fromType === 'exec' || toType === 'exec') return false;
+        if (this._isArrayType(fromType) || this._isArrayType(toType)) return false;
         const key = `${fromType}->${toType}`;
         return !!(window.nodeConversions && window.nodeConversions[key]);
+    }
+
+    _isArrayType(typeName) {
+        return typeof typeName === 'string' && typeName.endsWith('[]');
+    }
+
+    _isWildcardType(typeName) {
+        return typeName === 'wildcard' || typeName === 'wildcard[]';
+    }
+
+    _getElementType(typeName) {
+        if (this._isArrayType(typeName)) return typeName.slice(0, -2);
+        return typeName;
+    }
+
+    _ensureArrayType(typeName) {
+        if (this._isArrayType(typeName)) return typeName;
+        const element = this._getElementType(typeName);
+        return `${element}[]`;
     }
 }

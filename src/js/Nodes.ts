@@ -1,3 +1,5 @@
+const arrayElementTypes = ["boolean", "float", "string", "vector", "rotator", "transform", "color", "int", "class", "object"];
+
 export const globalNodes = [
     // --- EVENTS ---
     {
@@ -484,6 +486,180 @@ export const globalNodes = [
         "functionId": "Conv.VectorToString",
         "inputs": [{"name": "Vec", "type": "vector"}],
         "outputs": [{"name": "String", "type": "string"}]
+    },
+
+    // --- ARRAYS ---
+    {
+        "name": "Make Array",
+        "category": "Arrays",
+        "color": "var(--n-pure)",
+        "functionId": "Array.Make",
+        "inputs": [
+            {
+                "name": "[0]",
+                "type": "wildcard",
+                "allowedTypes": arrayElementTypes
+            }
+        ],
+        "outputs": [
+            {
+                "name": "Array",
+                "type": "wildcard[]",
+                "isArray": true,
+                "allowedTypes": arrayElementTypes
+            }
+        ]
+    },
+    {
+        "name": "Array Get",
+        "category": "Arrays",
+        "color": "var(--n-pure)",
+        "functionId": "Array.Get",
+        "inputs": [
+            { "name": "Array", "type": "wildcard[]", "isArray": true, "allowedTypes": arrayElementTypes },
+            { "name": "Index", "type": "int", "default": 0 }
+        ],
+        "outputs": [
+            { "name": "Item", "type": "wildcard", "allowedTypes": arrayElementTypes }
+        ]
+    },
+    {
+        "name": "Array Contains",
+        "category": "Arrays",
+        "color": "var(--n-pure)",
+        "functionId": "Array.Contains",
+        "inputs": [
+            { "name": "Array", "type": "wildcard[]", "isArray": true, "allowedTypes": arrayElementTypes },
+            { "name": "Item", "type": "wildcard", "allowedTypes": arrayElementTypes }
+        ],
+        "outputs": [
+            { "name": "Result", "type": "boolean" }
+        ]
+    },
+    {
+        "name": "Array Find",
+        "category": "Arrays",
+        "color": "var(--n-pure)",
+        "functionId": "Array.Find",
+        "inputs": [
+            { "name": "Array", "type": "wildcard[]", "isArray": true, "allowedTypes": arrayElementTypes },
+            { "name": "Item", "type": "wildcard", "allowedTypes": arrayElementTypes }
+        ],
+        "outputs": [
+            { "name": "Index", "type": "int" }
+        ]
+    },
+    {
+        "name": "Array Last Index",
+        "category": "Arrays",
+        "color": "var(--n-pure)",
+        "functionId": "Array.LastIndex",
+        "inputs": [
+            { "name": "Array", "type": "wildcard[]", "isArray": true, "allowedTypes": arrayElementTypes }
+        ],
+        "outputs": [
+            { "name": "Index", "type": "int" }
+        ]
+    },
+    {
+        "name": "Array Length",
+        "category": "Arrays",
+        "color": "var(--n-pure)",
+        "functionId": "Array.Length",
+        "inputs": [
+            { "name": "Array", "type": "wildcard[]", "isArray": true, "allowedTypes": arrayElementTypes }
+        ],
+        "outputs": [
+            { "name": "Length", "type": "int" }
+        ]
+    },
+    {
+        "name": "Array Add",
+        "category": "Arrays",
+        "color": "var(--n-func)",
+        "functionId": "Array.Add",
+        "inputs": [
+            { "name": "Exec", "type": "exec" },
+            { "name": "Target Array", "type": "wildcard[]", "isArray": true, "allowedTypes": arrayElementTypes },
+            { "name": "Item", "type": "wildcard", "allowedTypes": arrayElementTypes }
+        ],
+        "outputs": [
+            { "name": "Out", "type": "exec" },
+            { "name": "Index", "type": "int" }
+        ]
+    },
+    {
+        "name": "Array Clear",
+        "category": "Arrays",
+        "color": "var(--n-func)",
+        "functionId": "Array.Clear",
+        "inputs": [
+            { "name": "Exec", "type": "exec" },
+            { "name": "Target Array", "type": "wildcard[]", "isArray": true, "allowedTypes": arrayElementTypes }
+        ],
+        "outputs": [
+            { "name": "Out", "type": "exec" }
+        ]
+    },
+    {
+        "name": "Array Insert",
+        "category": "Arrays",
+        "color": "var(--n-func)",
+        "functionId": "Array.Insert",
+        "inputs": [
+            { "name": "Exec", "type": "exec" },
+            { "name": "Target Array", "type": "wildcard[]", "isArray": true, "allowedTypes": arrayElementTypes },
+            { "name": "Item", "type": "wildcard", "allowedTypes": arrayElementTypes },
+            { "name": "Index", "type": "int", "default": 0 }
+        ],
+        "outputs": [
+            { "name": "Out", "type": "exec" }
+        ]
+    },
+    {
+        "name": "Array Remove Index",
+        "category": "Arrays",
+        "color": "var(--n-func)",
+        "functionId": "Array.RemoveIndex",
+        "inputs": [
+            { "name": "Exec", "type": "exec" },
+            { "name": "Target Array", "type": "wildcard[]", "isArray": true, "allowedTypes": arrayElementTypes },
+            { "name": "Index", "type": "int", "default": 0 }
+        ],
+        "outputs": [
+            { "name": "Out", "type": "exec" }
+        ]
+    },
+    {
+        "name": "Array Remove Item",
+        "category": "Arrays",
+        "color": "var(--n-func)",
+        "functionId": "Array.RemoveItem",
+        "inputs": [
+            { "name": "Exec", "type": "exec" },
+            { "name": "Target Array", "type": "wildcard[]", "isArray": true, "allowedTypes": arrayElementTypes },
+            { "name": "Item", "type": "wildcard", "allowedTypes": arrayElementTypes }
+        ],
+        "outputs": [
+            { "name": "Out", "type": "exec" },
+            { "name": "Removed", "type": "boolean" }
+        ]
+    },
+    {
+        "name": "Set Array Elem",
+        "category": "Arrays",
+        "color": "var(--n-func)",
+        "functionId": "Array.SetElem",
+        "inputs": [
+            { "name": "Exec", "type": "exec" },
+            { "name": "Target Array", "type": "wildcard[]", "isArray": true, "allowedTypes": arrayElementTypes },
+            { "name": "Index", "type": "int", "default": 0 },
+            { "name": "Item", "type": "wildcard", "allowedTypes": arrayElementTypes },
+            { "name": "Size to Fit", "type": "boolean", "default": false }
+        ],
+        "outputs": [
+            { "name": "Out", "type": "exec" }
+        ]
     },
 
     // --- GAMEPLAY EXAMPLES ---

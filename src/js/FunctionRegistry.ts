@@ -107,6 +107,14 @@ export const FunctionRegistry = {
         "Conv.IntToString": (inputs, result) => `${inputs[0]} ➞ "${result}"`,
         "Conv.BoolToString": (inputs, result) => `${inputs[0]} ➞ "${result}"`,
         "Conv.VectorToString": (inputs, result) => `Vec ➞ "${result}"`,
+        "Array.Length": (inputs, result) => `Length(${formatArrayForDisplay(inputs[0])}) = ${result}`,
+        "Array.LastIndex": (inputs, result) => `LastIndex(${formatArrayForDisplay(inputs[0])}) = ${result}`,
+        "Array.Contains": (inputs, result) => `Contains(${formatValueForDisplay(inputs[1])}) = ${formatBoolean(result)}`,
+        "Array.Find": (inputs, result) => `Find(${formatValueForDisplay(inputs[1])}) = ${result}`,
+        "Array.Get": (inputs, result) => `Get[${formatValueForDisplay(inputs[1])}] = ${formatValueForDisplay(result)}`,
+        "Array.Add": (inputs, result) => `Add(${formatValueForDisplay(inputs[1])}) -> ${result}`,
+        "Array.RemoveItem": (inputs, result) => `Remove Item = ${formatBoolean(result)}`,
+        "Array.SetElem": (inputs, result) => `Set[${formatValueForDisplay(inputs[1])}]`,
 
         // Variable Accessors (Visualizer needs the Node instance to read 'varName')
         "Variable.Get": (inputs, result, node) => `${node.varName} = ${formatValueForDisplay(result)}`,
@@ -254,6 +262,80 @@ export const FunctionRegistry = {
     "Conv.VectorToString": (vector) => {
         if (!vector) return "X=0.000 Y=0.000 Z=0.000";
         return `X=${vector.x.toFixed(3)} Y=${vector.y.toFixed(3)} Z=${vector.z.toFixed(3)}`;
+    },
+
+    // Arrays
+    "Array.Make": (...items) => items.map((item) => cloneDeep(item)),
+    "Array.Get": (targetArray, indexValue) => {
+        const array = asArray(targetArray);
+        const index = Math.floor(coerceNumber(indexValue));
+        if (index < 0 || index >= array.length) return null;
+        return cloneDeep(array[index]);
+    },
+    "Array.Add": (targetArray, itemValue) => {
+        const array = asArray(targetArray);
+        array.push(cloneDeep(itemValue));
+        return array.length - 1;
+    },
+    "Array.Clear": (targetArray) => {
+        const array = asArray(targetArray);
+        array.length = 0;
+        return 0;
+    },
+    "Array.Contains": (targetArray, itemValue) => {
+        const array = asArray(targetArray);
+        return array.some((entry) => areValuesDeeplyEqual(entry, itemValue));
+    },
+    "Array.Find": (targetArray, itemValue) => {
+        const array = asArray(targetArray);
+        return array.findIndex((entry) => areValuesDeeplyEqual(entry, itemValue));
+    },
+    "Array.Insert": (targetArray, itemValue, indexValue) => {
+        const array = asArray(targetArray);
+        const rawIndex = Math.floor(coerceNumber(indexValue));
+        const index = Math.max(0, Math.min(rawIndex, array.length));
+        array.splice(index, 0, cloneDeep(itemValue));
+        return index;
+    },
+    "Array.LastIndex": (targetArray) => {
+        const array = asArray(targetArray);
+        return array.length - 1;
+    },
+    "Array.Length": (targetArray) => {
+        const array = asArray(targetArray);
+        return array.length;
+    },
+    "Array.RemoveIndex": (targetArray, indexValue) => {
+        const array = asArray(targetArray);
+        const index = Math.floor(coerceNumber(indexValue));
+        if (index < 0 || index >= array.length) return false;
+        array.splice(index, 1);
+        return true;
+    },
+    "Array.RemoveItem": (targetArray, itemValue) => {
+        const array = asArray(targetArray);
+        const foundIndex = array.findIndex((entry) => areValuesDeeplyEqual(entry, itemValue));
+        if (foundIndex < 0) return false;
+        array.splice(foundIndex, 1);
+        return true;
+    },
+    "Array.SetElem": (targetArray, indexValue, itemValue, sizeToFitValue) => {
+        const array = asArray(targetArray);
+        const index = Math.floor(coerceNumber(indexValue));
+        const sizeToFit = !!sizeToFitValue;
+        if (index < 0) return false;
+
+        if (index >= array.length) {
+            if (!sizeToFit) return false;
+            while (array.length < index) {
+                array.push(null);
+            }
+            array.push(cloneDeep(itemValue));
+            return true;
+        }
+
+        array[index] = cloneDeep(itemValue);
+        return true;
     }
 };
 
@@ -269,6 +351,10 @@ window.FunctionRegistry = FunctionRegistry;
  * @returns {String} The formatted string.
  */
 function formatValueForDisplay(value) {
+    if (Array.isArray(value)) {
+        return formatArrayForDisplay(value);
+    }
+
     // Format Vectors
     if (typeof value === 'object' && value !== null && 'x' in value) {
         // Parse float to remove trailing zeros (e.g. 5.0 -> 5)
@@ -286,6 +372,26 @@ function formatValueForDisplay(value) {
 
 function formatBoolean(value) {
     return value ? "true" : "false";
+}
+
+function formatArrayForDisplay(arrayValue) {
+    const array = Array.isArray(arrayValue) ? arrayValue : [];
+    if (array.length === 0) return "[]";
+    const shown = array.slice(0, 3).map((entry) => formatValueForDisplay(entry));
+    const suffix = array.length > 3 ? ", ..." : "";
+    return `[${shown.join(", ")}${suffix}]`;
+}
+
+function cloneDeep(value) {
+    if (typeof value === "object" && value !== null) {
+        return JSON.parse(JSON.stringify(value));
+    }
+    return value;
+}
+
+function asArray(value) {
+    if (Array.isArray(value)) return value;
+    return [];
 }
 
 function coerceNumber(value) {

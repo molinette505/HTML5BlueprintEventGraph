@@ -129,14 +129,28 @@ const getAllowedTypes = (pinDefinition) => {
     return pinDefinition.allowedTypes;
 };
 
+const isArrayType = (typeName) => typeof typeName === "string" && typeName.endsWith("[]");
+
+const isWildcardType = (typeName) => typeName === "wildcard" || typeName === "wildcard[]";
+
+const getElementType = (typeName) => {
+    if (isArrayType(typeName)) return typeName.slice(0, -2);
+    if (typeName === "wildcard[]") return "wildcard";
+    return typeName;
+};
+
 const evaluateDataInputCompatibility = (inputPin, sourceType) => {
     if (!inputPin || inputPin.type === "exec") return null;
 
     const allowedTypes = getAllowedTypes(inputPin);
     const inputType = inputPin.type;
+    const sourceIsArray = isArrayType(sourceType);
+    const inputIsArray = !!inputPin.isArray || isArrayType(inputType);
 
-    if (sourceType === "wildcard") {
-        if (inputType === "wildcard") return { score: 150, kind: "wildcard-wildcard" };
+    if (sourceType === "wildcard" || sourceType === "wildcard[]") {
+        if (inputType === sourceType) return { score: 150, kind: "wildcard-wildcard" };
+        if (isWildcardType(inputType) && inputIsArray === sourceIsArray) return { score: 140, kind: "wildcard-compatible" };
+        if (inputIsArray !== sourceIsArray) return null;
         return { score: 80, kind: "wildcard-generic" };
     }
 
@@ -144,12 +158,23 @@ const evaluateDataInputCompatibility = (inputPin, sourceType) => {
         return { score: 220, kind: "exact" };
     }
 
-    if (inputType === "wildcard" && (!allowedTypes || allowedTypes.includes(sourceType))) {
-        return { score: 180, kind: "wildcard" };
+    if (isWildcardType(inputType)) {
+        const mirrorsArray = Array.isArray(allowedTypes) && allowedTypes.includes("wildcard");
+        if (!mirrorsArray && inputIsArray !== sourceIsArray) return null;
+        if (!allowedTypes || allowedTypes.includes(getElementType(sourceType))) {
+            return { score: 180, kind: "wildcard" };
+        }
+        return null;
+    }
+
+    if (inputIsArray !== sourceIsArray) return null;
+
+    if (allowedTypes && allowedTypes.includes(getElementType(sourceType))) {
+        return { score: 140, kind: "allowed" };
     }
 
     if (allowedTypes && allowedTypes.includes(sourceType)) {
-        return { score: 140, kind: "allowed" };
+        return { score: 180, kind: "wildcard" };
     }
 
     return null;
@@ -192,9 +217,13 @@ const evaluateDataOutputCompatibility = (outputPin, targetType) => {
 
     const allowedTypes = getAllowedTypes(outputPin);
     const outputType = outputPin.type;
+    const targetIsArray = isArrayType(targetType);
+    const outputIsArray = !!outputPin.isArray || isArrayType(outputType);
 
-    if (targetType === "wildcard") {
-        if (outputType === "wildcard") return { score: 150, kind: "wildcard-wildcard" };
+    if (targetType === "wildcard" || targetType === "wildcard[]") {
+        if (outputType === targetType) return { score: 150, kind: "wildcard-wildcard" };
+        if (isWildcardType(outputType) && outputIsArray === targetIsArray) return { score: 140, kind: "wildcard-compatible" };
+        if (outputIsArray !== targetIsArray) return null;
         return { score: 80, kind: "wildcard-generic" };
     }
 
@@ -202,12 +231,23 @@ const evaluateDataOutputCompatibility = (outputPin, targetType) => {
         return { score: 220, kind: "exact" };
     }
 
-    if (outputType === "wildcard" && (!allowedTypes || allowedTypes.includes(targetType))) {
-        return { score: 180, kind: "wildcard" };
+    if (isWildcardType(outputType)) {
+        const mirrorsArray = Array.isArray(allowedTypes) && allowedTypes.includes("wildcard");
+        if (!mirrorsArray && outputIsArray !== targetIsArray) return null;
+        if (!allowedTypes || allowedTypes.includes(getElementType(targetType))) {
+            return { score: 180, kind: "wildcard" };
+        }
+        return null;
+    }
+
+    if (outputIsArray !== targetIsArray) return null;
+
+    if (allowedTypes && allowedTypes.includes(getElementType(targetType))) {
+        return { score: 140, kind: "allowed" };
     }
 
     if (allowedTypes && allowedTypes.includes(targetType)) {
-        return { score: 140, kind: "allowed" };
+        return { score: 130, kind: "allowed-exact-string" };
     }
 
     return null;

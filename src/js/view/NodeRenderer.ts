@@ -71,6 +71,32 @@ export class NodeRenderer {
             if (!p.advanced || node.showAdvanced) right.appendChild(this.renderPin(p));
         });
 
+        if (node.functionId === "Array.Make") {
+            const addPinRow = document.createElement('div');
+            addPinRow.className = 'pin-row make-array-add-row';
+
+            const addPinBtn = document.createElement('button');
+            addPinBtn.type = 'button';
+            addPinBtn.className = 'make-array-add-pin';
+            addPinBtn.innerText = 'Add pin +';
+            addPinBtn.addEventListener('mousedown', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                window.dispatchEvent(new CustomEvent('node-add-make-array-pin', { detail: { nodeId: node.id } }));
+            });
+            addPinBtn.addEventListener('touchstart', (event) => {
+                event.stopPropagation();
+            }, { passive: true });
+            addPinBtn.addEventListener('touchend', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                window.dispatchEvent(new CustomEvent('node-add-make-array-pin', { detail: { nodeId: node.id } }));
+            }, { passive: false });
+
+            addPinRow.appendChild(addPinBtn);
+            right.appendChild(addPinRow);
+        }
+
         body.append(left, center, right);
         el.appendChild(body);
 
@@ -153,6 +179,7 @@ export class NodeRenderer {
         shape.dataset.type = pin.direction;
         shape.dataset.dataType = pin.dataType;
         shape.dataset.id = pin.id;
+        shape.dataset.isArray = pin.isArray ? 'true' : 'false';
 
         // Apply Data Type Color
         const typeDef = window.typeDefinitions[pin.type] || { color: '#999' };
@@ -192,6 +219,7 @@ export class NodeRenderer {
         shape.dataset.type = pin.direction;
         shape.dataset.dataType = pin.dataType;
         shape.dataset.id = pin.id;
+        shape.dataset.isArray = pin.isArray ? 'true' : 'false';
 
         const typeDef = window.typeDefinitions[pin.type] || { color: '#999' };
         shape.style.setProperty('--pin-color', typeDef.color);

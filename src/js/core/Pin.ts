@@ -23,6 +23,7 @@ export class Pin {
         this.name = pinTemplate.name;
         this.type = pinTemplate.type;
         this.dataType = pinTemplate.type; // Tracks the current type (mutable for generic pins)
+        this.isArray = !!pinTemplate.isArray;
         
         this.advanced = pinTemplate.advanced || false;
         this.allowedTypes = pinTemplate.allowedTypes || null; 
@@ -41,6 +42,12 @@ export class Pin {
      * @param {Object} pinTemplate - The configuration object for the pin.
      */
     initializeWidget(pinTemplate) {
+        if (this.isArray) {
+            this.widget = null;
+            this.value = this.resolveDefaultValue(this.type, pinTemplate ? pinTemplate.default : undefined);
+            return;
+        }
+
         // Check if there is a global definition for this type that specifies a default widget
         const globalTypeDefinition = window.typeDefinitions ? window.typeDefinitions[this.type] : null;
         
@@ -67,8 +74,18 @@ export class Pin {
      * @param {String} newDataType - The new data type identifier.
      */
     setType(newDataType) {
-        this.type = newDataType;
-        this.dataType = newDataType;
+        let resolvedType = newDataType;
+        if (typeof resolvedType === 'string') {
+            if (this.isArray && resolvedType !== 'wildcard[]' && resolvedType !== 'wildcard' && !resolvedType.endsWith('[]')) {
+                resolvedType = `${resolvedType}[]`;
+            }
+            if (!this.isArray && resolvedType.endsWith('[]')) {
+                resolvedType = resolvedType.slice(0, -2);
+            }
+        }
+
+        this.type = resolvedType;
+        this.dataType = resolvedType;
         
         if (this.direction === 'input') {
             // Re-run widget initialization with null template to force type-based defaults
@@ -87,6 +104,9 @@ export class Pin {
     resolveDefaultValue(typeIdentifier, manualDefaultValue) {
         // If a specific default was provided in the template, use it.
         if (manualDefaultValue !== undefined) return manualDefaultValue;
+
+        if (typeof typeIdentifier === 'string' && typeIdentifier.endsWith('[]')) return [];
+        if (this.isArray) return [];
         
         // Otherwise, return a safe default for the specific type
         switch (typeIdentifier) {

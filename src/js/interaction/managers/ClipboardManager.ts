@@ -106,6 +106,7 @@ export class ClipboardManager {
                 idMap.set(nodeData.id, newNode.id);
 
                 // Restore dynamic state (pin types and widget inputs)
+                this._restoreDynamicPins(newNode, nodeData);
                 this._restoreNodeState(newNode, nodeData);
                 
                 this.renderer.createNodeElement(newNode);
@@ -173,6 +174,24 @@ export class ClipboardManager {
                     if (realPin.widget) realPin.widget.value = savedPin.value;
                 }
             });
+        }
+    }
+
+    _restoreDynamicPins(newNode, nodeData) {
+        if (!newNode || !nodeData) return;
+        if (typeof newNode.addMakeArrayPin !== "function") return;
+
+        const pinTypeCount = nodeData.pinTypes && Array.isArray(nodeData.pinTypes.inputs)
+            ? nodeData.pinTypes.inputs.length
+            : 0;
+        const savedInputCount = Array.isArray(nodeData.inputs) ? nodeData.inputs.length : 0;
+        const explicitCount = Number(nodeData.dynamicInputCount);
+        const requestedCount = Number.isFinite(explicitCount)
+            ? explicitCount
+            : Math.max(pinTypeCount, savedInputCount);
+
+        while (newNode.inputs.length < requestedCount) {
+            newNode.addMakeArrayPin();
         }
     }
 
