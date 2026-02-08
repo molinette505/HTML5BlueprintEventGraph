@@ -33,7 +33,7 @@ export class Simulation {
         this.purePolicies = {
             "default": (node, ctx, item, currentRunId) => this.runDefaultPure(node, ctx, item, currentRunId)
         };
-        this.postInputSettleDelayMs = 140;
+        this.postInputSettleDelayMs = 220;
     }
 
     initialize() {
@@ -314,10 +314,13 @@ export class Simulation {
             if (this.runInstanceId !== currentRunId) return;
         }
 
-        const hasDataInputs = item.node && Array.isArray(item.node.inputs)
-            ? item.node.inputs.some(pin => pin.type !== 'exec')
+        const hasConnectedDataInputs = item.node && Array.isArray(item.node.inputs)
+            ? item.node.inputs.some(pin => {
+                if (pin.type === 'exec') return false;
+                return this.graph.connections.some(c => c.toNode === item.node.id && c.toPin === pin.index);
+            })
             : false;
-        if (hasDataInputs && !item.postInputSettleDone) {
+        if (hasConnectedDataInputs && !item.postInputSettleDone) {
             item.postInputSettleDone = true;
             await new Promise(r => setTimeout(r, this.postInputSettleDelayMs));
             if (this.runInstanceId !== currentRunId) return;
