@@ -14,7 +14,7 @@ export class Connection {
      * @param {Number} targetPinIndex - The index of the specific input pin on the target Node.
      * @param {String} connectionType - Data type of the connection (e.g., 'exec', 'string', 'int').
      */
-    constructor(uniqueConnectionId, sourceNodeId, sourcePinIndex, targetNodeId, targetPinIndex, connectionType) {
+    constructor(uniqueConnectionId, sourceNodeId, sourcePinIndex, targetNodeId, targetPinIndex, connectionType, controlPoints = []) {
         this.id = uniqueConnectionId;
         
         // Source Information (Output Pin)
@@ -27,5 +27,10 @@ export class Connection {
         
         // Type determines the color and compatibility rules during interaction
         this.type = connectionType; 
+        this.controlPoints = Array.isArray(controlPoints)
+            ? controlPoints
+                .filter(point => point && Number.isFinite(point.x) && Number.isFinite(point.y))
+                .map(point => ({ x: Number(point.x), y: Number(point.y) }))
+            : [];
     }
 }

@@ -103,7 +103,7 @@ export class Renderer {
         const p2 = this.getPinPos(c.toNode, c.toPin, 'input');
         
         // Only draw if both endpoints exist in the DOM
-        if(p1 && p2) this.drawCurve(p1, p2, c.type, false, c.id);
+        if(p1 && p2) this.drawCurve(p1, p2, c.type, false, c.id, c.controlPoints || []);
     }
 
     /**
@@ -114,27 +114,49 @@ export class Renderer {
      * @param {Boolean} isDrag - If true, adds special styling
      * @param {Number} id - Optional Connection ID to assign to the DOM element
      */
-    drawCurve(p1, p2, type, isDrag, id = null) {
+    drawCurve(p1, p2, type, isDrag, id = null, controlPoints = []) {
         const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        
-        // Bezier Curve Logic
-        const dist = Math.abs(p2.x - p1.x);
-        // Control Point Offset: Smoothness based on distance
-        const cp = Math.max(dist * 0.5, 50); 
-        
-        // SVG Path Command (M = Move, C = Cubic Bezier)
-        const d = `M ${p1.x} ${p1.y} C ${p1.x+cp} ${p1.y}, ${p2.x-cp} ${p2.y}, ${p2.x} ${p2.y}`;
-        
+
+        const points = [p1]
+            .concat(Array.isArray(controlPoints) ? controlPoints : [])
+            .concat([p2]);
+
+        // Build a segmented cubic path so inserted control points bend the wire.
+        let d = `M ${points[0].x} ${points[0].y}`;
+        for (let index = 0; index < points.length - 1; index += 1) {
+            const a = points[index];
+            const b = points[index + 1];
+            const dist = Math.abs(b.x - a.x);
+            const cp = Math.max(dist * 0.5, 40);
+            d += ` C ${a.x + cp} ${a.y}, ${b.x - cp} ${b.y}, ${b.x} ${b.y}`;
+        }
+
         path.setAttribute('d', d); 
         path.setAttribute('class', `connection ${type==='exec'?'exec':''} ${isDrag?'dragging':''}`);
         
-        if (id) path.id = `conn-${id}`; // Assign ID for animation lookups
+        if (id) {
+            path.id = `conn-${id}`; // Assign ID for animation lookups
+            path.dataset.connId = String(id);
+        }
 
         // Set Color
         const col = (window.typeDefinitions[type]||{}).color || '#fff';
         path.style.stroke = col;
         
         this.dom.connectionsLayer.appendChild(path);
+
+        if (!isDrag && id && Array.isArray(controlPoints) && controlPoints.length > 0) {
+            controlPoints.forEach((point, index) => {
+                const handle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                handle.setAttribute('cx', String(point.x));
+                handle.setAttribute('cy', String(point.y));
+                handle.setAttribute('r', '7');
+                handle.setAttribute('class', 'connection-point');
+                handle.dataset.connId = String(id);
+                handle.dataset.pointIndex = String(index);
+                this.dom.connectionsLayer.appendChild(handle);
+            });
+        }
     }
 
     /**

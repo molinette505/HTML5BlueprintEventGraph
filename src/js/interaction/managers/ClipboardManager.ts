@@ -119,7 +119,14 @@ export class ClipboardManager {
                 
                 // Only create the connection if both ends were successfully pasted
                 if (newFrom && newTo) {
-                    this.graph.addConnection(newFrom, c.fromPin, newTo, c.toPin, c.type);
+                    this.graph.addConnection(
+                        newFrom,
+                        c.fromPin,
+                        newTo,
+                        c.toPin,
+                        c.type,
+                        Array.isArray(c.controlPoints) ? c.controlPoints : []
+                    );
                 }
             });
 

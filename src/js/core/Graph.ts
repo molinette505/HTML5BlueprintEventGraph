@@ -84,7 +84,7 @@ export class Graph {
      * @param {String} connectionType - Data type of the connection ('exec' or data type).
      * @returns {Connection} The new connection object.
      */
-    addConnection(sourceNodeId, sourcePinIndex, targetNodeId, targetPinIndex, connectionType) {
+    addConnection(sourceNodeId, sourcePinIndex, targetNodeId, targetPinIndex, connectionType, controlPoints = []) {
         // RULE 1: Exec Outputs are Single-Wire. 
         // If this is an execution flow wire, remove any existing connection FROM the source pin.
         if (connectionType === 'exec') {
@@ -108,7 +108,8 @@ export class Graph {
             sourcePinIndex, 
             targetNodeId, 
             targetPinIndex, 
-            connectionType
+            connectionType,
+            controlPoints
         );
         this.connections.push(newConnection);
         return newConnection;

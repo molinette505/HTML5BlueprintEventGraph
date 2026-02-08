@@ -60,7 +60,7 @@ export class Interaction {
             }
         );
 
-        this.mode = 'IDLE'; // IDLE, PANNING, DRAG_NODES, DRAG_WIRE, BOX_SELECT, PINCH_PAN
+        this.mode = 'IDLE'; // IDLE, PANNING, DRAG_NODES, DRAG_WIRE, BOX_SELECT, PINCH_PAN, DRAG_CONN_POINT
 
         this.lastMousePos = {
             x: window.innerWidth / 2,
@@ -83,6 +83,7 @@ export class Interaction {
         this.pendingPinSingleAction = null;
         this.pendingNodeSingleAction = null;
         this.pendingCanvasClearAction = null;
+        this.connectionPointDrag = null;
 
         this.bindEvents();
         this.bindKeyboardEvents();
@@ -95,6 +96,24 @@ export class Interaction {
             if (Date.now() - this.lastTouchTimestamp < 700) return;
 
             this.contextMenu.hide();
+
+            const pointEl = e.target.closest('.connection-point');
+            if (pointEl) {
+                if (e.button === 0) {
+                    e.preventDefault();
+                    this._startConnectionPointDrag(e, pointEl);
+                }
+                return;
+            }
+
+            const wireEl = e.target.closest('path.connection');
+            if (wireEl && !wireEl.classList.contains('dragging')) {
+                if (e.button === 0) {
+                    e.preventDefault();
+                    this._addConnectionPointAtClient(wireEl, e.clientX, e.clientY);
+                }
+                return;
+            }
 
             if (e.target.classList.contains('pin')) {
                 return this._handlePinInteraction(e);
@@ -116,6 +135,7 @@ export class Interaction {
             if (this.mode === 'PANNING') this.viewportManager.updatePan(e);
             else if (this.mode === 'DRAG_NODES') this.nodeMovementManager.update(e);
             else if (this.mode === 'DRAG_WIRE') this.connectionManager.update(e);
+            else if (this.mode === 'DRAG_CONN_POINT') this._updateConnectionPointDrag(e.clientX, e.clientY);
             else if (this.mode === 'BOX_SELECT') this.selectionManager.updateBox(e);
         });
 
@@ -145,6 +165,9 @@ export class Interaction {
             }
             else if (this.mode === 'DRAG_NODES') {
                 this.nodeMovementManager.endDrag();
+            }
+            else if (this.mode === 'DRAG_CONN_POINT') {
+                this._endConnectionPointDrag();
             }
 
             this._finishPointerInteraction();
@@ -299,6 +322,20 @@ export class Interaction {
 
         this.contextMenu.hide();
 
+        const pointEl = target.closest && target.closest('.connection-point');
+        if (pointEl) {
+            e.preventDefault();
+            this._beginConnectionPointTouch(touch, pointEl);
+            return;
+        }
+
+        const wireEl = target.closest && target.closest('path.connection');
+        if (wireEl && !wireEl.classList.contains('dragging')) {
+            e.preventDefault();
+            this._beginConnectionWireTouch(touch, wireEl);
+            return;
+        }
+
         const pinEl = target.closest && target.closest('.pin');
         if (pinEl) {
             e.preventDefault();
@@ -353,6 +390,22 @@ export class Interaction {
                 e.preventDefault();
                 this.connectionManager.update(this._asPointerEvent(touch.clientX, touch.clientY));
             }
+            return;
+        }
+
+        if (state.type === 'connection-point') {
+            if (!state.dragStarted && distance > this.touchConfig.dragThreshold) {
+                state.dragStarted = true;
+                this.mode = 'DRAG_CONN_POINT';
+            }
+            if (state.dragStarted && this.mode === 'DRAG_CONN_POINT') {
+                e.preventDefault();
+                this._updateConnectionPointByIndex(state.connId, state.pointIndex, touch.clientX, touch.clientY);
+            }
+            return;
+        }
+
+        if (state.type === 'connection-wire') {
             return;
         }
 
@@ -458,6 +511,18 @@ export class Interaction {
                 }
             }
         }
+        else if (state.type === 'connection-point') {
+            if (state.dragStarted && this.mode === 'DRAG_CONN_POINT') {
+                this._endConnectionPointDrag();
+            } else if (!state.hasMoved) {
+                this._removeConnectionPoint(state.connId, state.pointIndex);
+            }
+        }
+        else if (state.type === 'connection-wire') {
+            if (!state.hasMoved) {
+                this._addConnectionPointAtClient(state.wireElement, state.lastX, state.lastY);
+            }
+        }
         else if (state.type === 'node') {
             if (state.dragStarted && this.mode === 'DRAG_NODES') {
                 this.nodeMovementManager.endDrag();
@@ -537,6 +602,7 @@ export class Interaction {
         if (this.mode === 'DRAG_NODES') this.nodeMovementManager.endDrag();
         if (this.mode === 'BOX_SELECT') this.selectionManager.endBox();
         if (this.mode === 'DRAG_WIRE') this.connectionManager.clearDrag();
+        if (this.mode === 'DRAG_CONN_POINT') this._endConnectionPointDrag();
 
         this.pinchState = null;
         this.touchState = null;
@@ -606,6 +672,41 @@ export class Interaction {
         this._armTouchLongPress(() => {
             // Long-press now enters multi-select mode.
         });
+    }
+
+    _beginConnectionPointTouch(touch, pointElement) {
+        const connId = parseInt(pointElement.dataset.connId);
+        const pointIndex = parseInt(pointElement.dataset.pointIndex);
+        if (!Number.isFinite(connId) || !Number.isFinite(pointIndex)) return;
+
+        this.touchState = {
+            type: 'connection-point',
+            touchId: touch.identifier,
+            startX: touch.clientX,
+            startY: touch.clientY,
+            lastX: touch.clientX,
+            lastY: touch.clientY,
+            hasMoved: false,
+            dragStarted: false,
+            longPressTriggered: false,
+            connId,
+            pointIndex
+        };
+    }
+
+    _beginConnectionWireTouch(touch, wireElement) {
+        this.touchState = {
+            type: 'connection-wire',
+            touchId: touch.identifier,
+            startX: touch.clientX,
+            startY: touch.clientY,
+            lastX: touch.clientX,
+            lastY: touch.clientY,
+            hasMoved: false,
+            dragStarted: false,
+            longPressTriggered: false,
+            wireElement
+        };
     }
 
     _startPinchPan(e) {
@@ -865,6 +966,128 @@ export class Interaction {
         const target = document.elementFromPoint(clientX, clientY);
         if (!target) return null;
         return target.closest('.pin');
+    }
+
+    _graphPointFromClient(clientX, clientY) {
+        const rect = this.dom.container.getBoundingClientRect();
+        return {
+            x: (clientX - rect.left - this.graph.pan.x) / this.graph.scale,
+            y: (clientY - rect.top - this.graph.pan.y) / this.graph.scale
+        };
+    }
+
+    _findConnection(connectionId) {
+        return this.graph.connections.find(conn => conn.id === connectionId) || null;
+    }
+
+    _getConnectionAnchors(connection) {
+        if (!connection) return null;
+        const from = this.renderer.getPinPos(connection.fromNode, connection.fromPin, 'output');
+        const to = this.renderer.getPinPos(connection.toNode, connection.toPin, 'input');
+        if (!from || !to) return null;
+        const controlPoints = Array.isArray(connection.controlPoints) ? connection.controlPoints : [];
+        return [from].concat(controlPoints).concat([to]);
+    }
+
+    _distancePointToSegment(point, segmentStart, segmentEnd) {
+        const ax = segmentStart.x;
+        const ay = segmentStart.y;
+        const bx = segmentEnd.x;
+        const by = segmentEnd.y;
+        const dx = bx - ax;
+        const dy = by - ay;
+
+        if (dx === 0 && dy === 0) {
+            return Math.hypot(point.x - ax, point.y - ay);
+        }
+
+        const tRaw = ((point.x - ax) * dx + (point.y - ay) * dy) / (dx * dx + dy * dy);
+        const t = Math.max(0, Math.min(1, tRaw));
+        const closestX = ax + t * dx;
+        const closestY = ay + t * dy;
+        return Math.hypot(point.x - closestX, point.y - closestY);
+    }
+
+    _findInsertIndexForConnectionPoint(connection, graphPoint) {
+        const anchors = this._getConnectionAnchors(connection);
+        if (!anchors || anchors.length < 2) return 0;
+
+        let bestSegmentIndex = 0;
+        let bestDistance = Number.POSITIVE_INFINITY;
+
+        for (let index = 0; index < anchors.length - 1; index += 1) {
+            const distance = this._distancePointToSegment(graphPoint, anchors[index], anchors[index + 1]);
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                bestSegmentIndex = index;
+            }
+        }
+
+        return bestSegmentIndex;
+    }
+
+    _addConnectionPointAtClient(wireElement, clientX, clientY) {
+        if (!wireElement || !wireElement.dataset) return;
+        const connId = parseInt(wireElement.dataset.connId);
+        if (!Number.isFinite(connId)) return;
+
+        const connection = this._findConnection(connId);
+        if (!connection) return;
+
+        const graphPoint = this._graphPointFromClient(clientX, clientY);
+        if (!Array.isArray(connection.controlPoints)) connection.controlPoints = [];
+
+        const insertIndex = this._findInsertIndexForConnectionPoint(connection, graphPoint);
+        connection.controlPoints.splice(insertIndex, 0, graphPoint);
+        this.renderer.render();
+    }
+
+    _removeConnectionPoint(connId, pointIndex) {
+        const connection = this._findConnection(connId);
+        if (!connection || !Array.isArray(connection.controlPoints)) return;
+        if (pointIndex < 0 || pointIndex >= connection.controlPoints.length) return;
+        connection.controlPoints.splice(pointIndex, 1);
+        this.renderer.render();
+    }
+
+    _startConnectionPointDrag(event, pointElement) {
+        const connId = parseInt(pointElement.dataset.connId);
+        const pointIndex = parseInt(pointElement.dataset.pointIndex);
+        if (!Number.isFinite(connId) || !Number.isFinite(pointIndex)) return;
+
+        this.connectionPointDrag = {
+            connId,
+            pointIndex,
+            startX: event.clientX,
+            startY: event.clientY,
+            hasMoved: false
+        };
+        this.mode = 'DRAG_CONN_POINT';
+    }
+
+    _updateConnectionPointByIndex(connId, pointIndex, clientX, clientY) {
+        const connection = this._findConnection(connId);
+        if (!connection || !Array.isArray(connection.controlPoints)) return;
+        if (pointIndex < 0 || pointIndex >= connection.controlPoints.length) return;
+        connection.controlPoints[pointIndex] = this._graphPointFromClient(clientX, clientY);
+        this.renderer.render();
+    }
+
+    _updateConnectionPointDrag(clientX, clientY) {
+        if (!this.connectionPointDrag) return;
+        const drag = this.connectionPointDrag;
+        const distance = Math.hypot(clientX - drag.startX, clientY - drag.startY);
+        if (distance > 3) drag.hasMoved = true;
+        this._updateConnectionPointByIndex(drag.connId, drag.pointIndex, clientX, clientY);
+    }
+
+    _endConnectionPointDrag() {
+        if (!this.connectionPointDrag) return;
+        const drag = this.connectionPointDrag;
+        if (!drag.hasMoved) {
+            this._removeConnectionPoint(drag.connId, drag.pointIndex);
+        }
+        this.connectionPointDrag = null;
     }
 
     _finishPointerInteraction() {

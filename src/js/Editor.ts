@@ -10,6 +10,7 @@ import { Interaction } from "./interaction/Interaction";
 import { Simulation } from "./Simulation";
 import { VariableManager } from "./VariableManager";
 import starterGraph from "../data/starter-graph.json";
+import builtinSaves from "../data/builtin-saves.json";
 
 export class Editor {
     constructor() {
@@ -49,6 +50,8 @@ export class Editor {
 
         this.saveStorageKey = "blueprint.graphSaves.v1";
         this.defaultSaveName = "default";
+        this.builtinSaveConfig = builtinSaves && typeof builtinSaves === 'object' ? builtinSaves : { saves: {} };
+        this.defaultBuiltinSaveName = this.builtinSaveConfig.defaultSaveName || null;
         this.currentSaveName = this.defaultSaveName;
         this.modalMode = null;
         this.modalSelectedSaveName = null;
@@ -135,7 +138,7 @@ export class Editor {
                 if (this.modalMode === 'save') {
                     const raw = this.dom.modalSaveName ? this.dom.modalSaveName.value : '';
                     const name = String(raw || '').trim();
-                    if (!name) return;
+                    if (!name || this.isBuiltinSaveName(name)) return;
                     this.saveProject(name);
                     this.closeSaveLoadModal();
                 } else if (this.modalMode === 'load' && this.modalSelectedSaveName) {
@@ -303,15 +306,16 @@ export class Editor {
         this.modalMode = mode === 'load' ? 'load' : 'save';
         if (!this.dom.saveLoadModal) return;
 
-        const saves = this.getProjectSaves();
-        const names = Object.keys(saves);
+        const loadableNames = Object.keys(this.getLoadableProjectSaves());
 
         if (this.modalMode === 'save') {
             if (this.dom.modalTitle) this.dom.modalTitle.innerText = 'Save Graph';
             if (this.dom.modalSaveNameRow) this.dom.modalSaveNameRow.style.display = 'flex';
             if (this.dom.btnModalConfirm) this.dom.btnModalConfirm.innerText = 'Save';
             if (this.dom.btnModalDelete) this.dom.btnModalDelete.style.display = 'none';
-            const initialName = this.currentSaveName || this.defaultSaveName;
+            const initialName = this.isBuiltinSaveName(this.currentSaveName)
+                ? this.defaultSaveName
+                : (this.currentSaveName || this.defaultSaveName);
             this.modalSelectedSaveName = initialName;
             if (this.dom.modalSaveName) {
                 this.dom.modalSaveName.value = initialName;
@@ -323,9 +327,9 @@ export class Editor {
             if (this.dom.modalSaveNameRow) this.dom.modalSaveNameRow.style.display = 'none';
             if (this.dom.btnModalConfirm) this.dom.btnModalConfirm.innerText = 'Load';
             if (this.dom.btnModalDelete) this.dom.btnModalDelete.style.display = 'inline-flex';
-            this.modalSelectedSaveName = names.includes(this.currentSaveName)
+            this.modalSelectedSaveName = loadableNames.includes(this.currentSaveName)
                 ? this.currentSaveName
-                : (names[0] || null);
+                : (loadableNames[0] || null);
         }
 
         this.renderSaveList();
@@ -344,14 +348,34 @@ export class Editor {
         if (!list) return;
         list.innerHTML = '';
 
-        const saves = this.getProjectSaves();
-        const names = Object.keys(saves).sort((a, b) => {
-            if (a === this.defaultSaveName && b !== this.defaultSaveName) return -1;
-            if (b === this.defaultSaveName && a !== this.defaultSaveName) return 1;
-            return a.localeCompare(b);
+        const localSaves = this.getProjectSaves();
+        const builtinSavesMap = this.getBuiltinProjectSaves();
+
+        const entries = [];
+        if (this.modalMode === 'save') {
+            Object.keys(localSaves).forEach((name) => {
+                entries.push({ name, isBuiltin: false });
+            });
+        } else {
+            Object.keys(builtinSavesMap).forEach((name) => {
+                entries.push({ name, isBuiltin: true });
+            });
+            Object.keys(localSaves).forEach((name) => {
+                if (Object.prototype.hasOwnProperty.call(builtinSavesMap, name)) return;
+                entries.push({ name, isBuiltin: false });
+            });
+        }
+
+        entries.sort((a, b) => {
+            if (a.isBuiltin !== b.isBuiltin) return a.isBuiltin ? -1 : 1;
+            if (a.name === this.defaultBuiltinSaveName && b.name !== this.defaultBuiltinSaveName) return -1;
+            if (b.name === this.defaultBuiltinSaveName && a.name !== this.defaultBuiltinSaveName) return 1;
+            if (a.name === this.defaultSaveName && b.name !== this.defaultSaveName) return -1;
+            if (b.name === this.defaultSaveName && a.name !== this.defaultSaveName) return 1;
+            return a.name.localeCompare(b.name);
         });
 
-        if (names.length === 0) {
+        if (entries.length === 0) {
             const empty = document.createElement('div');
             empty.className = 'save-item';
             empty.style.opacity = '0.65';
@@ -359,10 +383,11 @@ export class Editor {
             empty.innerText = 'No saves yet';
             list.appendChild(empty);
         } else {
-            names.forEach((name) => {
+            entries.forEach((entry) => {
+                const name = entry.name;
                 const item = document.createElement('div');
-                item.className = `save-item ${this.modalSelectedSaveName === name ? 'selected' : ''}`;
-                item.innerText = name;
+                item.className = `save-item ${this.modalSelectedSaveName === name ? 'selected' : ''} ${entry.isBuiltin ? 'builtin' : ''}`;
+                item.innerText = entry.isBuiltin ? `${name} (Demo)` : name;
                 item.onclick = () => {
                     this.modalSelectedSaveName = name;
                     if (this.modalMode === 'save' && this.dom.modalSaveName) {
@@ -378,13 +403,35 @@ export class Editor {
             if (this.modalMode === 'load') {
                 this.dom.btnModalConfirm.disabled = !this.modalSelectedSaveName;
             } else {
-                const hasName = this.dom.modalSaveName && this.dom.modalSaveName.value.trim().length > 0;
-                this.dom.btnModalConfirm.disabled = !hasName;
+                const entered = this.dom.modalSaveName ? this.dom.modalSaveName.value.trim() : '';
+                const hasName = entered.length > 0;
+                const isReadonlyName = this.isBuiltinSaveName(entered);
+                this.dom.btnModalConfirm.disabled = !hasName || isReadonlyName;
             }
         }
         if (this.dom.btnModalDelete) {
-            this.dom.btnModalDelete.disabled = !(this.modalMode === 'load' && this.modalSelectedSaveName);
+            const isBuiltinSelected = this.modalSelectedSaveName && this.isBuiltinSaveName(this.modalSelectedSaveName);
+            this.dom.btnModalDelete.disabled = !(this.modalMode === 'load' && this.modalSelectedSaveName && !isBuiltinSelected);
         }
+    }
+
+    getBuiltinProjectSaves() {
+        const saves = this.builtinSaveConfig && this.builtinSaveConfig.saves;
+        if (!saves || typeof saves !== 'object') return {};
+        return saves;
+    }
+
+    getLoadableProjectSaves() {
+        const localSaves = this.getProjectSaves();
+        const builtinSavesMap = this.getBuiltinProjectSaves();
+        return { ...localSaves, ...builtinSavesMap };
+    }
+
+    isBuiltinSaveName(name) {
+        const trimmed = String(name || '').trim();
+        if (!trimmed) return false;
+        const builtinSavesMap = this.getBuiltinProjectSaves();
+        return Object.prototype.hasOwnProperty.call(builtinSavesMap, trimmed);
     }
 
     getProjectSaves() {
@@ -417,6 +464,10 @@ export class Editor {
     saveProject(name, silent = false) {
         const trimmed = String(name || '').trim();
         if (!trimmed) return false;
+        if (this.isBuiltinSaveName(trimmed)) {
+            if (!silent) this.showNotification(`"${trimmed}" is read-only (demo)`);
+            return false;
+        }
 
         const saves = this.getProjectSaves();
         saves[trimmed] = this.serializeProject();
@@ -429,6 +480,7 @@ export class Editor {
     deleteProject(name) {
         const trimmed = String(name || '').trim();
         if (!trimmed) return false;
+        if (this.isBuiltinSaveName(trimmed)) return false;
         const saves = this.getProjectSaves();
         if (!Object.prototype.hasOwnProperty.call(saves, trimmed)) return false;
         delete saves[trimmed];
@@ -442,8 +494,8 @@ export class Editor {
     loadProject(name, silent = false) {
         const trimmed = String(name || '').trim();
         if (!trimmed) return false;
-        const saves = this.getProjectSaves();
-        const data = saves[trimmed];
+        const loadable = this.getLoadableProjectSaves();
+        const data = loadable[trimmed];
         if (!data) return false;
 
         this.applySerializedProject(data);
@@ -514,7 +566,8 @@ export class Editor {
     }
 
     initDemo() {
-        const loaded = this.loadProject(this.defaultSaveName, true);
+        const bootName = this.defaultBuiltinSaveName || this.defaultSaveName;
+        const loaded = this.loadProject(bootName, true);
         if (!loaded) {
             this.applySerializedProject({
                 variables: [],
@@ -574,7 +627,14 @@ export class Editor {
             const fromNode = idMap.get(conn.fromNode);
             const toNode = idMap.get(conn.toNode);
             if (!fromNode || !toNode) return;
-            this.graph.addConnection(fromNode, conn.fromPin, toNode, conn.toPin, conn.type);
+            this.graph.addConnection(
+                fromNode,
+                conn.fromPin,
+                toNode,
+                conn.toPin,
+                conn.type,
+                Array.isArray(conn.controlPoints) ? conn.controlPoints : []
+            );
         });
 
         setTimeout(() => this.renderer.render(), 50);

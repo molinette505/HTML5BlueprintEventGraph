@@ -25,11 +25,16 @@ export class Simulation {
 
         this.execPolicies = {
             "For Loop": (node, ctx, item, continuations, currentRunId) => this.runForLoop(node, ctx, continuations, !!item.isLoopContinuation),
+            "Flow.ForLoop": (node, ctx, item, continuations, currentRunId) => this.runForLoop(node, ctx, continuations, !!item.isLoopContinuation),
             "While Loop": (node, ctx, item, continuations, currentRunId) => this.runWhileLoop(node, ctx, continuations),
             "WhileLoop": (node, ctx, item, continuations, currentRunId) => this.runWhileLoop(node, ctx, continuations),
+            "Flow.WhileLoop": (node, ctx, item, continuations, currentRunId) => this.runWhileLoop(node, ctx, continuations),
             "Do Once": (node, ctx, item, continuations, currentRunId) => this.runDoOnce(node, item.conn ? item.conn.toPin : null, continuations),
+            "Flow.DoOnce": (node, ctx, item, continuations, currentRunId) => this.runDoOnce(node, item.conn ? item.conn.toPin : null, continuations),
             "Delay": (node, ctx, item, continuations, currentRunId) => this.runDelay(node, ctx, continuations, currentRunId),
+            "Flow.Delay": (node, ctx, item, continuations, currentRunId) => this.runDelay(node, ctx, continuations, currentRunId),
             "Branch": (node, ctx, item, continuations, currentRunId) => this.runDefaultExec(node, ctx, continuations),
+            "Flow.Branch": (node, ctx, item, continuations, currentRunId) => this.runDefaultExec(node, ctx, continuations),
             "Flow.CallCustomEvent": (node, ctx, item, continuations, currentRunId) => this.runCallCustomEvent(node, ctx, continuations)
         };
         this.purePolicies = {
@@ -527,7 +532,7 @@ export class Simulation {
         const args = this.buildArgs(node, ctx);
         const durationSeconds = this.castValue(args[0], 'float') ?? 0;
         const delayMs = Math.max(0, durationSeconds * 1000);
-        this.highlightNode(node.id, '#ff9900');
+        this.setNodeHighlight(node.id, '#ffffff');
 
         const nextInfo = this.getNextExecConnection(node);
         if (!nextInfo) {
@@ -540,6 +545,7 @@ export class Simulation {
         setTimeout(() => {
             try {
                 if (this.runInstanceId !== currentRunId) return;
+                this.highlightNode(node.id, '#ff9900');
                 this.queueExec(nextNode, nextConn, false, continuations);
                 if (this.status === 'RUNNING') this.tick();
             } finally {

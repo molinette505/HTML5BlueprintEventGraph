@@ -1,0 +1,136 @@
+{
+  "defaultSaveName": "Starter Demo",
+  "saves": {
+    "Starter Demo": {
+      "version": 1,
+      "savedAt": "2026-02-08T00:00:00.000Z",
+      "variables": [],
+      "customEvents": [],
+      "graph": {
+        "appIdentifier": "NodeGraphEditor",
+        "nodes": [
+          {
+            "id": 1,
+            "name": "Event BeginPlay",
+            "x": 50,
+            "y": 50,
+            "varName": null,
+            "functionId": null,
+            "pinTypes": {
+              "inputs": [],
+              "outputs": ["exec"]
+            },
+            "inputs": []
+          },
+          {
+            "id": 2,
+            "name": "Branch",
+            "x": 300,
+            "y": 50,
+            "varName": null,
+            "functionId": "Flow.Branch",
+            "pinTypes": {
+              "inputs": ["exec", "boolean"],
+              "outputs": ["exec", "exec"]
+            },
+            "inputs": [
+              { "name": "Exec", "value": null },
+              { "name": "Condition", "value": true }
+            ]
+          },
+          {
+            "id": 3,
+            "name": "Make Float",
+            "x": 50,
+            "y": 200,
+            "varName": null,
+            "functionId": "Make.Float",
+            "pinTypes": {
+              "inputs": ["float"],
+              "outputs": ["float"]
+            },
+            "inputs": [
+              { "name": "Value", "value": 5 }
+            ]
+          },
+          {
+            "id": 4,
+            "name": "Add",
+            "x": 250,
+            "y": 200,
+            "varName": null,
+            "functionId": "Math.AddGeneric",
+            "pinTypes": {
+              "inputs": ["float", "float"],
+              "outputs": ["float"]
+            },
+            "inputs": [
+              { "name": "A", "value": 0 },
+              { "name": "B", "value": 10 }
+            ]
+          },
+          {
+            "id": 5,
+            "name": "Greater Equal (>=)",
+            "x": 450,
+            "y": 200,
+            "varName": null,
+            "functionId": "Logic.GreaterEqual",
+            "pinTypes": {
+              "inputs": ["float", "float"],
+              "outputs": ["boolean"]
+            },
+            "inputs": [
+              { "name": "A", "value": 0 },
+              { "name": "B", "value": 12 }
+            ]
+          },
+          {
+            "id": 6,
+            "name": "Print String",
+            "x": 550,
+            "y": 20,
+            "varName": null,
+            "functionId": "Flow.Print",
+            "pinTypes": {
+              "inputs": ["exec", "string", "boolean", "color"],
+              "outputs": ["exec"]
+            },
+            "inputs": [
+              { "name": "In", "value": null },
+              { "name": "String", "value": "True: >= 12" },
+              { "name": "Log To Screen", "value": true },
+              { "name": "Text Color", "value": "#ffffff" }
+            ]
+          },
+          {
+            "id": 7,
+            "name": "Print String",
+            "x": 550,
+            "y": 150,
+            "varName": null,
+            "functionId": "Flow.Print",
+            "pinTypes": {
+              "inputs": ["exec", "string", "boolean", "color"],
+              "outputs": ["exec"]
+            },
+            "inputs": [
+              { "name": "In", "value": null },
+              { "name": "String", "value": "False: < 12" },
+              { "name": "Log To Screen", "value": true },
+              { "name": "Text Color", "value": "#ffffff" }
+            ]
+          }
+        ],
+        "connections": [
+          { "id": 1, "fromNode": 1, "fromPin": 0, "toNode": 2, "toPin": 0, "type": "exec" },
+          { "id": 2, "fromNode": 2, "fromPin": 0, "toNode": 6, "toPin": 0, "type": "exec" },
+          { "id": 3, "fromNode": 2, "fromPin": 1, "toNode": 7, "toPin": 0, "type": "exec" },
+          { "id": 4, "fromNode": 3, "fromPin": 0, "toNode": 4, "toPin": 0, "type": "float" },
+          { "id": 5, "fromNode": 4, "fromPin": 0, "toNode": 5, "toPin": 0, "type": "float" },
+          { "id": 6, "fromNode": 5, "fromPin": 0, "toNode": 2, "toPin": 1, "type": "boolean" }
+        ]
+      }
+    }
+  }
+}
