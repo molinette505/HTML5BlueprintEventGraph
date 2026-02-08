@@ -115,14 +115,12 @@ export class Renderer {
      * @param {Number} id - Optional Connection ID to assign to the DOM element
      */
     drawCurve(p1, p2, type, isDrag, id = null, controlPoints = []) {
-        let d = "";
-
         const points = [p1]
             .concat(Array.isArray(controlPoints) ? controlPoints : [])
             .concat([p2]);
 
         // Build a segmented cubic path so inserted control points bend the wire.
-        d = `M ${points[0].x} ${points[0].y}`;
+        let d = `M ${points[0].x} ${points[0].y}`;
         for (let index = 0; index < points.length - 1; index += 1) {
             const a = points[index];
             const b = points[index + 1];
@@ -155,18 +153,6 @@ export class Renderer {
         
         this.dom.connectionsLayer.appendChild(path);
 
-        if (!isDrag && id && Array.isArray(controlPoints) && controlPoints.length > 0) {
-            controlPoints.forEach((point, index) => {
-                const handle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-                handle.setAttribute('cx', String(point.x));
-                handle.setAttribute('cy', String(point.y));
-                handle.setAttribute('r', '9');
-                handle.setAttribute('class', 'connection-point');
-                handle.dataset.connId = String(id);
-                handle.dataset.pointIndex = String(index);
-                this.dom.connectionsLayer.appendChild(handle);
-            });
-        }
     }
 
     /**

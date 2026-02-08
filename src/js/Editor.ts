@@ -627,14 +627,7 @@ export class Editor {
             const fromNode = idMap.get(conn.fromNode);
             const toNode = idMap.get(conn.toNode);
             if (!fromNode || !toNode) return;
-            this.graph.addConnection(
-                fromNode,
-                conn.fromPin,
-                toNode,
-                conn.toPin,
-                conn.type,
-                Array.isArray(conn.controlPoints) ? conn.controlPoints : []
-            );
+            this._restoreConnectionWithLegacyPoints(fromNode, toNode, conn);
         });
 
         setTimeout(() => this.renderer.render(), 50);
@@ -651,6 +644,71 @@ export class Editor {
             if (nodeData.functionId === 'Flow.CallCustomEvent') return this.variableManager.createCallCustomEventTemplate(nodeData.customEventName);
         }
         return (window.nodeTemplates || []).find(template => template.name === nodeData.name);
+    }
+
+    _getRerouteTemplateForType(connectionType) {
+        const templates = Array.isArray(window.nodeTemplates) ? window.nodeTemplates : [];
+        if (connectionType === 'exec') {
+            return templates.find((template) => template.functionId === 'Flow.RerouteExec') || null;
+        }
+        return templates.find((template) => template.functionId === 'Flow.RerouteData') || null;
+    }
+
+    _createRerouteNode(connectionType, x, y) {
+        const template = this._getRerouteTemplateForType(connectionType);
+        if (!template) return null;
+
+        const node = this.graph.addNode(template, x, y);
+        if (connectionType !== 'exec') {
+            node.inputs.forEach((pin) => {
+                if (pin.type === 'wildcard') pin.setType(connectionType);
+            });
+            node.outputs.forEach((pin) => {
+                if (pin.type === 'wildcard') pin.setType(connectionType);
+            });
+        }
+
+        this.renderer.createNodeElement(node, (e, id) => this.interaction.handleNodeDown(e, id));
+        return node;
+    }
+
+    _restoreConnectionWithLegacyPoints(fromNodeId, toNodeId, serializedConnection) {
+        if (!serializedConnection) return;
+
+        const points = Array.isArray(serializedConnection.controlPoints)
+            ? serializedConnection.controlPoints.filter((point) => point && Number.isFinite(point.x) && Number.isFinite(point.y))
+            : [];
+
+        if (points.length === 0) {
+            this.graph.addConnection(
+                fromNodeId,
+                serializedConnection.fromPin,
+                toNodeId,
+                serializedConnection.toPin,
+                serializedConnection.type
+            );
+            return;
+        }
+
+        let sourceNodeId = fromNodeId;
+        let sourcePinIndex = serializedConnection.fromPin;
+
+        points.forEach((point) => {
+            const reroute = this._createRerouteNode(serializedConnection.type, Number(point.x) || 0, Number(point.y) || 0);
+            if (!reroute) return;
+
+            this.graph.addConnection(sourceNodeId, sourcePinIndex, reroute.id, 0, serializedConnection.type);
+            sourceNodeId = reroute.id;
+            sourcePinIndex = 0;
+        });
+
+        this.graph.addConnection(
+            sourceNodeId,
+            sourcePinIndex,
+            toNodeId,
+            serializedConnection.toPin,
+            serializedConnection.type
+        );
     }
 
     _restoreNodeState(node, nodeData) {

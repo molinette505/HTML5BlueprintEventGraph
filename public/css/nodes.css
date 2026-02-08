@@ -89,3 +89,28 @@
     transition: transform 0.2s;
 }
 .node.expanded .advanced-arrow::after { transform: rotate(180deg); }
+
+.node.reroute {
+    min-width: 42px;
+    width: 42px !important;
+    border-radius: 999px;
+}
+
+.node.reroute .node-body {
+    padding: 8px 0;
+    grid-template-columns: auto auto;
+    column-gap: 8px;
+    align-items: center;
+}
+
+.node.reroute .col-center {
+    display: none;
+}
+
+.node.reroute .col-left {
+    padding-left: 8px;
+}
+
+.node.reroute .col-right {
+    padding-right: 8px;
+}

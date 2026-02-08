@@ -416,6 +416,7 @@ export class ContextMenuManager {
     _collectContextTemplates() {
         const templates = Array.isArray(window.nodeTemplates) ? [...window.nodeTemplates] : [];
         return templates
+            .filter(template => !template.hiddenInContextMenu)
             .concat(this._buildCustomEventContextTemplates())
             .concat(this._buildVariableContextTemplates());
     }

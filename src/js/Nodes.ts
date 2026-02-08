@@ -65,6 +65,44 @@ export const globalNodes = [
         ]
     },
     {
+        "name": "Reroute Exec",
+        "category": "Internal",
+        "color": "var(--header-default)",
+        "hideHeader": true,
+        "width": 48,
+        "functionId": "Flow.RerouteExec",
+        "hiddenInContextMenu": true,
+        "inputs": [
+            { "name": "", "type": "exec" }
+        ],
+        "outputs": [
+            { "name": "", "type": "exec" }
+        ]
+    },
+    {
+        "name": "Reroute Data",
+        "category": "Internal",
+        "color": "var(--n-pure)",
+        "hideHeader": true,
+        "width": 48,
+        "functionId": "Flow.RerouteData",
+        "hiddenInContextMenu": true,
+        "inputs": [
+            {
+                "name": "",
+                "type": "wildcard",
+                "allowedTypes": ["boolean", "float", "string", "vector", "rotator", "transform", "color", "int", "class", "object", "wildcard"]
+            }
+        ],
+        "outputs": [
+            {
+                "name": "",
+                "type": "wildcard",
+                "allowedTypes": ["boolean", "float", "string", "vector", "rotator", "transform", "color", "int", "class", "object", "wildcard"]
+            }
+        ]
+    },
+    {
         "name": "While Loop",
         "category": "Flow Control",
         "color": "var(--header-default)",

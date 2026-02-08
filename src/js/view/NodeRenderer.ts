@@ -19,9 +19,10 @@ export class NodeRenderer {
      */
     createElement(node) {
         const el = document.createElement('div');
+        const isRerouteNode = node.functionId === 'Flow.RerouteData' || node.functionId === 'Flow.RerouteExec';
         
         // Apply classes: 'compact' for math nodes, 'expanded' for advanced view
-        el.className = `node ${node.hideHeader ? 'compact' : ''} ${node.showAdvanced ? 'expanded' : ''}`;
+        el.className = `node ${node.hideHeader ? 'compact' : ''} ${node.showAdvanced ? 'expanded' : ''} ${isRerouteNode ? 'reroute' : ''}`;
         el.id = `node-${node.id}`;
         
         // Positioning

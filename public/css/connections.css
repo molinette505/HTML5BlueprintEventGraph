@@ -62,21 +62,6 @@ path.connection.data-flow {
     pointer-events: none;
 }
 
-.connection-point {
-    fill: #171717;
-    stroke: #d4d4d4;
-    stroke-width: 1.8;
-    opacity: 0.95;
-    cursor: grab;
-    pointer-events: all;
-    transition: transform 0.08s ease, stroke 0.12s ease;
-}
-
-.connection-point:hover {
-    stroke: #ffffff;
-    transform: scale(1.1);
-}
-
 /* DATA LABEL: Floating value above wires */
 .data-value-label {
     position: absolute;

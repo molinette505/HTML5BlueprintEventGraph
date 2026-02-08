@@ -110,7 +110,8 @@ export const FunctionRegistry = {
 
         // Variable Accessors (Visualizer needs the Node instance to read 'varName')
         "Variable.Get": (inputs, result, node) => `${node.varName} = ${formatValueForDisplay(result)}`,
-        "Variable.Set": (inputs, result, node) => `${node.varName} = ${formatValueForDisplay(result)}`
+        "Variable.Set": (inputs, result, node) => `${node.varName} = ${formatValueForDisplay(result)}`,
+        "Flow.RerouteData": (inputs, result) => `${formatValueForDisplay(result)}`
     },
 
     // ==========================================================================================
@@ -137,6 +138,8 @@ export const FunctionRegistry = {
     },
     "Flow.DoOnce": () => true,
     "Flow.Delay": (durationSeconds) => durationSeconds,
+    "Flow.RerouteExec": () => true,
+    "Flow.RerouteData": (value) => value,
 
     // Generic Math (Handles both Numbers and Vectors via 'executePolymorphicOperation')
     "Math.AddGeneric": (leftOperand, rightOperand) => executePolymorphicOperation(leftOperand, rightOperand, (a, b) => a + b),
