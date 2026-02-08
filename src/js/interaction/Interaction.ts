@@ -81,7 +81,6 @@ export class Interaction {
 
         this.pendingTap = null;
         this.pendingPinSingleAction = null;
-        this.pendingCanvasClearAction = null;
 
         this.bindEvents();
         this.bindKeyboardEvents();
@@ -419,12 +418,17 @@ export class Interaction {
                 const targetPin = this._pinFromPoint(state.lastX, state.lastY) || this.connectionManager.getSnapTargetElement();
                 if (targetPin) {
                     this.connectionManager.commit(targetPin);
-                } else if (state.startedFromConnected) {
-                    this.connectionManager.clearDrag();
                 } else {
-                    const spawnContext = this.connectionManager.beginPendingSpawn(state.lastX, state.lastY);
-                    if (spawnContext) {
-                        this.contextMenu.show(state.lastX, state.lastY, 'canvas', { graph: this.graph, spawnContext });
+                    const shouldCancelWithoutSpawn = state.startedFromConnected && state.pinDir === 'input';
+                    if (shouldCancelWithoutSpawn) {
+                        this.connectionManager.clearDrag();
+                    } else {
+                        const spawnContext = this.connectionManager.beginPendingSpawn(state.lastX, state.lastY);
+                        if (spawnContext) {
+                            this.contextMenu.show(state.lastX, state.lastY, 'canvas', { graph: this.graph, spawnContext });
+                        } else {
+                            this.connectionManager.clearDrag();
+                        }
                     }
                 }
             } else if (!state.hasMoved && !state.longPressTriggered) {
@@ -466,7 +470,7 @@ export class Interaction {
                 };
                 const usedForContext = this._registerTouchTap(tap);
                 if (!usedForContext) {
-                    // Node selection is now long-press based.
+                    this._handleNodeTap(state.nodeId);
                 }
             }
         }
@@ -486,16 +490,9 @@ export class Interaction {
                 };
                 const usedForContext = this._registerTouchTap(tap);
                 if (!usedForContext) {
-                    if (this.pendingCanvasClearAction && this.pendingCanvasClearAction.timer) {
-                        clearTimeout(this.pendingCanvasClearAction.timer);
+                    if (this.selectionManager.selected.size > 0) {
+                        this.selectionManager.clear();
                     }
-                    const timer = setTimeout(() => {
-                        if (this.pendingCanvasClearAction && this.pendingCanvasClearAction.tapTime === tap.time) {
-                            this.selectionManager.clear();
-                            this.pendingCanvasClearAction = null;
-                        }
-                    }, this.touchConfig.doubleTapMs + 20);
-                    this.pendingCanvasClearAction = { tapTime: tap.time, timer };
                 }
             }
         }
@@ -521,6 +518,7 @@ export class Interaction {
     }
 
     _beginPinTouch(touch, pinElement) {
+        const pinMeta = this._pinData(pinElement);
         this.touchState = {
             type: 'pin',
             touchId: touch.identifier,
@@ -532,6 +530,7 @@ export class Interaction {
             dragStarted: false,
             longPressTriggered: false,
             startedFromConnected: this._pinHasConnection(pinElement),
+            pinDir: pinMeta ? pinMeta.dir : null,
             pinElement
         };
 
@@ -556,7 +555,11 @@ export class Interaction {
         };
 
         this._armTouchLongPress(() => {
-            this.selectionManager.add(nodeId);
+            const selected = this.selectionManager.selected;
+            const hasOtherSelection = selected.size > 0 && (!selected.has(nodeId) || selected.size > 1);
+            if (!hasOtherSelection) return;
+            if (selected.has(nodeId)) this.selectionManager.remove(nodeId);
+            else this.selectionManager.add(nodeId);
         });
     }
 
@@ -663,10 +666,7 @@ export class Interaction {
             this.selectionManager.add(nodeId);
             return;
         }
-
-        if (this.selectionManager.selected.has(nodeId)) {
-            this.selectionManager.remove(nodeId);
-        } else {
+        if (!this.selectionManager.selected.has(nodeId) || this.selectionManager.selected.size !== 1) {
             this.selectionManager.clear();
             this.selectionManager.add(nodeId);
         }
@@ -678,10 +678,6 @@ export class Interaction {
             if (this.pendingPinSingleAction && this.pendingPinSingleAction.timer) {
                 clearTimeout(this.pendingPinSingleAction.timer);
                 this.pendingPinSingleAction = null;
-            }
-            if (this.pendingCanvasClearAction && this.pendingCanvasClearAction.timer) {
-                clearTimeout(this.pendingCanvasClearAction.timer);
-                this.pendingCanvasClearAction = null;
             }
             this._showTouchContextMenu(tap);
             return true;
@@ -718,39 +714,24 @@ export class Interaction {
         }
 
         if (tap.type === 'node' && tap.meta) {
-            const selectedIds = Array.from(this.selectionManager.selected);
-            if (selectedIds.length > 1) {
-                const targetId = this.selectionManager.selected.has(tap.meta.nodeId)
-                    ? tap.meta.nodeId
-                    : selectedIds[0];
+            if (!this.selectionManager.selected.has(tap.meta.nodeId)) {
+                this.selectionManager.clear();
+                this.selectionManager.add(tap.meta.nodeId);
+            }
+
+            if (this.selectionManager.selected.size > 1) {
                 this.contextMenu.show(tap.x, tap.y, 'node', {
-                    targetId,
+                    targetId: tap.meta.nodeId,
                     selectedCount: this.selectionManager.selected.size
                 });
                 return;
             }
 
-            if (!this.selectionManager.selected.has(tap.meta.nodeId)) {
-                this.selectionManager.clear();
-                this.selectionManager.add(tap.meta.nodeId);
-            }
             this.contextMenu.show(tap.x, tap.y, 'node', {
                 targetId: tap.meta.nodeId,
                 selectedCount: this.selectionManager.selected.size
             });
             return;
-        }
-
-        if (tap.type === 'canvas' && this.selectionManager.selected.size > 1) {
-            const selectedIds = Array.from(this.selectionManager.selected);
-            const targetId = selectedIds.length > 0 ? selectedIds[0] : null;
-            if (targetId !== null) {
-                this.contextMenu.show(tap.x, tap.y, 'node', {
-                    targetId,
-                    selectedCount: this.selectionManager.selected.size
-                });
-                return;
-            }
         }
 
         this.contextMenu.show(tap.x, tap.y, 'canvas', { graph: this.graph });

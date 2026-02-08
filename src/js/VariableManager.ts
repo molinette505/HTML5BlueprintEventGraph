@@ -316,6 +316,8 @@ export class VariableManager {
         if(!v) return null;
 
         const widgetConfig = this.getWidgetConfig(v.type, v.defaultValue);
+        const widgetType = widgetConfig ? widgetConfig.type : null;
+        const widgetDefault = widgetConfig ? widgetConfig.value : this.getTypeDefault(v.type);
 
         return {
             name: `Set ${v.name}`,
@@ -325,7 +327,7 @@ export class VariableManager {
             varName: varName, // Ensure this is in template
             inputs: [
                 { name: "Exec", type: "exec" },
-                { name: v.name, type: v.type, widget: widgetConfig } 
+                { name: v.name, type: v.type, widget: widgetType, default: widgetDefault } 
             ],
             outputs: [
                 { name: "Out", type: "exec" },
