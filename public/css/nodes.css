@@ -121,11 +121,24 @@
     filter: drop-shadow(0 0 6px var(--reroute-color, #ffffff));
 }
 
-.node.reroute .reroute-pin {
+.node.reroute .reroute-grab {
     position: absolute;
+    left: 50%;
     top: 50%;
     width: 22px;
     height: 22px;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    background: transparent;
+    cursor: move;
+    pointer-events: all;
+}
+
+.node.reroute .reroute-pin {
+    position: absolute;
+    top: 50%;
+    width: 18px;
+    height: 18px;
     transform: translateY(-50%);
     opacity: 0;
     border: none;
@@ -150,13 +163,13 @@
 }
 
 .node.reroute .reroute-pin::before {
-    inset: -6px;
+    inset: -4px;
 }
 
 .node.reroute .reroute-pin-in {
-    left: -11px;
+    left: -26px;
 }
 
 .node.reroute .reroute-pin-out {
-    right: -11px;
+    right: -26px;
 }

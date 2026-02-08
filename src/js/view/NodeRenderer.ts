@@ -112,6 +112,10 @@ export class NodeRenderer {
         dot.className = 'reroute-dot';
         el.appendChild(dot);
 
+        const grabZone = document.createElement('div');
+        grabZone.className = 'reroute-grab';
+        el.appendChild(grabZone);
+
         const inPin = this.renderReroutePin(node.inputs[0], 'reroute-pin-in');
         const outPin = this.renderReroutePin(node.outputs[0], 'reroute-pin-out');
         if (inPin) el.appendChild(inPin);

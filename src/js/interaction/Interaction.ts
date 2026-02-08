@@ -83,6 +83,10 @@ export class Interaction {
             doubleTapMs: 280,
             doubleTapRadius: 32
         };
+        this.mouseConfig = {
+            wireDoubleClickMs: 320,
+            wireDoubleClickRadius: 16
+        };
 
         this.touchState = null;
         this.touchLongPressTimer = null;
@@ -93,6 +97,7 @@ export class Interaction {
         this.pendingPinSingleAction = null;
         this.pendingNodeSingleAction = null;
         this.pendingCanvasClearAction = null;
+        this.pendingWireClick = null;
         this.bindEvents();
         this.bindKeyboardEvents();
     }
@@ -107,8 +112,16 @@ export class Interaction {
 
             const wireEl = e.target.closest('path.connection-hit, path.connection');
             if (wireEl && !wireEl.classList.contains('dragging')) {
+                if (e.button === 0) {
+                    if (this._consumeWireDoubleClick(wireEl, e.clientX, e.clientY)) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        this._insertRerouteAtClient(wireEl, e.clientX, e.clientY);
+                    }
+                }
                 return;
             }
+            this.pendingWireClick = null;
 
             if (e.target.classList.contains('pin')) {
                 return this._handlePinInteraction(e);
@@ -175,13 +188,6 @@ export class Interaction {
             this.contextMenu.hide();
         }, { passive: false });
 
-        c.addEventListener('dblclick', (e) => {
-            const wireEl = e.target.closest('path.connection-hit, path.connection');
-            if (!wireEl || wireEl.classList.contains('dragging')) return;
-            e.preventDefault();
-            e.stopPropagation();
-            this._insertRerouteAtClient(wireEl, e.clientX, e.clientY);
-        }, { passive: false });
     }
 
     bindKeyboardEvents() {
@@ -939,6 +945,32 @@ export class Interaction {
 
     _findConnection(connectionId) {
         return this.graph.connections.find(conn => conn.id === connectionId) || null;
+    }
+
+    _consumeWireDoubleClick(wireElement, clientX, clientY) {
+        if (!wireElement || !wireElement.dataset) return false;
+
+        const connId = parseInt(wireElement.dataset.connId);
+        if (!Number.isFinite(connId)) {
+            this.pendingWireClick = null;
+            return false;
+        }
+
+        const now = Date.now();
+        const current = { connId, x: clientX, y: clientY, time: now };
+        const previous = this.pendingWireClick;
+        this.pendingWireClick = current;
+
+        if (!previous || previous.connId !== connId) return false;
+
+        const elapsed = now - previous.time;
+        if (elapsed > this.mouseConfig.wireDoubleClickMs) return false;
+
+        const distance = Math.hypot(clientX - previous.x, clientY - previous.y);
+        if (distance > this.mouseConfig.wireDoubleClickRadius) return false;
+
+        this.pendingWireClick = null;
+        return true;
     }
 
     _getRerouteTemplate(connectionType) {

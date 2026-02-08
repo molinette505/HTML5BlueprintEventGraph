@@ -403,7 +403,7 @@ export class ContextMenuManager {
                 entries.unshift({
                     template: {
                         name: rerouteActionName,
-                        category: spawnContext.dataType === 'exec' ? 'Flow Control' : 'Variables',
+                        category: 'Misc',
                         functionId: 'Internal.AddRerouteNode'
                     },
                     compatibility: { index: 0 },
