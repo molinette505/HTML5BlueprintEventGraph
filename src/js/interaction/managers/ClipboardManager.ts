@@ -146,6 +146,11 @@ export class ClipboardManager {
             if (nodeData.functionId === 'Variable.Get') return window.App.variableManager.createGetTemplate(nodeData.varName);
             if (nodeData.functionId === 'Variable.Set') return window.App.variableManager.createSetTemplate(nodeData.varName);
         }
+        if (nodeData.customEventName && window.App.variableManager) {
+            window.App.variableManager.ensureCustomEvent(nodeData.customEventName);
+            if (nodeData.functionId === 'Flow.CustomEvent') return window.App.variableManager.createCustomEventTemplate(nodeData.customEventName);
+            if (nodeData.functionId === 'Flow.CallCustomEvent') return window.App.variableManager.createCallCustomEventTemplate(nodeData.customEventName);
+        }
         return window.nodeTemplates.find(t => t.name === nodeData.name);
     }
 

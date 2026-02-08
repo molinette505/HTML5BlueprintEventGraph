@@ -17,6 +17,7 @@ export class Simulation {
         // Request tracking for queued evaluations
         this.nextRequestId = 1;
         this.pendingRequests = new Map();
+        this.pendingAsyncExecCount = 0;
 
         // Tracks all visuals (labels AND glowing wires) for the current step
         this.activeStepVisuals = [];
@@ -28,7 +29,8 @@ export class Simulation {
             "WhileLoop": (node, ctx, item, continuations, currentRunId) => this.runWhileLoop(node, ctx, continuations),
             "Do Once": (node, ctx, item, continuations, currentRunId) => this.runDoOnce(node, item.conn ? item.conn.toPin : null, continuations),
             "Delay": (node, ctx, item, continuations, currentRunId) => this.runDelay(node, ctx, continuations, currentRunId),
-            "Branch": (node, ctx, item, continuations, currentRunId) => this.runDefaultExec(node, ctx, continuations)
+            "Branch": (node, ctx, item, continuations, currentRunId) => this.runDefaultExec(node, ctx, continuations),
+            "Flow.CallCustomEvent": (node, ctx, item, continuations, currentRunId) => this.runCallCustomEvent(node, ctx, continuations)
         };
         this.purePolicies = {
             "default": (node, ctx, item, currentRunId) => this.runDefaultPure(node, ctx, item, currentRunId)
@@ -55,6 +57,7 @@ export class Simulation {
         });
         this.executionQueue = [];
         this.pendingRequests.clear();
+        this.pendingAsyncExecCount = 0;
         this.nextRequestId = 1;
         this.lastProcessedItem = null;
         this.lastProcessedExec = null;
@@ -75,6 +78,7 @@ export class Simulation {
         this.setStatus('STOPPED');
         this.executionQueue = [];
         this.pendingRequests.clear();
+        this.pendingAsyncExecCount = 0;
         this.lastProcessedItem = null;
         this.lastProcessedExec = null;
         if (this.timer) clearTimeout(this.timer);
@@ -241,7 +245,13 @@ export class Simulation {
     async processNext(isSingleStep) {
         const currentRunId = this.runInstanceId;
         if (this.executionQueue.length === 0) {
-            if (this.status === 'RUNNING') this.stop();
+            if (this.status === 'RUNNING') {
+                if (this.pendingAsyncExecCount > 0) {
+                    this.timer = setTimeout(() => this.tick(), 50);
+                    return;
+                }
+                this.stop();
+            }
             return;
         }
 
@@ -526,16 +536,43 @@ export class Simulation {
         }
 
         const { nextConn, nextNode } = nextInfo;
+        this.pendingAsyncExecCount += 1;
         setTimeout(() => {
-            if (this.runInstanceId !== currentRunId) return;
-            this.queueExec(nextNode, nextConn, false, continuations);
-            if (this.status === 'RUNNING') this.tick();
+            try {
+                if (this.runInstanceId !== currentRunId) return;
+                this.queueExec(nextNode, nextConn, false, continuations);
+                if (this.status === 'RUNNING') this.tick();
+            } finally {
+                this.pendingAsyncExecCount = Math.max(0, this.pendingAsyncExecCount - 1);
+            }
         }, delayMs);
     }
 
     executeExecNode(node, ctx, item, continuations, currentRunId) {
-        const policy = this.execPolicies[node.name] || ((n, c, i, cont, runId) => this.runDefaultExec(n, c, cont));
+        const policy = this.execPolicies[node.functionId] || this.execPolicies[node.name] || ((n, c, i, cont, runId) => this.runDefaultExec(n, c, cont));
         return policy(node, ctx, item, continuations, currentRunId);
+    }
+
+    runCallCustomEvent(node, ctx, continuations) {
+        this.highlightNode(node.id, '#ff9900');
+
+        const eventName = node.customEventName || '';
+        if (eventName) {
+            const targets = this.graph.nodes.filter(
+                (candidate) => candidate.functionId === 'Flow.CustomEvent' && candidate.customEventName === eventName
+            );
+            targets.forEach((targetNode) => {
+                this.queueExec(targetNode, null, false, null);
+            });
+        }
+
+        const nextInfo = this.getNextExecConnection(node);
+        if (nextInfo) {
+            const { nextConn, nextNode } = nextInfo;
+            this.queueExec(nextNode, nextConn, false, continuations);
+        } else {
+            this.enqueueContinuation(continuations);
+        }
     }
 
     runDefaultExec(node, ctx, continuations) {

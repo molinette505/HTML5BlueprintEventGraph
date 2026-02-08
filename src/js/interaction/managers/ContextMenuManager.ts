@@ -415,7 +415,30 @@ export class ContextMenuManager {
 
     _collectContextTemplates() {
         const templates = Array.isArray(window.nodeTemplates) ? [...window.nodeTemplates] : [];
-        return templates.concat(this._buildVariableContextTemplates());
+        return templates
+            .concat(this._buildCustomEventContextTemplates())
+            .concat(this._buildVariableContextTemplates());
+    }
+
+    _buildCustomEventContextTemplates() {
+        const variableManager = window.App && window.App.variableManager;
+        if (!variableManager || !Array.isArray(variableManager.customEvents)) return [];
+
+        const templates = [];
+        variableManager.customEvents.forEach((evt, index) => {
+            const eventTemplate = variableManager.createCustomEventTemplate(evt.name);
+            if (eventTemplate) {
+                eventTemplate.__ctxOrder = (index * 2);
+                templates.push(eventTemplate);
+            }
+
+            const callTemplate = variableManager.createCallCustomEventTemplate(evt.name);
+            if (callTemplate) {
+                callTemplate.__ctxOrder = (index * 2) + 1;
+                templates.push(callTemplate);
+            }
+        });
+        return templates;
     }
 
     _buildVariableContextTemplates() {

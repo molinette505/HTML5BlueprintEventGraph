@@ -104,17 +104,6 @@
     color: #fff;
 }
 
-.panel-header {
-    padding: 12px 15px;
-    background: #252526;
-    border-bottom: 1px solid #333;
-    display: flex; justify-content: space-between; align-items: center;
-}
-.panel-header h3 {
-    margin: 0; border: none; padding: 0;
-    font-size: 13px; color: #ddd; font-weight: 700;
-}
-
 .btn-small {
     background: #333; color: #fff; border: 1px solid #444;
     width: 20px; height: 20px; border-radius: 3px;
@@ -126,7 +115,29 @@
 .panel-content {
     flex-grow: 1;
     overflow-y: auto;
-    padding: 10px;
+    padding: 10px 10px 12px;
+}
+
+.drawer-section + .drawer-section {
+    margin-top: 12px;
+}
+
+.section-header {
+    padding: 8px 6px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #333;
+    margin-bottom: 8px;
+}
+
+.section-header h3 {
+    margin: 0;
+    border: none;
+    padding: 0;
+    font-size: 13px;
+    color: #ddd;
+    font-weight: 700;
 }
 
 .hint-footer {
@@ -141,8 +152,30 @@
     background: #2a2a2a; padding: 6px; border-radius: 4px;
     align-items: center; border: 1px solid transparent;
 }
+.event-row {
+    display: flex; gap: 6px; margin-bottom: 6px;
+    background: #2a2a2a; padding: 6px; border-radius: 4px;
+    align-items: center; border: 1px solid transparent;
+}
 .var-row:hover { background: #333; border-color: #444; }
 .var-row:active { cursor: grabbing; }
+.event-row:hover { background: #333; border-color: #444; }
+.event-row:active { cursor: grabbing; }
+
+.event-name {
+    background: transparent;
+    border: 1px solid transparent;
+    color: white;
+    flex-grow: 1;
+    font-size: 12px;
+    padding: 2px 4px;
+    border-radius: 2px;
+    min-width: 0;
+}
+.event-name:focus {
+    background: #111;
+    border-color: var(--accent-color);
+}
 
 .var-drag-ghost {
     position: fixed;

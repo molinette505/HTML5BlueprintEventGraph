@@ -10,6 +10,7 @@ export class VariableManager {
     constructor(editor) {
         this.editor = editor;
         this.variables = []; // { name, type, defaultValue }
+        this.customEvents = []; // { name }
         this.runtimeValues = {};
         this.lastAddedType = 'boolean';
         this.activeTouchVariableDrag = null;
@@ -19,6 +20,8 @@ export class VariableManager {
         this.widgetRenderer = new WidgetRenderer();
 
         this.ui = {
+            eventList: document.getElementById('event-list'),
+            addEventBtn: document.getElementById('btn-add-event'),
             list: document.getElementById('var-list'),
             addBtn: document.getElementById('btn-add-var')
         };
@@ -27,9 +30,70 @@ export class VariableManager {
     }
 
     bindEvents() {
+        if(this.ui.addEventBtn) {
+            this.ui.addEventBtn.onclick = () => this.addCustomEvent();
+        }
         if(this.ui.addBtn) {
             this.ui.addBtn.onclick = () => this.addVariable();
         }
+    }
+
+    ensureCustomEvent(name) {
+        if (!name) return;
+        if (this.customEvents.find(e => e.name === name)) return;
+        this.customEvents.push({ name });
+        this.renderList();
+    }
+
+    addCustomEvent() {
+        let name = "CustomEvent";
+        let count = 0;
+        while (this.customEvents.find(e => e.name === name)) {
+            count += 1;
+            name = `CustomEvent_${count}`;
+        }
+        this.customEvents.push({ name });
+        this.renderList();
+    }
+
+    deleteCustomEvent(name) {
+        this.customEvents = this.customEvents.filter(e => e.name !== name);
+
+        const nodesToRemove = this.editor.graph.nodes
+            .filter(n => n.customEventName === name)
+            .map(n => n.id);
+
+        nodesToRemove.forEach(id => {
+            this.editor.graph.removeNode(id);
+            const el = document.getElementById(`node-${id}`);
+            if (el) el.remove();
+        });
+
+        this.editor.renderer.render();
+        this.renderList();
+    }
+
+    renameCustomEvent(oldName, nextNameRaw) {
+        const nextName = String(nextNameRaw || "").trim();
+        if (!nextName || nextName === oldName) return;
+        if (this.customEvents.find(e => e.name === nextName)) {
+            this.renderList();
+            return;
+        }
+
+        const item = this.customEvents.find(e => e.name === oldName);
+        if (!item) return;
+        item.name = nextName;
+
+        this.editor.graph.nodes.forEach(node => {
+            if (node.customEventName !== oldName) return;
+            node.customEventName = nextName;
+            if (node.functionId === "Flow.CustomEvent") node.name = nextName;
+            if (node.functionId === "Flow.CallCustomEvent") node.name = `Call ${nextName}`;
+            this.editor.renderer.refreshNode(node);
+        });
+
+        this.renderList();
     }
 
     _isInteractiveVariableControl(target) {
@@ -37,15 +101,16 @@ export class VariableManager {
         return !!target.closest('input, select, button, textarea, .node-widget');
     }
 
-    _beginTouchVariableDrag(event, variable) {
+    _beginTouchVariableDrag(event, payload) {
         if (!event.touches || event.touches.length !== 1) return;
         if (this._isInteractiveVariableControl(event.target)) return;
 
         const touch = event.touches[0];
         this.activeTouchVariableDrag = {
             touchId: touch.identifier,
-            varName: variable.name,
-            varType: variable.type,
+            itemType: payload.itemType,
+            itemName: payload.itemName,
+            itemSubType: payload.itemSubType,
             startX: touch.clientX,
             startY: touch.clientY,
             lastX: touch.clientX,
@@ -72,7 +137,7 @@ export class VariableManager {
             drag.dragging = true;
             const ghost = document.createElement('div');
             ghost.className = 'var-drag-ghost';
-            ghost.textContent = drag.varName;
+            ghost.textContent = drag.itemName;
             document.body.appendChild(ghost);
             drag.ghost = ghost;
         }
@@ -100,7 +165,11 @@ export class VariableManager {
                 const rect = graphContainer.getBoundingClientRect();
                 const gx = (dropX - rect.left - this.editor.graph.pan.x) / this.editor.graph.scale;
                 const gy = (dropY - rect.top - this.editor.graph.pan.y) / this.editor.graph.scale;
-                this.editor.showVariableMenu(dropX, dropY, drag.varName, gx, gy);
+                if (drag.itemType === 'custom-event') {
+                    this.editor.showCustomEventMenu(dropX, dropY, drag.itemName, gx, gy);
+                } else {
+                    this.editor.showVariableMenu(dropX, dropY, drag.itemName, gx, gy);
+                }
             }
             event.preventDefault();
         }
@@ -260,8 +329,42 @@ export class VariableManager {
     }
 
     renderList() {
-        if(!this.ui.list) return;
+        if(!this.ui.list || !this.ui.eventList) return;
         this.ui.list.innerHTML = '';
+        this.ui.eventList.innerHTML = '';
+
+        this.customEvents.forEach((evt) => {
+            const row = document.createElement('div');
+            row.className = 'event-row';
+
+            const nameInput = document.createElement('input');
+            nameInput.value = evt.name;
+            nameInput.className = 'event-name';
+            nameInput.onchange = (e) => this.renameCustomEvent(evt.name, e.target.value);
+
+            const delBtn = document.createElement('button');
+            delBtn.innerText = '×';
+            delBtn.className = 'var-del';
+            delBtn.onclick = () => this.deleteCustomEvent(evt.name);
+
+            row.draggable = true;
+            row.ondragstart = (e) => {
+                e.dataTransfer.setData('application/json', JSON.stringify({
+                    type: 'custom-event',
+                    name: evt.name
+                }));
+            };
+            row.addEventListener('touchstart', (e) => this._beginTouchVariableDrag(e, {
+                itemType: 'custom-event',
+                itemName: evt.name
+            }), { passive: true });
+            row.addEventListener('touchmove', (e) => this._updateTouchVariableDrag(e), { passive: false });
+            row.addEventListener('touchend', (e) => this._endTouchVariableDrag(e), { passive: false });
+            row.addEventListener('touchcancel', () => this._clearTouchVariableDrag(), { passive: true });
+
+            row.append(nameInput, delBtn);
+            this.ui.eventList.appendChild(row);
+        });
 
         this.variables.forEach(v => {
             const row = document.createElement('div');
@@ -364,7 +467,11 @@ export class VariableManager {
                     varType: v.type
                 }));
             };
-            row.addEventListener('touchstart', (e) => this._beginTouchVariableDrag(e, v), { passive: true });
+            row.addEventListener('touchstart', (e) => this._beginTouchVariableDrag(e, {
+                itemType: 'variable',
+                itemName: v.name,
+                itemSubType: v.type
+            }), { passive: true });
             row.addEventListener('touchmove', (e) => this._updateTouchVariableDrag(e), { passive: false });
             row.addEventListener('touchend', (e) => this._endTouchVariableDrag(e), { passive: false });
             row.addEventListener('touchcancel', () => this._clearTouchVariableDrag(), { passive: true });
@@ -421,6 +528,41 @@ export class VariableManager {
             outputs: [
                 { name: "Out", type: "exec" },
                 { name: "", type: v.type } 
+            ]
+        };
+    }
+
+    createCustomEventTemplate(eventName) {
+        const evt = this.customEvents.find(e => e.name === eventName);
+        if (!evt) return null;
+
+        return {
+            name: evt.name,
+            category: "Custom Events",
+            color: "var(--n-event)",
+            functionId: "Flow.CustomEvent",
+            customEventName: evt.name,
+            outputs: [
+                { name: "Out", type: "exec" }
+            ]
+        };
+    }
+
+    createCallCustomEventTemplate(eventName) {
+        const evt = this.customEvents.find(e => e.name === eventName);
+        if (!evt) return null;
+
+        return {
+            name: `Call ${evt.name}`,
+            category: "Custom Events",
+            color: "var(--header-default)",
+            functionId: "Flow.CallCustomEvent",
+            customEventName: evt.name,
+            inputs: [
+                { name: "Exec", type: "exec" }
+            ],
+            outputs: [
+                { name: "Out", type: "exec" }
             ]
         };
     }

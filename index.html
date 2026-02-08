@@ -55,19 +55,29 @@
         </div>
 
         <div id="variable-panel">
-            <div class="panel-header">
-                <h3>Variables</h3>
-                <button id="btn-add-var" class="btn-small" title="Add Variable">+</button>
-            </div>
             <div class="panel-content">
-                <div id="var-list">
+                <div class="drawer-section">
+                    <div class="section-header">
+                        <h3>Event Graph</h3>
+                        <button id="btn-add-event" class="btn-small" title="Add Custom Event">+</button>
                     </div>
+                    <div id="event-list">
+                    </div>
+                </div>
+                <div class="drawer-section">
+                    <div class="section-header">
+                        <h3>Variables</h3>
+                        <button id="btn-add-var" class="btn-small" title="Add Variable">+</button>
+                    </div>
+                    <div id="var-list">
+                    </div>
+                </div>
             </div>
             <div class="hint-footer">
                 Drag to Graph (Alt+Drag to Set)
             </div>
         </div>
-        <button id="variable-drawer-handle" aria-label="Toggle Variables">Variables</button>
+        <button id="variable-drawer-handle" aria-label="Toggle Drawer">|</button>
     </div>
 </div>
 

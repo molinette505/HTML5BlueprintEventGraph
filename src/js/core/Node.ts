@@ -32,6 +32,7 @@ export class GraphNode {
 
         // Restore Variable Name if this node represents a Getter/Setter
         this.varName = nodeTemplate.varName || null;
+        this.customEventName = nodeTemplate.customEventName || null;
 
         // Function reference for logic execution
         this.functionId = nodeTemplate.functionId || null;
@@ -118,6 +119,7 @@ export class GraphNode {
             x: this.x,
             y: this.y,
             varName: this.varName, 
+            customEventName: this.customEventName,
             functionId: this.functionId, // Persist functionId to identify logic (e.g. Get/Set) on restore
             
             // Save types to validation/reconstruction

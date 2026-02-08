@@ -135,14 +135,18 @@ export class Editor {
             try { data = JSON.parse(rawData); } catch(err) { return; }
             
             // If the user dropped a variable, calculate where it landed
-            if (data.type === 'variable') {
+            if (data.type === 'variable' || data.type === 'custom-event') {
                 const rect = c.getBoundingClientRect();
                 // Convert Screen Coords -> Graph Coords (accounting for Pan/Zoom)
                 const x = (e.clientX - rect.left - this.graph.pan.x) / this.graph.scale;
                 const y = (e.clientY - rect.top - this.graph.pan.y) / this.graph.scale;
 
-                // Open the specific "Get vs Set" menu
-                this.showVariableMenu(e.clientX, e.clientY, data.name, x, y);
+                if (data.type === 'custom-event') {
+                    this.showCustomEventMenu(e.clientX, e.clientY, data.name, x, y);
+                } else {
+                    // Open the specific "Get vs Set" menu
+                    this.showVariableMenu(e.clientX, e.clientY, data.name, x, y);
+                }
             }
         });
     }
@@ -202,6 +206,43 @@ export class Editor {
         createOption(`Set ${varName}`, true);
     }
 
+    showCustomEventMenu(mx, my, eventName, gx, gy) {
+        const menu = this.dom.contextMenu;
+        const list = this.dom.contextList;
+        const search = this.dom.contextSearch;
+
+        let drawX = mx; let drawY = my;
+        if(mx + 170 > window.innerWidth) drawX -= 170;
+        if(my + 100 > window.innerHeight) drawY -= 100;
+
+        menu.style.left = `${drawX}px`;
+        menu.style.top = `${drawY}px`;
+        menu.classList.add('visible');
+
+        if(search) search.style.display = 'none';
+        if(this.dom.contextControls) this.dom.contextControls.style.display = 'none';
+        list.innerHTML = '';
+
+        const createOption = (label, makeTemplate) => {
+            const li = document.createElement('li');
+            li.className = 'ctx-item';
+            li.innerText = label;
+            li.onclick = () => {
+                const template = makeTemplate();
+                if (template) {
+                    const node = this.graph.addNode(template, gx, gy);
+                    if (template.customEventName) node.customEventName = template.customEventName;
+                    this.renderer.createNodeElement(node, (e, nid) => this.interaction.handleNodeDown(e, nid));
+                }
+                menu.classList.remove('visible');
+            };
+            list.appendChild(li);
+        };
+
+        createOption(`Custom Event ${eventName}`, () => this.variableManager.createCustomEventTemplate(eventName));
+        createOption(`Call ${eventName}`, () => this.variableManager.createCallCustomEventTemplate(eventName));
+    }
+
     /**
      * Updates the Toolbar buttons (Enabled/Disabled) based on the Simulation State.
      * @param {string} status - 'STOPPED', 'RUNNING', or 'PAUSED'
@@ -255,6 +296,14 @@ export class Editor {
         const connections = Array.isArray(serializedGraph) ? [] : (serializedGraph.connections || []);
         if (!nodes.length) return;
 
+        if (this.variableManager) {
+            nodes.forEach((nodeData) => {
+                if (nodeData.customEventName) {
+                    this.variableManager.ensureCustomEvent(nodeData.customEventName);
+                }
+            });
+        }
+
         const idMap = new Map();
         nodes.forEach(nodeData => {
             const template = this._resolveTemplateForSerializedNode(nodeData);
@@ -265,6 +314,9 @@ export class Editor {
 
             if (nodeData.varName) {
                 node.varName = nodeData.varName;
+            }
+            if (nodeData.customEventName) {
+                node.customEventName = nodeData.customEventName;
             }
 
             this._restoreNodeState(node, nodeData);
@@ -285,6 +337,11 @@ export class Editor {
         if (nodeData.varName && this.variableManager) {
             if (nodeData.functionId === 'Variable.Get') return this.variableManager.createGetTemplate(nodeData.varName);
             if (nodeData.functionId === 'Variable.Set') return this.variableManager.createSetTemplate(nodeData.varName);
+        }
+        if (nodeData.customEventName && this.variableManager) {
+            this.variableManager.ensureCustomEvent(nodeData.customEventName);
+            if (nodeData.functionId === 'Flow.CustomEvent') return this.variableManager.createCustomEventTemplate(nodeData.customEventName);
+            if (nodeData.functionId === 'Flow.CallCustomEvent') return this.variableManager.createCallCustomEventTemplate(nodeData.customEventName);
         }
         return (window.nodeTemplates || []).find(template => template.name === nodeData.name);
     }
