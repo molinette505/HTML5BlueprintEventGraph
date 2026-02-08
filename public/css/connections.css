@@ -10,7 +10,7 @@ path.connection {
     stroke: var(--wire-default);
     stroke-width: 2px;
     stroke-linecap: round;
-    pointer-events: stroke;
+    pointer-events: none;
     cursor: pointer;
     transition: stroke-width 0.1s, stroke 0.2s;
 }
@@ -18,6 +18,15 @@ path.connection {
 path.connection:hover {
     stroke-width: 4px;
     stroke: var(--wire-hover);
+}
+
+path.connection-hit {
+    fill: none;
+    stroke: transparent;
+    stroke-width: 20px;
+    stroke-linecap: round;
+    pointer-events: stroke;
+    cursor: pointer;
 }
 
 /* Default Pulse Animation (for dragging) */

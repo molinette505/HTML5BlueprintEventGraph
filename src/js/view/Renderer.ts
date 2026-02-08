@@ -115,14 +115,14 @@ export class Renderer {
      * @param {Number} id - Optional Connection ID to assign to the DOM element
      */
     drawCurve(p1, p2, type, isDrag, id = null, controlPoints = []) {
-        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        let d = "";
 
         const points = [p1]
             .concat(Array.isArray(controlPoints) ? controlPoints : [])
             .concat([p2]);
 
         // Build a segmented cubic path so inserted control points bend the wire.
-        let d = `M ${points[0].x} ${points[0].y}`;
+        d = `M ${points[0].x} ${points[0].y}`;
         for (let index = 0; index < points.length - 1; index += 1) {
             const a = points[index];
             const b = points[index + 1];
@@ -130,6 +130,16 @@ export class Renderer {
             const cp = Math.max(dist * 0.5, 40);
             d += ` C ${a.x + cp} ${a.y}, ${b.x - cp} ${b.y}, ${b.x} ${b.y}`;
         }
+
+        if (!isDrag && id) {
+            const hitPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            hitPath.setAttribute('d', d);
+            hitPath.setAttribute('class', 'connection-hit');
+            hitPath.dataset.connId = String(id);
+            this.dom.connectionsLayer.appendChild(hitPath);
+        }
+
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
 
         path.setAttribute('d', d); 
         path.setAttribute('class', `connection ${type==='exec'?'exec':''} ${isDrag?'dragging':''}`);

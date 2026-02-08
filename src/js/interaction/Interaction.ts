@@ -101,14 +101,20 @@ export class Interaction {
             if (pointEl) {
                 if (e.button === 0) {
                     e.preventDefault();
-                    this._startConnectionPointDrag(e, pointEl);
+                    if (e.altKey) {
+                        const connId = parseInt(pointEl.dataset.connId);
+                        const pointIndex = parseInt(pointEl.dataset.pointIndex);
+                        this._removeConnectionPoint(connId, pointIndex);
+                    } else {
+                        this._startConnectionPointDrag(e, pointEl);
+                    }
                 }
                 return;
             }
 
-            const wireEl = e.target.closest('path.connection');
+            const wireEl = e.target.closest('path.connection-hit, path.connection');
             if (wireEl && !wireEl.classList.contains('dragging')) {
-                if (e.button === 0) {
+                if (e.button === 0 && e.altKey) {
                     e.preventDefault();
                     this._addConnectionPointAtClient(wireEl, e.clientX, e.clientY);
                 }
@@ -329,7 +335,7 @@ export class Interaction {
             return;
         }
 
-        const wireEl = target.closest && target.closest('path.connection');
+        const wireEl = target.closest && target.closest('path.connection-hit, path.connection');
         if (wireEl && !wireEl.classList.contains('dragging')) {
             e.preventDefault();
             this._beginConnectionWireTouch(touch, wireEl);
@@ -1083,10 +1089,6 @@ export class Interaction {
 
     _endConnectionPointDrag() {
         if (!this.connectionPointDrag) return;
-        const drag = this.connectionPointDrag;
-        if (!drag.hasMoved) {
-            this._removeConnectionPoint(drag.connId, drag.pointIndex);
-        }
         this.connectionPointDrag = null;
     }
 
