@@ -33,7 +33,7 @@ export class Simulation {
         this.purePolicies = {
             "default": (node, ctx, item, currentRunId) => this.runDefaultPure(node, ctx, item, currentRunId)
         };
-        this.postInputSettleDelayMs = 220;
+        this.postInputSettleDelayMs = 360;
     }
 
     initialize() {

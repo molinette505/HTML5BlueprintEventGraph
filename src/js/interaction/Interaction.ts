@@ -81,6 +81,8 @@ export class Interaction {
 
         this.pendingTap = null;
         this.pendingPinSingleAction = null;
+        this.pendingNodeSingleAction = null;
+        this.pendingCanvasClearAction = null;
 
         this.bindEvents();
         this.bindKeyboardEvents();
@@ -470,7 +472,22 @@ export class Interaction {
                 };
                 const usedForContext = this._registerTouchTap(tap);
                 if (!usedForContext) {
-                    this._handleNodeTap(state.nodeId);
+                    const isSelectedMultiTap = this.selectionManager.selected.size > 1
+                        && this.selectionManager.selected.has(state.nodeId);
+                    if (isSelectedMultiTap) {
+                        if (this.pendingNodeSingleAction && this.pendingNodeSingleAction.timer) {
+                            clearTimeout(this.pendingNodeSingleAction.timer);
+                        }
+                        const timer = setTimeout(() => {
+                            if (this.pendingNodeSingleAction && this.pendingNodeSingleAction.tapTime === tap.time) {
+                                this._handleNodeTap(state.nodeId);
+                                this.pendingNodeSingleAction = null;
+                            }
+                        }, this.touchConfig.doubleTapMs + 20);
+                        this.pendingNodeSingleAction = { tapTime: tap.time, targetId: tap.targetId, timer };
+                    } else {
+                        this._handleNodeTap(state.nodeId);
+                    }
                 }
             }
         }
@@ -491,7 +508,16 @@ export class Interaction {
                 const usedForContext = this._registerTouchTap(tap);
                 if (!usedForContext) {
                     if (this.selectionManager.selected.size > 0) {
-                        this.selectionManager.clear();
+                        if (this.pendingCanvasClearAction && this.pendingCanvasClearAction.timer) {
+                            clearTimeout(this.pendingCanvasClearAction.timer);
+                        }
+                        const timer = setTimeout(() => {
+                            if (this.pendingCanvasClearAction && this.pendingCanvasClearAction.tapTime === tap.time) {
+                                this.selectionManager.clear();
+                                this.pendingCanvasClearAction = null;
+                            }
+                        }, this.touchConfig.doubleTapMs + 20);
+                        this.pendingCanvasClearAction = { tapTime: tap.time, timer };
                     }
                 }
             }
@@ -673,11 +699,34 @@ export class Interaction {
     }
 
     _registerTouchTap(tap) {
+        if (this.pendingNodeSingleAction) {
+            const isSameNodeTap = tap && tap.type === 'node' && tap.targetId === this.pendingNodeSingleAction.targetId;
+            if (!isSameNodeTap) {
+                if (this.pendingNodeSingleAction.timer) clearTimeout(this.pendingNodeSingleAction.timer);
+                this.pendingNodeSingleAction = null;
+            }
+        }
+        if (this.pendingCanvasClearAction) {
+            const isCanvasTap = tap && tap.type === 'canvas';
+            if (!isCanvasTap) {
+                if (this.pendingCanvasClearAction.timer) clearTimeout(this.pendingCanvasClearAction.timer);
+                this.pendingCanvasClearAction = null;
+            }
+        }
+
         if (this._isDoubleTap(this.pendingTap, tap)) {
             this.pendingTap = null;
             if (this.pendingPinSingleAction && this.pendingPinSingleAction.timer) {
                 clearTimeout(this.pendingPinSingleAction.timer);
                 this.pendingPinSingleAction = null;
+            }
+            if (this.pendingNodeSingleAction && this.pendingNodeSingleAction.timer) {
+                clearTimeout(this.pendingNodeSingleAction.timer);
+                this.pendingNodeSingleAction = null;
+            }
+            if (this.pendingCanvasClearAction && this.pendingCanvasClearAction.timer) {
+                clearTimeout(this.pendingCanvasClearAction.timer);
+                this.pendingCanvasClearAction = null;
             }
             this._showTouchContextMenu(tap);
             return true;

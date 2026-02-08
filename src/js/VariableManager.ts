@@ -12,6 +12,8 @@ export class VariableManager {
         this.variables = []; // { name, type, defaultValue }
         this.runtimeValues = {};
         this.lastAddedType = 'boolean';
+        this.activeTouchVariableDrag = null;
+        this.touchVariableDragThreshold = 8;
 
         // Helper to render widgets in the sidebar
         this.widgetRenderer = new WidgetRenderer();
@@ -28,6 +30,89 @@ export class VariableManager {
         if(this.ui.addBtn) {
             this.ui.addBtn.onclick = () => this.addVariable();
         }
+    }
+
+    _isInteractiveVariableControl(target) {
+        if (!target || !target.closest) return false;
+        return !!target.closest('input, select, button, textarea, .node-widget');
+    }
+
+    _beginTouchVariableDrag(event, variable) {
+        if (!event.touches || event.touches.length !== 1) return;
+        if (this._isInteractiveVariableControl(event.target)) return;
+
+        const touch = event.touches[0];
+        this.activeTouchVariableDrag = {
+            touchId: touch.identifier,
+            varName: variable.name,
+            varType: variable.type,
+            startX: touch.clientX,
+            startY: touch.clientY,
+            lastX: touch.clientX,
+            lastY: touch.clientY,
+            dragging: false,
+            ghost: null
+        };
+    }
+
+    _updateTouchVariableDrag(event) {
+        const drag = this.activeTouchVariableDrag;
+        if (!drag) return;
+
+        const touch = Array.from(event.touches || []).find(t => t.identifier === drag.touchId);
+        if (!touch) return;
+
+        drag.lastX = touch.clientX;
+        drag.lastY = touch.clientY;
+
+        if (!drag.dragging) {
+            const distance = Math.hypot(drag.lastX - drag.startX, drag.lastY - drag.startY);
+            if (distance <= this.touchVariableDragThreshold) return;
+
+            drag.dragging = true;
+            const ghost = document.createElement('div');
+            ghost.className = 'var-drag-ghost';
+            ghost.textContent = drag.varName;
+            document.body.appendChild(ghost);
+            drag.ghost = ghost;
+        }
+
+        if (drag.ghost) {
+            drag.ghost.style.left = `${drag.lastX + 14}px`;
+            drag.ghost.style.top = `${drag.lastY + 14}px`;
+        }
+        event.preventDefault();
+    }
+
+    _endTouchVariableDrag(event) {
+        const drag = this.activeTouchVariableDrag;
+        if (!drag) return;
+
+        const touch = Array.from(event.changedTouches || []).find(t => t.identifier === drag.touchId);
+        if (!touch) return;
+
+        if (drag.dragging) {
+            const dropX = touch.clientX;
+            const dropY = touch.clientY;
+            const graphContainer = this.editor.dom.container;
+            const dropTarget = document.elementFromPoint(dropX, dropY);
+            if (graphContainer && dropTarget && graphContainer.contains(dropTarget)) {
+                const rect = graphContainer.getBoundingClientRect();
+                const gx = (dropX - rect.left - this.editor.graph.pan.x) / this.editor.graph.scale;
+                const gy = (dropY - rect.top - this.editor.graph.pan.y) / this.editor.graph.scale;
+                this.editor.showVariableMenu(dropX, dropY, drag.varName, gx, gy);
+            }
+            event.preventDefault();
+        }
+
+        this._clearTouchVariableDrag();
+    }
+
+    _clearTouchVariableDrag() {
+        if (this.activeTouchVariableDrag && this.activeTouchVariableDrag.ghost) {
+            this.activeTouchVariableDrag.ghost.remove();
+        }
+        this.activeTouchVariableDrag = null;
     }
 
     addVariable() {
@@ -279,6 +364,10 @@ export class VariableManager {
                     varType: v.type
                 }));
             };
+            row.addEventListener('touchstart', (e) => this._beginTouchVariableDrag(e, v), { passive: true });
+            row.addEventListener('touchmove', (e) => this._updateTouchVariableDrag(e), { passive: false });
+            row.addEventListener('touchend', (e) => this._endTouchVariableDrag(e), { passive: false });
+            row.addEventListener('touchcancel', () => this._clearTouchVariableDrag(), { passive: true });
 
             row.append(typeIndicator, col);
             this.ui.list.appendChild(row);
