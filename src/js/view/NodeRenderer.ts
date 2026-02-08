@@ -66,19 +66,17 @@ export class NodeRenderer {
             if (!p.advanced || node.showAdvanced) left.appendChild(this.renderPin(p));
         });
 
-        // Render Output Pins (Filter out hidden advanced pins)
-        node.outputs.forEach(p => {
-            if (!p.advanced || node.showAdvanced) right.appendChild(this.renderPin(p));
-        });
-
         if (node.functionId === "Array.Make") {
             const addPinRow = document.createElement('div');
             addPinRow.className = 'pin-row make-array-add-row';
 
             const addPinBtn = document.createElement('button');
             addPinBtn.type = 'button';
-            addPinBtn.className = 'make-array-add-pin';
-            addPinBtn.innerText = 'Add pin +';
+            addPinBtn.className = 'make-array-add-pin-circle';
+            addPinBtn.innerText = '+';
+            const arrayOutputPin = node.outputs.find((pin) => pin.isArray) || node.outputs[0];
+            const typeDef = arrayOutputPin ? (window.typeDefinitions[arrayOutputPin.type] || { color: '#999' }) : { color: '#999' };
+            addPinBtn.style.setProperty('--pin-color', typeDef.color);
             addPinBtn.addEventListener('mousedown', (event) => {
                 event.preventDefault();
                 event.stopPropagation();
@@ -94,8 +92,13 @@ export class NodeRenderer {
             }, { passive: false });
 
             addPinRow.appendChild(addPinBtn);
-            right.appendChild(addPinRow);
+            left.appendChild(addPinRow);
         }
+
+        // Render Output Pins (Filter out hidden advanced pins)
+        node.outputs.forEach(p => {
+            if (!p.advanced || node.showAdvanced) right.appendChild(this.renderPin(p));
+        });
 
         body.append(left, center, right);
         el.appendChild(body);
@@ -171,7 +174,8 @@ export class NodeRenderer {
         
         // The Pin Circle (Connection Point)
         const shape = document.createElement('div');
-        shape.className = `pin ${pin.type}`;
+        const isArrayDataPin = pin.type !== 'exec' && !!pin.isArray;
+        shape.className = `pin ${pin.type} ${isArrayDataPin ? 'array-pin' : ''}`;
         
         // Dataset attributes used by Interaction.js for wiring logic
         shape.dataset.node = pin.nodeId;
@@ -184,6 +188,9 @@ export class NodeRenderer {
         // Apply Data Type Color
         const typeDef = window.typeDefinitions[pin.type] || { color: '#999' };
         shape.style.setProperty('--pin-color', typeDef.color);
+        if (isArrayDataPin) {
+            shape.innerHTML = this.createArrayPinIconMarkup();
+        }
 
         // Pin Label
         const label = document.createElement('span');
@@ -213,7 +220,8 @@ export class NodeRenderer {
         if (!pin) return null;
 
         const shape = document.createElement('div');
-        shape.className = `pin ${pin.type} reroute-pin ${sideClass}`;
+        const isArrayDataPin = pin.type !== 'exec' && !!pin.isArray;
+        shape.className = `pin ${pin.type} reroute-pin ${sideClass} ${isArrayDataPin ? 'array-pin' : ''}`;
         shape.dataset.node = pin.nodeId;
         shape.dataset.index = pin.index;
         shape.dataset.type = pin.direction;
@@ -223,6 +231,20 @@ export class NodeRenderer {
 
         const typeDef = window.typeDefinitions[pin.type] || { color: '#999' };
         shape.style.setProperty('--pin-color', typeDef.color);
+        if (isArrayDataPin) {
+            shape.innerHTML = this.createArrayPinIconMarkup();
+        }
         return shape;
+    }
+
+    createArrayPinIconMarkup() {
+        return `
+            <svg class="pin-array-icon" viewBox="0 0 24 24" fill="none" stroke="var(--pin-color)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="3" y="3" width="7" height="7" rx="1"></rect>
+                <rect x="14" y="3" width="7" height="7" rx="1"></rect>
+                <rect x="3" y="14" width="7" height="7" rx="1"></rect>
+                <rect x="14" y="14" width="7" height="7" rx="1"></rect>
+            </svg>
+        `;
     }
 }

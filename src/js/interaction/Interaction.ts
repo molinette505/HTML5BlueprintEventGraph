@@ -62,9 +62,12 @@ export class Interaction {
                 onCut: () => this.cutSelection(),
                 onPaste: (x, y) => this.clipboard.paste(x, y),
                 onPinChange: (node, pin, newType, index, dir) => {
-                    pin.setType(newType);
                     this.graph.disconnectPin(node.id, index, dir);
-                    this.renderer.refreshNode(node);
+                    pin.setType(newType);
+                    const didSyncArrayNode = this.connectionManager.syncArrayNodeTypesFromPin(node, pin, pin.type);
+                    if (!didSyncArrayNode) {
+                        this.renderer.refreshNode(node);
+                    }
                 },
                 onHide: () => this.connectionManager.clearPendingSpawn()
             }

@@ -73,23 +73,32 @@
 }
 
 .make-array-add-row {
-    height: auto;
-    min-height: 18px;
-    justify-content: flex-end;
+    min-height: 26px;
+    align-items: center;
 }
 
-.make-array-add-pin {
-    border: none;
+.make-array-add-row .make-array-add-pin-circle {
+    margin-left: 0;
+}
+
+.make-array-add-pin-circle {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 2px solid var(--pin-color, #9a9a9a);
     background: transparent;
-    color: #d6d6d6;
+    color: var(--pin-color, #9a9a9a);
     font-size: 11px;
-    line-height: 1;
-    padding: 2px 0;
+    line-height: 10px;
+    padding: 0;
     cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
-.make-array-add-pin:hover {
-    color: #ffffff;
+.make-array-add-pin-circle:hover {
+    transform: scale(1.2);
 }
 
 /* ADVANCED ARROW */

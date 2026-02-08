@@ -19,6 +19,31 @@ export class ConnectionManager {
         this.snapDistancePx = 42;
     }
 
+    isArrayPolicyNode(node) {
+        return !!node
+            && typeof node.functionId === 'string'
+            && node.functionId.startsWith('Array.');
+    }
+
+    syncArrayNodeTypesFromPin(node, pin, typeHint = null) {
+        if (!this.isArrayPolicyNode(node) || !pin) return false;
+
+        const hintedType = typeof typeHint === 'string' && typeHint.length > 0
+            ? typeHint
+            : pin.type;
+        if (!hintedType || hintedType === 'exec' || this._isWildcardType(hintedType)) return false;
+
+        const arrayPin = !!pin.isArray || this._isArrayType(pin.type) || hintedType === 'wildcard[]';
+        const normalizedType = arrayPin
+            ? this._ensureArrayType(hintedType)
+            : this._getElementType(hintedType);
+
+        this._applyWildcardTypes(node, normalizedType, arrayPin || this._isArrayType(normalizedType));
+        this._pruneIncompatibleConnectionsForNode(node);
+        this.renderer.refreshNode(node);
+        return true;
+    }
+
     buildSpawnContext() {
         if (!this.dragWire) return null;
 
@@ -120,6 +145,7 @@ export class ConnectionManager {
                 this._applyWildcardTypes(targetNode, spawnContext.dataType, !!spawnContext.isArray);
                 this.renderer.refreshNode(targetNode);
             }
+            this.syncArrayNodeTypesFromPin(targetNode, inputPin, spawnContext.dataType);
 
             this.graph.addConnection(
                 spawnContext.sourceNodeId,
@@ -151,6 +177,7 @@ export class ConnectionManager {
                 this._applyWildcardTypes(targetNode, spawnContext.dataType, !!spawnContext.isArray);
                 this.renderer.refreshNode(targetNode);
             }
+            this.syncArrayNodeTypesFromPin(targetNode, outputPin, spawnContext.dataType);
 
             this.graph.addConnection(
                 targetNode.id,
@@ -354,6 +381,13 @@ export class ConnectionManager {
         const toNode = s.sourceType === 'output' ? t.nodeId : s.sourceNode;
         const toPin = s.sourceType === 'output' ? t.index : s.sourcePin;
 
+        const fromNodeObj = this.graph.nodes.find((node) => node.id === fromNode);
+        const toNodeObj = this.graph.nodes.find((node) => node.id === toNode);
+        const fromPinObj = fromNodeObj && fromNodeObj.outputs ? fromNodeObj.outputs[fromPin] : null;
+        const toPinObj = toNodeObj && toNodeObj.inputs ? toNodeObj.inputs[toPin] : null;
+        this.syncArrayNodeTypesFromPin(fromNodeObj, fromPinObj, s.dataType);
+        this.syncArrayNodeTypesFromPin(toNodeObj, toPinObj, s.dataType);
+
         this.graph.addConnection(fromNode, fromPin, toNode, toPin, s.dataType);
     }
 
@@ -520,6 +554,24 @@ export class ConnectionManager {
         if (this._isArrayType(fromType) || this._isArrayType(toType)) return false;
         const key = `${fromType}->${toType}`;
         return !!(window.nodeConversions && window.nodeConversions[key]);
+    }
+
+    _pruneIncompatibleConnectionsForNode(node) {
+        if (!node) return;
+
+        this.graph.connections = this.graph.connections.filter((connection) => {
+            if (connection.fromNode === node.id) {
+                const outputPin = node.outputs[connection.fromPin];
+                if (!outputPin) return false;
+                if (outputPin.type !== 'exec' && connection.type !== outputPin.type) return false;
+            }
+            if (connection.toNode === node.id) {
+                const inputPin = node.inputs[connection.toPin];
+                if (!inputPin) return false;
+                if (inputPin.type !== 'exec' && connection.type !== inputPin.type) return false;
+            }
+            return true;
+        });
     }
 
     _isArrayType(typeName) {

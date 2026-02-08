@@ -39,6 +39,37 @@
     border-color: var(--pin-snap) !important;
 }
 
+.pin.array-pin {
+    width: 14px;
+    height: 14px;
+    border: none;
+    border-radius: 2px;
+    background: transparent;
+    margin-top: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.pin.array-pin .pin-array-icon {
+    width: 14px;
+    height: 14px;
+    display: block;
+}
+
+.pin.array-pin:hover {
+    background-color: transparent;
+}
+
+.pin.array-pin.connected .pin-array-icon {
+    filter: drop-shadow(0 0 2px var(--pin-color));
+}
+
+.pin.array-pin.snapped {
+    background-color: transparent !important;
+    border-color: transparent !important;
+}
+
 .pin.exec {
     border-radius: 0; width: 14px; height: 15px;
     border: none; background: none;
