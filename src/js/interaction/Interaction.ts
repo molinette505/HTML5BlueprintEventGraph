@@ -582,15 +582,6 @@ export class Interaction {
 
         this._armTouchLongPress(() => {
             const selected = this.selectionManager.selected;
-            if (selected.size <= 1) {
-                if (selected.has(nodeId)) this.selectionManager.remove(nodeId);
-                else {
-                    this.selectionManager.clear();
-                    this.selectionManager.add(nodeId);
-                }
-                return;
-            }
-
             if (selected.has(nodeId)) this.selectionManager.remove(nodeId);
             else this.selectionManager.add(nodeId);
         });

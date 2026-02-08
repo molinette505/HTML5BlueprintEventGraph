@@ -16,21 +16,26 @@
 
 <div id="app">
     <div id="toolbar">
-        <div class="toolbar-left"></div>
-        
-        <div class="controls">
-            <button class="btn-control" id="btn-play" title="Play">
-                <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-            </button>
-            <button class="btn-control" id="btn-step" title="Step Forward">
-                <svg viewBox="0 0 24 24"><path d="M6 5v14l9-7z M17 5v14h2V5z"/></svg>
-            </button>
-            <button class="btn-control" id="btn-replay" title="Replay Last Step" disabled>
-                <svg viewBox="0 0 24 24"><path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg>
-            </button>
-            <button class="btn-control" id="btn-stop" title="Stop & Reset" disabled>
-                <svg viewBox="0 0 24 24"><path d="M6 6h12v12H6z"/></svg>
-            </button>
+        <div class="toolbar-left">
+            <div class="controls">
+                <button class="btn-control" id="btn-play" title="Play">
+                    <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                </button>
+                <button class="btn-control" id="btn-step" title="Step Forward">
+                    <svg viewBox="0 0 24 24"><path d="M6 5v14l9-7z M17 5v14h2V5z"/></svg>
+                </button>
+                <button class="btn-control" id="btn-replay" title="Replay Last Step" disabled>
+                    <svg viewBox="0 0 24 24"><path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg>
+                </button>
+                <button class="btn-control" id="btn-stop" title="Stop & Reset" disabled>
+                    <svg viewBox="0 0 24 24"><path d="M6 6h12v12H6z"/></svg>
+                </button>
+            </div>
+        </div>
+
+        <div class="toolbar-right">
+            <button id="btn-save" class="btn-action" title="Save Graph">Save</button>
+            <button id="btn-load" class="btn-action btn-action-secondary" title="Load Graph">Load</button>
         </div>
     </div>
 
@@ -82,6 +87,25 @@
 </div>
 
 <div id="notification"></div>
+<div id="save-load-modal" class="modal-overlay">
+    <div class="modal-card">
+        <div class="modal-header">
+            <h3 id="modal-title">Save</h3>
+            <button id="btn-modal-close" class="btn-small" title="Close">×</button>
+        </div>
+        <div class="modal-body">
+            <div id="modal-save-name-row" class="modal-save-name-row">
+                <label for="modal-save-name">Save Name</label>
+                <input id="modal-save-name" type="text" autocomplete="off" />
+            </div>
+            <div id="modal-save-list" class="modal-save-list"></div>
+        </div>
+        <div class="modal-footer">
+            <button id="btn-modal-delete" class="btn-action btn-action-danger">Delete</button>
+            <button id="btn-modal-confirm" class="btn-action">Save</button>
+        </div>
+    </div>
+</div>
 
 <script type="module" src="/src/main.ts"></script>
 

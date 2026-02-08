@@ -32,8 +32,26 @@ export class Editor {
             btnPlay: document.getElementById('btn-play'),
             btnStep: document.getElementById('btn-step'),
             btnReplay: document.getElementById('btn-replay'),
-            btnStop: document.getElementById('btn-stop')
+            btnStop: document.getElementById('btn-stop'),
+
+            // Save / Load
+            btnSave: document.getElementById('btn-save'),
+            btnLoad: document.getElementById('btn-load'),
+            saveLoadModal: document.getElementById('save-load-modal'),
+            modalTitle: document.getElementById('modal-title'),
+            modalSaveNameRow: document.getElementById('modal-save-name-row'),
+            modalSaveName: document.getElementById('modal-save-name'),
+            modalSaveList: document.getElementById('modal-save-list'),
+            btnModalConfirm: document.getElementById('btn-modal-confirm'),
+            btnModalDelete: document.getElementById('btn-modal-delete'),
+            btnModalClose: document.getElementById('btn-modal-close')
         };
+
+        this.saveStorageKey = "blueprint.graphSaves.v1";
+        this.defaultSaveName = "default";
+        this.currentSaveName = this.defaultSaveName;
+        this.modalMode = null;
+        this.modalSelectedSaveName = null;
         
         // 2. Instantiate the Core Systems
         this.graph = new Graph(); // The Data Model
@@ -108,6 +126,44 @@ export class Editor {
         if (this.dom.btnStep) this.dom.btnStep.onclick = () => this.simulation.step();
         if (this.dom.btnReplay) this.dom.btnReplay.onclick = () => this.simulation.replayStep();
         if (this.dom.btnStop) this.dom.btnStop.onclick = () => this.simulation.stop();
+
+        if (this.dom.btnSave) this.dom.btnSave.onclick = () => this.openSaveLoadModal('save');
+        if (this.dom.btnLoad) this.dom.btnLoad.onclick = () => this.openSaveLoadModal('load');
+        if (this.dom.btnModalClose) this.dom.btnModalClose.onclick = () => this.closeSaveLoadModal();
+        if (this.dom.btnModalConfirm) {
+            this.dom.btnModalConfirm.onclick = () => {
+                if (this.modalMode === 'save') {
+                    const raw = this.dom.modalSaveName ? this.dom.modalSaveName.value : '';
+                    const name = String(raw || '').trim();
+                    if (!name) return;
+                    this.saveProject(name);
+                    this.closeSaveLoadModal();
+                } else if (this.modalMode === 'load' && this.modalSelectedSaveName) {
+                    if (this.loadProject(this.modalSelectedSaveName)) {
+                        this.closeSaveLoadModal();
+                    }
+                }
+            };
+        }
+        if (this.dom.btnModalDelete) {
+            this.dom.btnModalDelete.onclick = () => {
+                if (this.modalMode !== 'load') return;
+                if (!this.modalSelectedSaveName) return;
+                this.deleteProject(this.modalSelectedSaveName);
+                this.renderSaveList();
+            };
+        }
+        if (this.dom.saveLoadModal) {
+            this.dom.saveLoadModal.onclick = (e) => {
+                if (e.target === this.dom.saveLoadModal) this.closeSaveLoadModal();
+            };
+        }
+        if (this.dom.modalSaveName) {
+            this.dom.modalSaveName.oninput = () => {
+                this.modalSelectedSaveName = this.dom.modalSaveName.value;
+                this.renderSaveList();
+            };
+        }
         
         // Set initial button states
         this.updateControls(this.simulation.status);
@@ -243,6 +299,178 @@ export class Editor {
         createOption(`Call ${eventName}`, () => this.variableManager.createCallCustomEventTemplate(eventName));
     }
 
+    openSaveLoadModal(mode) {
+        this.modalMode = mode === 'load' ? 'load' : 'save';
+        if (!this.dom.saveLoadModal) return;
+
+        const saves = this.getProjectSaves();
+        const names = Object.keys(saves);
+
+        if (this.modalMode === 'save') {
+            if (this.dom.modalTitle) this.dom.modalTitle.innerText = 'Save Graph';
+            if (this.dom.modalSaveNameRow) this.dom.modalSaveNameRow.style.display = 'flex';
+            if (this.dom.btnModalConfirm) this.dom.btnModalConfirm.innerText = 'Save';
+            if (this.dom.btnModalDelete) this.dom.btnModalDelete.style.display = 'none';
+            const initialName = this.currentSaveName || this.defaultSaveName;
+            this.modalSelectedSaveName = initialName;
+            if (this.dom.modalSaveName) {
+                this.dom.modalSaveName.value = initialName;
+                this.dom.modalSaveName.focus();
+                this.dom.modalSaveName.select();
+            }
+        } else {
+            if (this.dom.modalTitle) this.dom.modalTitle.innerText = 'Load Graph';
+            if (this.dom.modalSaveNameRow) this.dom.modalSaveNameRow.style.display = 'none';
+            if (this.dom.btnModalConfirm) this.dom.btnModalConfirm.innerText = 'Load';
+            if (this.dom.btnModalDelete) this.dom.btnModalDelete.style.display = 'inline-flex';
+            this.modalSelectedSaveName = names.includes(this.currentSaveName)
+                ? this.currentSaveName
+                : (names[0] || null);
+        }
+
+        this.renderSaveList();
+        this.dom.saveLoadModal.classList.add('visible');
+    }
+
+    closeSaveLoadModal() {
+        if (!this.dom.saveLoadModal) return;
+        this.dom.saveLoadModal.classList.remove('visible');
+        this.modalMode = null;
+        this.modalSelectedSaveName = null;
+    }
+
+    renderSaveList() {
+        const list = this.dom.modalSaveList;
+        if (!list) return;
+        list.innerHTML = '';
+
+        const saves = this.getProjectSaves();
+        const names = Object.keys(saves).sort((a, b) => {
+            if (a === this.defaultSaveName && b !== this.defaultSaveName) return -1;
+            if (b === this.defaultSaveName && a !== this.defaultSaveName) return 1;
+            return a.localeCompare(b);
+        });
+
+        if (names.length === 0) {
+            const empty = document.createElement('div');
+            empty.className = 'save-item';
+            empty.style.opacity = '0.65';
+            empty.style.cursor = 'default';
+            empty.innerText = 'No saves yet';
+            list.appendChild(empty);
+        } else {
+            names.forEach((name) => {
+                const item = document.createElement('div');
+                item.className = `save-item ${this.modalSelectedSaveName === name ? 'selected' : ''}`;
+                item.innerText = name;
+                item.onclick = () => {
+                    this.modalSelectedSaveName = name;
+                    if (this.modalMode === 'save' && this.dom.modalSaveName) {
+                        this.dom.modalSaveName.value = name;
+                    }
+                    this.renderSaveList();
+                };
+                list.appendChild(item);
+            });
+        }
+
+        if (this.dom.btnModalConfirm) {
+            if (this.modalMode === 'load') {
+                this.dom.btnModalConfirm.disabled = !this.modalSelectedSaveName;
+            } else {
+                const hasName = this.dom.modalSaveName && this.dom.modalSaveName.value.trim().length > 0;
+                this.dom.btnModalConfirm.disabled = !hasName;
+            }
+        }
+        if (this.dom.btnModalDelete) {
+            this.dom.btnModalDelete.disabled = !(this.modalMode === 'load' && this.modalSelectedSaveName);
+        }
+    }
+
+    getProjectSaves() {
+        try {
+            const raw = localStorage.getItem(this.saveStorageKey);
+            if (!raw) return {};
+            const parsed = JSON.parse(raw);
+            return parsed && typeof parsed === 'object' ? parsed : {};
+        } catch (err) {
+            return {};
+        }
+    }
+
+    setProjectSaves(saves) {
+        try {
+            localStorage.setItem(this.saveStorageKey, JSON.stringify(saves || {}));
+        } catch (err) {
+        }
+    }
+
+    serializeProject() {
+        return {
+            version: 1,
+            savedAt: new Date().toISOString(),
+            ...this.variableManager.serializeDefinitions(),
+            graph: this.graph.toJSON()
+        };
+    }
+
+    saveProject(name, silent = false) {
+        const trimmed = String(name || '').trim();
+        if (!trimmed) return false;
+
+        const saves = this.getProjectSaves();
+        saves[trimmed] = this.serializeProject();
+        this.setProjectSaves(saves);
+        this.currentSaveName = trimmed;
+        if (!silent) this.showNotification(`Saved "${trimmed}"`);
+        return true;
+    }
+
+    deleteProject(name) {
+        const trimmed = String(name || '').trim();
+        if (!trimmed) return false;
+        const saves = this.getProjectSaves();
+        if (!Object.prototype.hasOwnProperty.call(saves, trimmed)) return false;
+        delete saves[trimmed];
+        this.setProjectSaves(saves);
+        if (this.currentSaveName === trimmed) {
+            this.currentSaveName = this.defaultSaveName;
+        }
+        return true;
+    }
+
+    loadProject(name, silent = false) {
+        const trimmed = String(name || '').trim();
+        if (!trimmed) return false;
+        const saves = this.getProjectSaves();
+        const data = saves[trimmed];
+        if (!data) return false;
+
+        this.applySerializedProject(data);
+        this.currentSaveName = trimmed;
+        if (!silent) this.showNotification(`Loaded "${trimmed}"`);
+        return true;
+    }
+
+    applySerializedProject(data) {
+        if (!data || typeof data !== 'object') return;
+
+        if (this.simulation && this.simulation.status !== 'STOPPED') {
+            this.simulation.stop();
+        }
+
+        this.graph.clear();
+        if (this.dom.nodesLayer) this.dom.nodesLayer.innerHTML = '';
+        if (this.dom.connectionsLayer) this.dom.connectionsLayer.innerHTML = '';
+
+        this.variableManager.loadDefinitions({
+            variables: Array.isArray(data.variables) ? data.variables : [],
+            customEvents: Array.isArray(data.customEvents) ? data.customEvents : []
+        });
+
+        this._loadStarterGraph(data.graph || data);
+    }
+
     /**
      * Updates the Toolbar buttons (Enabled/Disabled) based on the Simulation State.
      * @param {string} status - 'STOPPED', 'RUNNING', or 'PAUSED'
@@ -286,7 +514,15 @@ export class Editor {
     }
 
     initDemo() {
-        this._loadStarterGraph(starterGraph);
+        const loaded = this.loadProject(this.defaultSaveName, true);
+        if (!loaded) {
+            this.applySerializedProject({
+                variables: [],
+                customEvents: [],
+                graph: starterGraph
+            });
+            this.saveProject(this.defaultSaveName, true);
+        }
     }
 
     _loadStarterGraph(serializedGraph) {
@@ -294,7 +530,18 @@ export class Editor {
 
         const nodes = Array.isArray(serializedGraph) ? serializedGraph : (serializedGraph.nodes || []);
         const connections = Array.isArray(serializedGraph) ? [] : (serializedGraph.connections || []);
-        if (!nodes.length) return;
+        const viewport = Array.isArray(serializedGraph) ? null : (serializedGraph.viewport || null);
+
+        if (viewport) {
+            const nextScale = Number(viewport.scale);
+            this.graph.scale = Number.isFinite(nextScale) ? Math.min(Math.max(nextScale, 0.2), 3) : 1;
+            this.graph.pan.x = Number(viewport.x) || 0;
+            this.graph.pan.y = Number(viewport.y) || 0;
+        } else {
+            this.graph.scale = 1;
+            this.graph.pan.x = 0;
+            this.graph.pan.y = 0;
+        }
 
         if (this.variableManager) {
             nodes.forEach((nodeData) => {
@@ -368,5 +615,15 @@ export class Editor {
                 if (pin.widget) pin.widget.value = savedPin.value;
             });
         }
+    }
+
+    showNotification(message) {
+        const el = document.getElementById('notification');
+        if (!el) return;
+        el.innerText = message;
+        el.style.opacity = '1';
+        setTimeout(() => {
+            el.style.opacity = '0';
+        }, 1400);
     }
 }

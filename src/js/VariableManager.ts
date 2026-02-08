@@ -38,6 +38,37 @@ export class VariableManager {
         }
     }
 
+    serializeDefinitions() {
+        return {
+            customEvents: JSON.parse(JSON.stringify(this.customEvents || [])),
+            variables: JSON.parse(JSON.stringify(this.variables || []))
+        };
+    }
+
+    loadDefinitions(definitions = {}) {
+        const incomingEvents = Array.isArray(definitions.customEvents) ? definitions.customEvents : [];
+        const incomingVariables = Array.isArray(definitions.variables) ? definitions.variables : [];
+
+        this.customEvents = incomingEvents
+            .map((evt) => ({ name: String(evt && evt.name ? evt.name : "").trim() }))
+            .filter((evt) => !!evt.name);
+
+        this.variables = incomingVariables
+            .map((variable) => ({
+                name: String(variable && variable.name ? variable.name : "").trim(),
+                type: variable && variable.type ? variable.type : 'boolean',
+                defaultValue: variable && variable.defaultValue !== undefined
+                    ? variable.defaultValue
+                    : this.getTypeDefault(variable && variable.type ? variable.type : 'boolean')
+            }))
+            .filter((variable) => !!variable.name);
+
+        this.lastAddedType = this.variables.length > 0
+            ? this.variables[this.variables.length - 1].type
+            : 'boolean';
+        this.renderList();
+    }
+
     ensureCustomEvent(name) {
         if (!name) return;
         if (this.customEvents.find(e => e.name === name)) return;
@@ -555,7 +586,7 @@ export class VariableManager {
         return {
             name: `Call ${evt.name}`,
             category: "Custom Events",
-            color: "var(--header-default)",
+            color: "var(--n-func)",
             functionId: "Flow.CallCustomEvent",
             customEventName: evt.name,
             inputs: [
