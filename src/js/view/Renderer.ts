@@ -121,19 +121,7 @@ export class Renderer {
      * @param {Number} id - Optional Connection ID to assign to the DOM element
      */
     drawCurve(p1, p2, type, isDrag, id = null, controlPoints = []) {
-        const points = [p1]
-            .concat(Array.isArray(controlPoints) ? controlPoints : [])
-            .concat([p2]);
-
-        // Build a segmented cubic path so inserted control points bend the wire.
-        let d = `M ${points[0].x} ${points[0].y}`;
-        for (let index = 0; index < points.length - 1; index += 1) {
-            const a = points[index];
-            const b = points[index + 1];
-            const dist = Math.abs(b.x - a.x);
-            const cp = Math.max(dist * 0.5, 40);
-            d += ` C ${a.x + cp} ${a.y}, ${b.x - cp} ${b.y}, ${b.x} ${b.y}`;
-        }
+        const d = this.buildCurvePathData(p1, p2, controlPoints);
 
         if (!isDrag && id) {
             const hitPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
@@ -159,6 +147,31 @@ export class Renderer {
         
         this.dom.connectionsLayer.appendChild(path);
 
+    }
+
+    buildCurvePathData(p1, p2, controlPoints = []) {
+        const points = [p1]
+            .concat(Array.isArray(controlPoints) ? controlPoints : [])
+            .concat([p2]);
+        if (points.length < 2) return '';
+
+        let d = `M ${points[0].x} ${points[0].y}`;
+        for (let index = 0; index < points.length - 1; index += 1) {
+            const a = points[index];
+            const b = points[index + 1];
+            const dist = Math.abs(b.x - a.x);
+            const cp = Math.max(dist * 0.5, 40);
+            d += ` C ${a.x + cp} ${a.y}, ${b.x - cp} ${b.y}, ${b.x} ${b.y}`;
+        }
+        return d;
+    }
+
+    getConnectionPathData(conn) {
+        if (!conn) return '';
+        const p1 = this.getPinPos(conn.fromNode, conn.fromPin, 'output');
+        const p2 = this.getPinPos(conn.toNode, conn.toPin, 'input');
+        if (!p1 || !p2) return '';
+        return this.buildCurvePathData(p1, p2, conn.controlPoints || []);
     }
 
     /**
@@ -264,6 +277,79 @@ export class Renderer {
 
         // Return object containing both visuals for tracking/cleanup
         return { label: label, path: path, connId: conn.id, durationMs: startDelay + travelMs };
+    }
+
+    animateDataWirePath(connections, value) {
+        const connList = Array.isArray(connections) ? connections.filter(Boolean) : [];
+        if (connList.length === 0) return null;
+
+        const pathDataList = connList
+            .map((conn) => this.getConnectionPathData(conn))
+            .filter((d) => !!d);
+        if (pathDataList.length === 0) return null;
+
+        const combinedPathData = pathDataList.join(' ');
+        const pathElements = connList
+            .map((conn) => document.getElementById(`conn-${conn.id}`))
+            .filter((el) => !!el);
+        pathElements.forEach((pathEl) => {
+            pathEl.classList.remove('data-flow');
+            void pathEl.offsetWidth;
+            pathEl.classList.add('data-flow');
+            setTimeout(() => {
+                if (pathEl) pathEl.classList.remove('data-flow');
+            }, 500);
+        });
+
+        let displayVal = value;
+        if (typeof value === 'object' && value !== null) {
+            displayVal = '{Obj}';
+        }
+
+        const label = document.createElement('div');
+        label.className = 'data-value-label';
+        label.innerText = displayVal;
+        label.style.whiteSpace = 'pre';
+        label.style.textAlign = 'center';
+        label.style.zIndex = '200';
+        this.dom.nodesLayer.appendChild(label);
+
+        const tempPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        tempPath.setAttribute('d', combinedPathData);
+        tempPath.setAttribute('fill', 'none');
+        tempPath.setAttribute('stroke', 'none');
+        tempPath.style.pointerEvents = 'none';
+        this.dom.connectionsLayer.appendChild(tempPath);
+
+        const totalLen = tempPath.getTotalLength();
+        const startPoint = tempPath.getPointAtLength(0);
+        const startDelay = 80;
+        const pxPerSecond = 180;
+        const travelMs = Math.max(320, Math.min(2400, (totalLen / pxPerSecond) * 1000));
+
+        label.style.left = `${startPoint.x}px`;
+        label.style.top = `${startPoint.y}px`;
+
+        setTimeout(() => {
+            const start = performance.now();
+            const animate = (time) => {
+                const elapsed = time - start;
+                const progress = Math.min(elapsed / travelMs, 1);
+                const point = tempPath.getPointAtLength(progress * totalLen);
+                label.style.left = `${point.x}px`;
+                label.style.top = `${point.y}px`;
+                if (progress < 1) requestAnimationFrame(animate);
+            };
+            requestAnimationFrame(animate);
+        }, startDelay);
+
+        return {
+            label,
+            paths: pathElements,
+            tempPath,
+            connIds: connList.map((conn) => conn.id),
+            durationMs: startDelay + travelMs
+        };
     }
 
     /**

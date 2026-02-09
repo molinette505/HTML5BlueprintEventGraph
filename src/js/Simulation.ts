@@ -166,6 +166,51 @@ export class Simulation {
         return task;
     }
 
+    isDataRerouteNode(node) {
+        return !!node && node.functionId === 'Flow.RerouteData';
+    }
+
+    resolveDataSource(connection) {
+        if (!connection) return { sourceNode: null, sourceConnection: null, connPath: [] };
+
+        const connPath = [connection];
+        let sourceConnection = connection;
+        let sourceNode = this.graph.nodes.find((node) => node.id === sourceConnection.fromNode) || null;
+        let safety = 0;
+
+        while (sourceNode && this.isDataRerouteNode(sourceNode) && safety < 64) {
+            const upstream = this.graph.connections.find((candidate) =>
+                candidate.toNode === sourceNode.id
+                && candidate.toPin === 0
+                && candidate.type !== 'exec'
+            );
+            if (!upstream) break;
+            connPath.unshift(upstream);
+            sourceConnection = upstream;
+            sourceNode = this.graph.nodes.find((node) => node.id === sourceConnection.fromNode) || null;
+            safety += 1;
+        }
+
+        return { sourceNode, sourceConnection, connPath };
+    }
+
+    animateDataPath(connPath, debugLabel) {
+        if (!this.renderer) return { waitMs: 0 };
+        const normalizedPath = Array.isArray(connPath) ? connPath.filter(Boolean) : [];
+        if (normalizedPath.length === 0) return { waitMs: 0 };
+
+        let visualObj = null;
+        if (normalizedPath.length > 1 && typeof this.renderer.animateDataWirePath === 'function') {
+            visualObj = this.renderer.animateDataWirePath(normalizedPath, debugLabel);
+        } else {
+            visualObj = this.renderer.animateDataWire(normalizedPath[0], debugLabel);
+        }
+
+        this.addStepVisual(visualObj);
+        const waitMs = visualObj && typeof visualObj.durationMs === 'number' ? visualObj.durationMs : 0;
+        return { waitMs };
+    }
+
     buildArgs(node, ctx) {
         const args = [];
         for (let i = 0; i < node.inputs.length; i++) {
@@ -197,7 +242,11 @@ export class Simulation {
                 continue;
             }
 
-            const sourceNode = this.graph.nodes.find(n => n.id === conn.fromNode);
+            const resolvedSource = this.resolveDataSource(conn);
+            const sourceNode = resolvedSource.sourceNode || this.graph.nodes.find(n => n.id === conn.fromNode);
+            const connPath = (resolvedSource.connPath && resolvedSource.connPath.length > 0)
+                ? resolvedSource.connPath
+                : [conn];
             if (!sourceNode) {
                 ctx.inputValues[i] = this.castValue(null, pin.type);
                 ctx.inputReady[i] = true;
@@ -208,7 +257,12 @@ export class Simulation {
                 if (!ctx.inputScheduled[i]) {
                     ctx.inputScheduled[i] = true;
                     const pureTask = this.createTask('pure', sourceNode, {
-                        deliverTo: { requestId: task.id, inputIndex: i, conn }
+                        deliverTo: {
+                            requestId: task.id,
+                            inputIndex: i,
+                            conn: resolvedSource.sourceConnection || conn,
+                            connPath
+                        }
                     });
                     deps.push(pureTask);
                 }
@@ -216,11 +270,10 @@ export class Simulation {
                 const incomingVal = this.castValue(sourceNode.executionResult, pin.type);
                 ctx.inputValues[i] = incomingVal;
                 ctx.inputReady[i] = true;
-                if (this.renderer && conn) {
+                if (this.renderer && connPath.length > 0) {
                     const debugLabel = window.FunctionRegistry.getVisualDebug(sourceNode, [], incomingVal);
-                    const visualObj = this.renderer.animateDataWire(conn, debugLabel);
-                    this.addStepVisual(visualObj);
-                    const waitMs = visualObj && typeof visualObj.durationMs === 'number' ? visualObj.durationMs : 0;
+                    const animated = this.animateDataPath(connPath, debugLabel);
+                    const waitMs = animated.waitMs;
                     ctx.inputVisualWaitMs = Math.max(ctx.inputVisualWaitMs || 0, waitMs);
                 }
             }
@@ -250,7 +303,12 @@ export class Simulation {
         node.inputs.forEach(pin => {
             if (pin.type === 'exec') return;
             const conn = this.graph.connections.find(c => c.toNode === node.id && c.toPin === pin.index);
-            if (conn) this.removeConnectionVisual(conn.id);
+            if (!conn) return;
+            const resolved = this.resolveDataSource(conn);
+            const connPath = (resolved.connPath && resolved.connPath.length > 0)
+                ? resolved.connPath
+                : [conn];
+            connPath.forEach((pathConn) => this.removeConnectionVisual(pathConn.id));
         });
     }
 
@@ -459,11 +517,11 @@ export class Simulation {
 
                     if (this.renderer) {
                         const debugLabel = window.FunctionRegistry.getVisualDebug(node, args, result);
-                        const visualObj = this.renderer.animateDataWire(item.deliverTo.conn, debugLabel);
-                        this.addStepVisual(visualObj);
-                        const waitMs = visualObj && typeof visualObj.durationMs === 'number'
-                            ? visualObj.durationMs
-                            : 0;
+                        const connPath = item.deliverTo.connPath && item.deliverTo.connPath.length > 0
+                            ? item.deliverTo.connPath
+                            : (item.deliverTo.conn ? [item.deliverTo.conn] : []);
+                        const animated = this.animateDataPath(connPath, debugLabel);
+                        const waitMs = animated.waitMs;
                         if (waitMs > 0) {
                             await new Promise(r => setTimeout(r, waitMs));
                         }
@@ -546,13 +604,25 @@ export class Simulation {
 
     addStepVisual(visualObj) {
         if (!visualObj) return;
-        if (visualObj.connId !== undefined && visualObj.connId !== null) {
-            const existing = this.connectionVisuals.get(visualObj.connId);
-            if (existing) {
-                this.removeVisual(existing);
-                this.activeStepVisuals = this.activeStepVisuals.filter(v => v !== existing);
-            }
-            this.connectionVisuals.set(visualObj.connId, visualObj);
+        const connIds = Array.isArray(visualObj.connIds)
+            ? visualObj.connIds.filter((id) => id !== undefined && id !== null)
+            : ((visualObj.connId !== undefined && visualObj.connId !== null) ? [visualObj.connId] : []);
+
+        if (connIds.length > 0) {
+            visualObj.mappedConnIds = connIds;
+            connIds.forEach((connId) => {
+                const existing = this.connectionVisuals.get(connId);
+                if (existing) {
+                    this.removeVisual(existing);
+                    this.activeStepVisuals = this.activeStepVisuals.filter(v => v !== existing);
+                    if (Array.isArray(existing.mappedConnIds)) {
+                        existing.mappedConnIds.forEach((mappedId) => this.connectionVisuals.delete(mappedId));
+                    } else if (existing.connId !== undefined && existing.connId !== null) {
+                        this.connectionVisuals.delete(existing.connId);
+                    }
+                }
+                this.connectionVisuals.set(connId, visualObj);
+            });
         }
         this.activeStepVisuals.push(visualObj);
     }
@@ -561,13 +631,21 @@ export class Simulation {
         if (!visualObj) return;
         if (visualObj.label) visualObj.label.remove();
         if (visualObj.path) visualObj.path.classList.remove('data-flow');
+        if (Array.isArray(visualObj.paths)) {
+            visualObj.paths.forEach((pathEl) => pathEl.classList.remove('data-flow'));
+        }
+        if (visualObj.tempPath) visualObj.tempPath.remove();
     }
 
     removeConnectionVisual(connId) {
         const visual = this.connectionVisuals.get(connId);
         if (visual) {
             this.removeVisual(visual);
-            this.connectionVisuals.delete(connId);
+            if (Array.isArray(visual.mappedConnIds) && visual.mappedConnIds.length > 0) {
+                visual.mappedConnIds.forEach((mappedId) => this.connectionVisuals.delete(mappedId));
+            } else {
+                this.connectionVisuals.delete(connId);
+            }
             this.activeStepVisuals = this.activeStepVisuals.filter(v => v !== visual);
         }
     }
