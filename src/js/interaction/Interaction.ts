@@ -82,7 +82,7 @@ export class Interaction {
 
         this.touchConfig = {
             dragThreshold: 8,
-            longPressMs: 430,
+            longPressMs: 600,
             doubleTapMs: 280,
             doubleTapRadius: 32
         };
@@ -412,13 +412,17 @@ export class Interaction {
             if (state.longPressTriggered) return;
 
             if (!state.dragStarted && distance > this.touchConfig.dragThreshold) {
-                this.selectionManager.startBox(this._asPointerEvent(state.startX, state.startY));
+                if (!this.selectionManager.selected.has(state.nodeId)) {
+                    this.selectionManager.clear();
+                    this.selectionManager.add(state.nodeId);
+                }
+                this.nodeMovementManager.startDrag(this._asPointerEvent(state.startX, state.startY), state.nodeId);
                 state.dragStarted = true;
-                this.mode = 'BOX_SELECT';
+                this.mode = 'DRAG_NODES';
             }
-            if (state.dragStarted && this.mode === 'BOX_SELECT') {
+            if (state.dragStarted && this.mode === 'DRAG_NODES') {
                 e.preventDefault();
-                this.selectionManager.updateBox(this._asPointerEvent(touch.clientX, touch.clientY));
+                this.nodeMovementManager.update(this._asPointerEvent(touch.clientX, touch.clientY));
             }
             return;
         }
@@ -488,8 +492,8 @@ export class Interaction {
             }
         }
         else if (state.type === 'node') {
-            if (state.dragStarted && this.mode === 'BOX_SELECT') {
-                this.selectionManager.endBox();
+            if (state.dragStarted && this.mode === 'DRAG_NODES') {
+                this.nodeMovementManager.endDrag();
             } else if (!state.hasMoved && !state.longPressTriggered && !state.chordActionUsed) {
                 this._handleNodeTap(state.nodeId);
             }
@@ -515,6 +519,7 @@ export class Interaction {
 
         if (this.mode === 'BOX_SELECT') this.selectionManager.endBox();
         if (this.mode === 'DRAG_WIRE') this.connectionManager.clearDrag();
+        if (this.mode === 'DRAG_NODES') this.nodeMovementManager.endDrag();
 
         this.pinchState = null;
         this.touchState = null;
@@ -811,6 +816,8 @@ export class Interaction {
     _handleTouchChordAction(e) {
         if (!this.touchState) return false;
         if (this.mode === 'PINCH_PAN') return false;
+        this._clearTouchLongPress();
+        this.contextMenu.hide();
         const assistTouch = e.changedTouches && e.changedTouches.length > 0 ? e.changedTouches[0] : null;
         if (!assistTouch) return false;
 
