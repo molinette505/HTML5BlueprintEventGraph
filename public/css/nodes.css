@@ -184,11 +184,11 @@
 }
 
 .node.reroute .reroute-pin-in {
-    left: -6px;
+    left: -14px;
 }
 
 .node.reroute .reroute-pin-out {
-    right: -6px;
+    right: -14px;
 }
 
 @media (hover: hover) and (pointer: fine) {
