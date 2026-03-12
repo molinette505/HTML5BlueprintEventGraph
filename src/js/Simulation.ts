@@ -122,6 +122,7 @@ export class Simulation {
 
     replayStep() {
         if (this.status === 'PAUSED' && this.lastProcessedExec) {
+            this.clearStepVisuals();
             const task = this.createTask('exec', this.lastProcessedExec.node, { conn: this.lastProcessedExec.conn });
             this.executionQueue.unshift(task);
             this.processNext(true);
@@ -168,6 +169,50 @@ export class Simulation {
 
     isDataRerouteNode(node) {
         return !!node && node.functionId === 'Flow.RerouteData';
+    }
+
+    isExecRerouteNode(node) {
+        return !!node && node.functionId === 'Flow.RerouteExec';
+    }
+
+    async animateExecConnection(conn, currentRunId) {
+        if (!conn || !this.renderer) return true;
+        this.renderer.animateExecWire(conn);
+        await new Promise(r => setTimeout(r, 1500));
+        return this.runInstanceId === currentRunId;
+    }
+
+    async advanceOutgoingExecForSingleStep(currentRunId) {
+        let safety = 0;
+        while (safety < 128) {
+            const nextItem = this.executionQueue[0];
+            if (!nextItem || nextItem.kind !== 'exec') return;
+            if (nextItem.execWireDone || !nextItem.conn) return;
+
+            const stillActive = await this.animateExecConnection(nextItem.conn, currentRunId);
+            if (!stillActive) return;
+            nextItem.execWireDone = true;
+
+            if (!this.isExecRerouteNode(nextItem.node)) return;
+
+            const rerouteItem = this.executionQueue.shift();
+            const rerouteCtx = this.pendingRequests.get(rerouteItem.id);
+            if (!rerouteCtx) {
+                safety += 1;
+                continue;
+            }
+
+            rerouteItem.node.setError(null);
+            const continuations = rerouteItem.continuations ? rerouteItem.continuations.slice() : [];
+            this.executeExecNode(rerouteItem.node, rerouteCtx, rerouteItem, continuations, currentRunId);
+            this.pendingRequests.delete(rerouteItem.id);
+            this.lastProcessedItem = rerouteItem;
+            this.lastProcessedExec = rerouteItem;
+            if (this.onStateChange) this.onStateChange(this.status);
+
+            if (this.runInstanceId !== currentRunId) return;
+            safety += 1;
+        }
     }
 
     resolveDataSource(connection) {
@@ -346,19 +391,11 @@ export class Simulation {
 
         if (item.kind === 'exec') {
             if (!item.execWireDone) {
-                if (item.conn && this.renderer) {
-                    this.renderer.animateExecWire(item.conn);
-                    await new Promise(r => setTimeout(r, 1500));
-                    if (this.runInstanceId !== currentRunId) return;
+                if (item.conn) {
+                    const stillActive = await this.animateExecConnection(item.conn, currentRunId);
+                    if (!stillActive) return;
                 }
                 item.execWireDone = true;
-
-                // In manual step mode, consume one click for incoming exec-wire travel only.
-                if (isSingleStep && item.conn) {
-                    this.executionQueue.unshift(item);
-                    if (this.onStateChange) this.onStateChange(this.status);
-                    return;
-                }
             }
 
             if (!item.waitingHighlight) {
@@ -428,6 +465,11 @@ export class Simulation {
             this.lastProcessedItem = item;
             this.lastProcessedExec = item;
             if (this.onStateChange) this.onStateChange(this.status);
+
+            if (isSingleStep) {
+                await this.advanceOutgoingExecForSingleStep(currentRunId);
+                if (this.runInstanceId !== currentRunId) return;
+            }
         } else if (item.kind === 'pure') {
             const node = item.node;
             this.clearInputVisuals(node);
