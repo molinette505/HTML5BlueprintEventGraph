@@ -175,6 +175,13 @@ export class Simulation {
         return !!node && node.functionId === 'Flow.RerouteExec';
     }
 
+    isPersistentExecHighlightNode(node) {
+        if (!node) return false;
+        return node.functionId === 'Flow.Delay'
+            || node.functionId === 'Flow.ForLoop'
+            || node.functionId === 'Flow.WhileLoop';
+    }
+
     async animateExecConnection(conn, currentRunId) {
         if (!conn || !this.renderer) return true;
         this.renderer.animateExecWire(conn);
@@ -212,6 +219,40 @@ export class Simulation {
 
             if (this.runInstanceId !== currentRunId) return;
             safety += 1;
+        }
+    }
+
+    async processOnePureTaskForSingleStep(currentRunId) {
+        let safety = 0;
+        while (safety < 128) {
+            const head = this.executionQueue[0];
+            if (!head) return;
+            if (head.kind !== 'pure') return;
+
+            const task = this.executionQueue.shift();
+            const ctx = this.pendingRequests.get(task.id);
+            if (!ctx) {
+                safety += 1;
+                continue;
+            }
+
+            const res = this.resolveInputs(task);
+            if (!res.ready) {
+                if (res.deps.length > 0) {
+                    this.executionQueue = res.deps.concat([task], this.executionQueue);
+                    safety += 1;
+                    continue;
+                }
+                this.executionQueue.unshift(task);
+                return;
+            }
+
+            const node = task.node;
+            this.clearInputVisuals(node);
+            node.setError(null);
+            await this.executePureNode(node, ctx, task, currentRunId);
+            this.pendingRequests.delete(task.id);
+            return;
         }
     }
 
@@ -416,6 +457,10 @@ export class Simulation {
         if (!ready) {
             if (deps.length > 0) {
                 this.executionQueue = deps.concat([item], this.executionQueue);
+                if (isSingleStep && item.kind === 'exec') {
+                    await this.processOnePureTaskForSingleStep(currentRunId);
+                    if (this.runInstanceId !== currentRunId) return;
+                }
             } else {
                 this.executionQueue.push(item);
             }
@@ -469,6 +514,20 @@ export class Simulation {
             if (isSingleStep) {
                 await this.advanceOutgoingExecForSingleStep(currentRunId);
                 if (this.runInstanceId !== currentRunId) return;
+            }
+
+            if (!this.isPersistentExecHighlightNode(node)) {
+                const nodeId = node.id;
+                setTimeout(() => {
+                    if (this.status === 'STOPPED') return;
+                    if (this.isPersistentExecHighlightNode(node)) return;
+                    const hasPendingSameNode = this.executionQueue.some((queued) =>
+                        queued.kind === 'exec' && queued.node && queued.node.id === nodeId
+                    );
+                    if (hasPendingSameNode) return;
+                    const el = document.getElementById(`node-${nodeId}`);
+                    if (el) el.style.boxShadow = "";
+                }, 900);
             }
         } else if (item.kind === 'pure') {
             const node = item.node;
