@@ -9,6 +9,9 @@ function routeToNextExec(api, node, continuations) {
 }
 
 function runForLoop(api, node, ctx, item, continuations) {
+    const indexPin = node.outputs.find((pin) => pin.type !== 'exec' && pin.name === "Index")
+        || node.outputs.find((pin) => pin.type !== 'exec');
+
     if (!item.isLoopContinuation) {
         const args = api.buildArgs(node, ctx);
         const firstIndex = api.castValue(args[0], 'int') ?? 0;
@@ -21,6 +24,9 @@ function runForLoop(api, node, ctx, item, continuations) {
     const state = node.loopState;
     if (state.current <= state.last) {
         node.executionResult = state.current;
+        if (indexPin) {
+            api.setNodeOutputValue(node, indexPin.index, state.current);
+        }
 
         const loopBodyPin = node.outputs.find((pin) => pin.type === 'exec' && pin.name === "Loop Body");
         const loopConn = loopBodyPin
@@ -45,6 +51,9 @@ function runForLoop(api, node, ctx, item, continuations) {
 
     state.active = false;
     node.executionResult = state.last;
+    if (indexPin) {
+        api.setNodeOutputValue(node, indexPin.index, state.last);
+    }
 
     const completedPin = node.outputs.find((pin) => pin.type === 'exec' && pin.name === "Completed");
     const completedConn = completedPin
@@ -166,7 +175,8 @@ function runDefaultExec(api, node, ctx, item, continuations) {
     if (node.jsFunctionRef) {
         try {
             const args = api.buildArgs(node, ctx);
-            node.executionResult = node.jsFunctionRef.apply(node, args);
+            const result = node.jsFunctionRef.apply(node, args);
+            api.setPrimaryDataOutputValue(node, result);
         } catch (err) {
             if (err.isBlueprintError) node.setError(err.message);
             else console.error(err);

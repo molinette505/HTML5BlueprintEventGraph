@@ -63,6 +63,8 @@ export class Interaction {
                 onPaste: (x, y) => this.clipboard.paste(x, y),
                 onToggleBreakpoint: (targetId) => this.toggleBreakpointForSelection(targetId),
                 getBreakpointState: (targetId, selectedCount = 1) => this.getBreakpointStateForSelection(targetId, selectedCount),
+                onTogglePinWatch: (nodeId, pinIndex) => this.togglePinWatch(nodeId, pinIndex),
+                getPinWatchState: (nodeId, pinIndex) => this.getPinWatchState(nodeId, pinIndex),
                 onPinChange: (node, pin, newType, index, dir) => {
                     this.graph.disconnectPin(node.id, index, dir);
                     pin.setType(newType);
@@ -268,6 +270,33 @@ export class Interaction {
             const el = document.getElementById(`node-${node.id}`);
             if (el) el.classList.toggle('has-breakpoint', shouldEnable);
         });
+    }
+
+    getPinWatchState(nodeId, pinIndex) {
+        const node = this.graph.nodes.find((candidate) => candidate.id === nodeId);
+        if (!node || typeof node.isOutputWatched !== 'function') return false;
+        return node.isOutputWatched(pinIndex);
+    }
+
+    togglePinWatch(nodeId, pinIndex) {
+        const node = this.graph.nodes.find((candidate) => candidate.id === nodeId);
+        if (!node || typeof node.isImpure !== 'function' || !node.isImpure()) return;
+        const pin = node.outputs && node.outputs[pinIndex];
+        if (!pin || pin.type === 'exec') return;
+
+        const nextState = !(typeof node.isOutputWatched === 'function' && node.isOutputWatched(pinIndex));
+        if (typeof node.setOutputWatched === 'function') {
+            node.setOutputWatched(pinIndex, nextState);
+        }
+        this.renderer.refreshNode(node);
+
+        if (window.App && window.App.simulation && typeof window.App.simulation.refreshWatchedOutputsForNode === 'function') {
+            window.App.simulation.refreshWatchedOutputsForNode(node);
+        }
+        if (this.selectionManager.has(node.id)) {
+            const el = document.getElementById(`node-${node.id}`);
+            if (el) el.classList.add('selected');
+        }
     }
 
     async cutSelection() {

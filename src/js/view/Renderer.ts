@@ -107,9 +107,11 @@ export class Renderer {
     refreshNode(node) {
         const oldEl = document.getElementById(`node-${node.id}`);
         if (!oldEl) return;
+        const wasSelected = oldEl.classList.contains('selected');
         
         // Create new HTML structure
         const newEl = this.nodeRenderer.createElement(node);
+        if (wasSelected) newEl.classList.add('selected');
         
         // Swap in DOM
         this.dom.nodesLayer.replaceChild(newEl, oldEl);

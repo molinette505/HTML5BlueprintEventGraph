@@ -745,6 +745,15 @@ export class Editor {
 
     _restoreNodeState(node, nodeData) {
         node.breakpoint = !!nodeData.breakpoint;
+        node.watchedOutputPins = {};
+        if (Array.isArray(nodeData.watchedOutputPins)) {
+            nodeData.watchedOutputPins.forEach((index) => {
+                const pinIndex = Number(index);
+                if (Number.isInteger(pinIndex)) {
+                    node.watchedOutputPins[pinIndex] = true;
+                }
+            });
+        }
 
         if (nodeData.pinTypes) {
             ['inputs', 'outputs'].forEach(dir => {

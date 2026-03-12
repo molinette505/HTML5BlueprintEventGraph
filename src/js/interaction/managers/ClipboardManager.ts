@@ -157,6 +157,17 @@ export class ClipboardManager {
 
     /** Restores dynamic data (pin types/widget values) to a newly instantiated node. */
     _restoreNodeState(newNode, nodeData) {
+        newNode.breakpoint = !!nodeData.breakpoint;
+        newNode.watchedOutputPins = {};
+        if (Array.isArray(nodeData.watchedOutputPins)) {
+            nodeData.watchedOutputPins.forEach((index) => {
+                const pinIndex = Number(index);
+                if (Number.isInteger(pinIndex)) {
+                    newNode.watchedOutputPins[pinIndex] = true;
+                }
+            });
+        }
+
         if (nodeData.pinTypes) {
             ['inputs', 'outputs'].forEach(dir => {
                 if (nodeData.pinTypes[dir]) {

@@ -212,6 +212,17 @@ export class NodeRenderer {
         } else {
             if (pin.name) row.append(label);
             row.append(shape);
+            if (this.shouldRenderOutputWatch(pin)) {
+                const watchValue = document.createElement('span');
+                watchValue.className = 'pin-watch-value';
+                watchValue.dataset.node = String(pin.nodeId);
+                watchValue.dataset.index = String(pin.index);
+                const currentValue = pin.node && typeof pin.node.getOutputValue === 'function'
+                    ? pin.node.getOutputValue(pin.index)
+                    : undefined;
+                watchValue.innerText = this.formatWatchValue(currentValue);
+                row.append(watchValue);
+            }
         }
         return row;
     }
@@ -246,5 +257,35 @@ export class NodeRenderer {
                 <rect x="14" y="14" width="7" height="7" rx="1"></rect>
             </svg>
         `;
+    }
+
+    shouldRenderOutputWatch(pin) {
+        if (!pin || pin.direction !== 'output') return false;
+        if (pin.type === 'exec') return false;
+        const node = pin.node;
+        if (!node || typeof node.isImpure !== 'function') return false;
+        if (!node.isImpure()) return false;
+        if (typeof node.isOutputWatched !== 'function') return false;
+        return node.isOutputWatched(pin.index);
+    }
+
+    formatWatchValue(value) {
+        if (value === undefined) return '';
+        if (value === null) return 'null';
+        if (Array.isArray(value)) {
+            const shown = value.slice(0, 3).map((entry) => this.formatWatchValue(entry) || '...');
+            const suffix = value.length > 3 ? ', ...' : '';
+            return `[${shown.join(', ')}${suffix}]`;
+        }
+        if (typeof value === 'boolean') return value ? 'true' : 'false';
+        if (typeof value === 'number') return Number.isFinite(value) ? String(parseFloat(value.toFixed(3))) : String(value);
+        if (typeof value === 'string') return value;
+        if (typeof value === 'object') {
+            if ('x' in value && 'y' in value && 'z' in value) {
+                return `(${this.formatWatchValue(value.x)}, ${this.formatWatchValue(value.y)}, ${this.formatWatchValue(value.z)})`;
+            }
+            return '{Obj}';
+        }
+        return String(value);
     }
 }

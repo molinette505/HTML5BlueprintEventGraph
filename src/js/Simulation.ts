@@ -41,6 +41,8 @@ export class Simulation {
             getNextExecConnection: (node) => this.getNextExecConnection(node),
             setNodeHighlight: (id, color) => this.setNodeHighlight(id, color),
             highlightNode: (id, color) => this.highlightNode(id, color),
+            setPrimaryDataOutputValue: (node, value) => this.setPrimaryDataOutputValue(node, value),
+            setNodeOutputValue: (node, pinIndex, value) => this.setNodeOutputValue(node, pinIndex, value),
             beginAsyncExec: () => { this.pendingAsyncExecCount += 1; },
             endAsyncExec: () => { this.pendingAsyncExecCount = Math.max(0, this.pendingAsyncExecCount - 1); },
             getSpeedFactor: () => this.speedFactor,
@@ -89,9 +91,14 @@ export class Simulation {
         }
 
         this.graph.nodes.forEach(n => {
-            n.executionResult = null;
+            n.executionResult = undefined;
             n.loopState = null;
             n.doOnceFired = false;
+            if (typeof n.clearOutputValueCache === 'function') {
+                n.clearOutputValueCache();
+            } else {
+                n.outputValueCache = {};
+            }
         });
         this.executionQueue = [];
         this.pendingRequests.clear();
@@ -125,9 +132,14 @@ export class Simulation {
         this.runInstanceId++;
 
         this.graph.nodes.forEach(n => {
-            n.executionResult = null;
+            n.executionResult = undefined;
             n.loopState = null;
             n.doOnceFired = false;
+            if (typeof n.clearOutputValueCache === 'function') {
+                n.clearOutputValueCache();
+            } else {
+                n.outputValueCache = {};
+            }
         });
 
         // Cleanup visuals
@@ -139,6 +151,7 @@ export class Simulation {
 
         // Also clear any persistent wire highlights
         this.graph.connections.forEach(c => this.resetWireColor(c));
+        this.graph.nodes.forEach((node) => this.refreshWatchedOutputsForNode(node));
 
         console.log("--- Simulation Stopped ---");
     }
@@ -290,11 +303,106 @@ export class Simulation {
         return { waitMs: 0 };
     }
 
-    isPersistentExecHighlightNode(node) {
-        if (!node) return false;
-        return node.functionId === 'Flow.Delay'
-            || node.functionId === 'Flow.ForLoop'
-            || node.functionId === 'Flow.WhileLoop';
+    getFirstDataOutputPin(node) {
+        if (!node || !Array.isArray(node.outputs)) return null;
+        return node.outputs.find((pin) => pin.type !== 'exec') || null;
+    }
+
+    setNodeOutputValue(node, pinIndex, value) {
+        if (!node || !Number.isInteger(pinIndex)) return;
+        if (typeof node.setOutputValue === 'function') {
+            node.setOutputValue(pinIndex, value);
+        } else {
+            if (!node.outputValueCache) node.outputValueCache = {};
+            node.outputValueCache[pinIndex] = value;
+        }
+        this.refreshWatchedOutputPin(node, pinIndex);
+    }
+
+    setPrimaryDataOutputValue(node, value) {
+        const dataPin = this.getFirstDataOutputPin(node);
+        node.executionResult = value;
+        if (!dataPin) return;
+        this.setNodeOutputValue(node, dataPin.index, value);
+    }
+
+    getNodeOutputValue(node, pinIndex) {
+        if (!node || !Number.isInteger(pinIndex)) return undefined;
+        if (typeof node.getOutputValue === 'function') {
+            const cached = node.getOutputValue(pinIndex);
+            if (cached !== undefined) return cached;
+        } else if (node.outputValueCache && Object.prototype.hasOwnProperty.call(node.outputValueCache, pinIndex)) {
+            return node.outputValueCache[pinIndex];
+        }
+
+        const firstDataPin = this.getFirstDataOutputPin(node);
+        if (firstDataPin && firstDataPin.index === pinIndex) {
+            return node.executionResult;
+        }
+        return undefined;
+    }
+
+    clearNodeOutputValueCache(node) {
+        if (!node || !node.isImpure || !node.isImpure()) return;
+        node.executionResult = undefined;
+        if (typeof node.clearOutputValueCache === 'function') {
+            node.clearOutputValueCache();
+        } else {
+            node.outputValueCache = {};
+        }
+        this.refreshWatchedOutputsForNode(node);
+    }
+
+    shouldResetOutputCacheForExecItem(item) {
+        if (!item || item.kind !== 'exec' || !item.node) return false;
+        if (typeof item.node.isImpure !== 'function' || !item.node.isImpure()) return false;
+        if (item.node.functionId === 'Flow.ForLoop' && item.isLoopContinuation) return false;
+        return true;
+    }
+
+    prepareExecItemRuntime(item) {
+        if (!item || item.kind !== 'exec') return;
+        if (item.runtimePrepared) return;
+        item.runtimePrepared = true;
+        if (this.shouldResetOutputCacheForExecItem(item)) {
+            this.clearNodeOutputValueCache(item.node);
+        }
+    }
+
+    formatWatchValue(value) {
+        if (value === undefined) return '';
+        if (value === null) return 'null';
+        if (Array.isArray(value)) {
+            const shown = value.slice(0, 3).map((entry) => this.formatWatchValue(entry));
+            const suffix = value.length > 3 ? ', ...' : '';
+            return `[${shown.join(', ')}${suffix}]`;
+        }
+        if (typeof value === 'boolean') return value ? 'true' : 'false';
+        if (typeof value === 'number') return Number.isFinite(value) ? String(parseFloat(value.toFixed(3))) : String(value);
+        if (typeof value === 'string') return value;
+        if (typeof value === 'object') {
+            if ('x' in value && 'y' in value && 'z' in value) {
+                return `(${this.formatWatchValue(value.x)}, ${this.formatWatchValue(value.y)}, ${this.formatWatchValue(value.z)})`;
+            }
+            return '{Obj}';
+        }
+        return String(value);
+    }
+
+    refreshWatchedOutputPin(node, pinIndex) {
+        if (!node || !Number.isInteger(pinIndex)) return;
+        const watchEl = document.querySelector(`.pin-watch-value[data-node="${node.id}"][data-index="${pinIndex}"]`);
+        if (!watchEl) return;
+        const value = this.getNodeOutputValue(node, pinIndex);
+        watchEl.innerText = this.formatWatchValue(value);
+    }
+
+    refreshWatchedOutputsForNode(node) {
+        if (!node || !Array.isArray(node.outputs)) return;
+        node.outputs.forEach((pin) => {
+            if (pin.type === 'exec') return;
+            this.refreshWatchedOutputPin(node, pin.index);
+        });
     }
 
     async animateExecConnection(conn, currentRunId) {
@@ -485,7 +593,8 @@ export class Simulation {
                     deps.push(pureTask);
                 }
             } else {
-                const incomingVal = this.castValue(sourceNode.executionResult, pin.type);
+                const sourceVal = this.getNodeOutputValue(sourceNode, conn.fromPin);
+                const incomingVal = this.castValue(sourceVal, pin.type);
                 ctx.inputValues[i] = incomingVal;
                 ctx.inputReady[i] = true;
                 if (this.renderer && connPath.length > 0) {
@@ -570,8 +679,12 @@ export class Simulation {
         }
 
         const instantStepMode = this.shouldUseInstantStepForItem(item, isSingleStep);
+        if (item.kind === 'exec') {
+            this.prepareExecItemRuntime(item);
+        }
 
-        if ((item.kind === 'exec' || item.kind === 'pure') && !item.waitingHighlight) {
+        const shouldShowWaitingHighlight = !instantStepMode && !item.instantMode;
+        if ((item.kind === 'exec' || item.kind === 'pure') && shouldShowWaitingHighlight && !item.waitingHighlight) {
             this.setNodeHighlight(item.node.id, '#ffffff');
             item.waitingHighlight = true;
         }
@@ -690,9 +803,6 @@ export class Simulation {
             node.setError(null);
 
             await this.executePureNode(node, ctx, item, currentRunId);
-            if (this.status !== 'STOPPED') {
-                this.highlightNode(node.id, '#ff9900');
-            }
 
             this.pendingRequests.delete(item.id);
         }
@@ -767,6 +877,9 @@ export class Simulation {
                 result = this.castValue(rawRes, outPin ? outPin.type : 'wildcard');
 
                 node.executionResult = result;
+                if (this.status !== 'STOPPED') {
+                    this.highlightNode(node.id, '#ff9900');
+                }
 
                 if (item.deliverTo) {
                     const targetCtx = this.pendingRequests.get(item.deliverTo.requestId);

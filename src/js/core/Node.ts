@@ -41,6 +41,17 @@ export class GraphNode {
         this.dynamicInputCount = 0;
         this.arrayElementAllowedTypes = null;
         this.breakpoint = !!nodeTemplate.breakpoint;
+        this.outputValueCache = {};
+        this.watchedOutputPins = {};
+
+        if (Array.isArray(nodeTemplate.watchedOutputPins)) {
+            nodeTemplate.watchedOutputPins.forEach((index) => {
+                const pinIndex = Number(index);
+                if (Number.isInteger(pinIndex)) {
+                    this.watchedOutputPins[pinIndex] = true;
+                }
+            });
+        }
 
         // Initialize Input Pins
         this.inputs = (nodeTemplate.inputs || []).map((pinDefinition, pinIndex) => {
@@ -110,6 +121,47 @@ export class GraphNode {
         this.dynamicInputCount = this.inputs.length;
         this.reindexPins("input");
         return pin;
+    }
+
+    isImpure() {
+        return this.inputs.some((pin) => pin.type === 'exec');
+    }
+
+    clearOutputValueCache() {
+        this.outputValueCache = {};
+    }
+
+    hasOutputValue(pinIndex) {
+        return Object.prototype.hasOwnProperty.call(this.outputValueCache || {}, pinIndex);
+    }
+
+    getOutputValue(pinIndex) {
+        if (this.hasOutputValue(pinIndex)) {
+            return this.outputValueCache[pinIndex];
+        }
+        return undefined;
+    }
+
+    setOutputValue(pinIndex, value) {
+        if (!this.outputValueCache) {
+            this.outputValueCache = {};
+        }
+        this.outputValueCache[pinIndex] = value;
+    }
+
+    isOutputWatched(pinIndex) {
+        return !!(this.watchedOutputPins && this.watchedOutputPins[pinIndex]);
+    }
+
+    setOutputWatched(pinIndex, enabled) {
+        if (!this.watchedOutputPins) {
+            this.watchedOutputPins = {};
+        }
+        if (enabled) {
+            this.watchedOutputPins[pinIndex] = true;
+        } else {
+            delete this.watchedOutputPins[pinIndex];
+        }
     }
     
     /**
@@ -183,6 +235,12 @@ export class GraphNode {
 
         if (this.dynamicInputCount > 0) {
             result.dynamicInputCount = this.dynamicInputCount;
+        }
+        const watchedIndices = Object.keys(this.watchedOutputPins || {})
+            .map((key) => Number(key))
+            .filter((index) => Number.isInteger(index));
+        if (watchedIndices.length > 0) {
+            result.watchedOutputPins = watchedIndices;
         }
         return result;
     }

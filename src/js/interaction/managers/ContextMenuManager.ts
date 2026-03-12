@@ -164,9 +164,41 @@ export class ContextMenuManager {
         // Identify the specific pin data object
         const pin = (dir === 'input') ? node.inputs[pinIndex] : node.outputs[pinIndex];
         const list = this.dom.list;
+        if (!pin || !list) return;
+
+        const addItem = (label, onSelect) => {
+            const li = document.createElement('li');
+            li.className = 'ctx-item';
+            li.innerHTML = `<span>${label}</span>`;
+            this._bindMenuAction(li, () => {
+                onSelect();
+                this.hide();
+            });
+            list.appendChild(li);
+        };
+
+        const isImpureNode = Array.isArray(node.inputs) && node.inputs.some((inputPin) => inputPin.type === 'exec');
+        const isOutputDataPin = dir === 'output' && pin.type !== 'exec';
+        if (isImpureNode && isOutputDataPin && this.callbacks.onTogglePinWatch) {
+            const isWatched = this.callbacks.getPinWatchState
+                ? !!this.callbacks.getPinWatchState(node.id, pinIndex)
+                : false;
+            addItem(isWatched ? 'Unwatch Output' : 'Watch Output', () => {
+                this.callbacks.onTogglePinWatch(node.id, pinIndex);
+            });
+        }
 
         // Only show if the pin actually supports multiple types
-        if (pin && pin.allowedTypes && list) {
+        if (pin.allowedTypes) {
+            if (list.childElementCount > 0) {
+                const separator = document.createElement('li');
+                separator.className = 'ctx-item';
+                separator.style.opacity = '0.6';
+                separator.style.cursor = 'default';
+                separator.style.pointerEvents = 'none';
+                separator.innerHTML = '<span>—</span>';
+                list.appendChild(separator);
+            }
             // Header
             const head = document.createElement('li');
             head.className = 'ctx-item';
