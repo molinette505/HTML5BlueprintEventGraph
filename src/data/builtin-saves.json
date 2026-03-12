@@ -3,132 +3,458 @@
   "saves": {
     "Starter Demo": {
       "version": 1,
-      "savedAt": "2026-02-08T00:00:00.000Z",
-      "variables": [],
-      "customEvents": [],
+      "savedAt": "2026-03-12T00:00:00.000Z",
+      "variables": [
+        {
+          "name": "Vie",
+          "type": "float",
+          "isArray": false,
+          "defaultValue": 100
+        },
+        {
+          "name": "EstMort",
+          "type": "boolean",
+          "isArray": false,
+          "defaultValue": false
+        },
+        {
+          "name": "Degats",
+          "type": "float",
+          "isArray": false,
+          "defaultValue": 50
+        }
+      ],
+      "customEvents": [
+        {
+          "name": "Meurt"
+        }
+      ],
       "graph": {
         "appIdentifier": "NodeGraphEditor",
         "nodes": [
           {
-            "id": 1,
-            "name": "Event BeginPlay",
-            "x": 50,
-            "y": 50,
+            "id": 16,
+            "name": "Subtract",
+            "x": 914.0611785874938,
+            "y": 23.810445230722927,
             "varName": null,
-            "functionId": null,
+            "customEventName": null,
+            "functionId": "Math.SubtractGeneric",
             "pinTypes": {
-              "inputs": [],
-              "outputs": ["exec"]
-            },
-            "inputs": []
-          },
-          {
-            "id": 2,
-            "name": "Branch",
-            "x": 300,
-            "y": 50,
-            "varName": null,
-            "functionId": "Flow.Branch",
-            "pinTypes": {
-              "inputs": ["exec", "boolean"],
-              "outputs": ["exec", "exec"]
+              "inputs": [
+                "float",
+                "float"
+              ],
+              "outputs": [
+                "float"
+              ]
             },
             "inputs": [
-              { "name": "Exec", "value": null },
-              { "name": "Condition", "value": true }
-            ]
-          },
-          {
-            "id": 3,
-            "name": "Make Float",
-            "x": 50,
-            "y": 200,
-            "varName": null,
-            "functionId": "Make.Float",
-            "pinTypes": {
-              "inputs": ["float"],
-              "outputs": ["float"]
-            },
-            "inputs": [
-              { "name": "Value", "value": 5 }
-            ]
-          },
-          {
-            "id": 4,
-            "name": "Add",
-            "x": 250,
-            "y": 200,
-            "varName": null,
-            "functionId": "Math.AddGeneric",
-            "pinTypes": {
-              "inputs": ["float", "float"],
-              "outputs": ["float"]
-            },
-            "inputs": [
-              { "name": "A", "value": 0 },
-              { "name": "B", "value": 10 }
-            ]
-          },
-          {
-            "id": 5,
-            "name": "Greater Equal (>=)",
-            "x": 450,
-            "y": 200,
-            "varName": null,
-            "functionId": "Logic.GreaterEqual",
-            "pinTypes": {
-              "inputs": ["float", "float"],
-              "outputs": ["boolean"]
-            },
-            "inputs": [
-              { "name": "A", "value": 0 },
-              { "name": "B", "value": 12 }
+              {
+                "name": "A",
+                "value": 0
+              },
+              {
+                "name": "B",
+                "value": 0
+              }
             ]
           },
           {
             "id": 6,
             "name": "Print String",
-            "x": 550,
-            "y": 20,
+            "x": 1531.2500000000005,
+            "y": -177.19444444444463,
             "varName": null,
+            "customEventName": null,
             "functionId": "Flow.Print",
             "pinTypes": {
-              "inputs": ["exec", "string", "boolean", "color"],
-              "outputs": ["exec"]
+              "inputs": [
+                "exec",
+                "string",
+                "boolean",
+                "color"
+              ],
+              "outputs": [
+                "exec"
+              ]
             },
             "inputs": [
-              { "name": "In", "value": null },
-              { "name": "String", "value": "True: >= 12" },
-              { "name": "Log To Screen", "value": true },
-              { "name": "Text Color", "value": "#ffffff" }
+              {
+                "name": "In",
+                "value": null
+              },
+              {
+                "name": "String",
+                "value": "Ouch"
+              },
+              {
+                "name": "Log To Screen",
+                "value": true
+              },
+              {
+                "name": "Text Color",
+                "value": "#ffffff"
+              }
             ]
           },
           {
-            "id": 7,
-            "name": "Print String",
-            "x": 550,
-            "y": 150,
-            "varName": null,
-            "functionId": "Flow.Print",
+            "id": 14,
+            "name": "Get Vie",
+            "x": 676.2834008097161,
+            "y": -96.1895547692771,
+            "varName": "Vie",
+            "customEventName": null,
+            "functionId": "Variable.Get",
             "pinTypes": {
-              "inputs": ["exec", "string", "boolean", "color"],
-              "outputs": ["exec"]
+              "inputs": [],
+              "outputs": [
+                "float"
+              ]
+            },
+            "inputs": []
+          },
+          {
+            "id": 15,
+            "name": "Set Vie",
+            "x": 1172.061178587494,
+            "y": -181.07844365816604,
+            "varName": "Vie",
+            "customEventName": null,
+            "functionId": "Variable.Set",
+            "pinTypes": {
+              "inputs": [
+                "exec",
+                "float"
+              ],
+              "outputs": [
+                "exec",
+                "float"
+              ]
             },
             "inputs": [
-              { "name": "In", "value": null },
-              { "name": "String", "value": "False: < 12" },
-              { "name": "Log To Screen", "value": true },
-              { "name": "Text Color", "value": "#ffffff" }
+              {
+                "name": "Exec",
+                "value": null
+              },
+              {
+                "name": "Vie",
+                "value": 100
+              }
             ]
+          },
+          {
+            "id": 17,
+            "name": "Get Degats",
+            "x": 678.5056230319383,
+            "y": 124.92155634183402,
+            "varName": "Degats",
+            "customEventName": null,
+            "functionId": "Variable.Get",
+            "pinTypes": {
+              "inputs": [],
+              "outputs": [
+                "float"
+              ]
+            },
+            "inputs": []
+          },
+          {
+            "id": 25,
+            "name": "Call Meurt",
+            "x": 351.89126516758324,
+            "y": -0.10441768413917885,
+            "varName": null,
+            "customEventName": "Meurt",
+            "functionId": "Flow.CallCustomEvent",
+            "pinTypes": {
+              "inputs": [
+                "exec"
+              ],
+              "outputs": [
+                "exec"
+              ]
+            },
+            "inputs": [
+              {
+                "name": "Exec",
+                "value": null
+              }
+            ]
+          },
+          {
+            "id": 20,
+            "name": "Print String",
+            "x": 144.56117858749508,
+            "y": 277.33822300850125,
+            "varName": null,
+            "customEventName": null,
+            "functionId": "Flow.Print",
+            "pinTypes": {
+              "inputs": [
+                "exec",
+                "string",
+                "boolean",
+                "color"
+              ],
+              "outputs": [
+                "exec"
+              ]
+            },
+            "inputs": [
+              {
+                "name": "In",
+                "value": null
+              },
+              {
+                "name": "String",
+                "value": "Hello World"
+              },
+              {
+                "name": "Log To Screen",
+                "value": true
+              },
+              {
+                "name": "Text Color",
+                "value": "#FFFFFF"
+              }
+            ]
+          },
+          {
+            "id": 9,
+            "name": "While Loop",
+            "x": 59.49707602339096,
+            "y": -183.7622043419264,
+            "varName": null,
+            "customEventName": null,
+            "functionId": "Flow.WhileLoop",
+            "pinTypes": {
+              "inputs": [
+                "exec",
+                "boolean"
+              ],
+              "outputs": [
+                "exec",
+                "exec"
+              ]
+            },
+            "inputs": [
+              {
+                "name": "Exec",
+                "value": null
+              },
+              {
+                "name": "Condition",
+                "value": true
+              }
+            ]
+          },
+          {
+            "id": 21,
+            "name": "Set EstMort",
+            "x": -170.43882141250492,
+            "y": 277.33822300850125,
+            "varName": "EstMort",
+            "customEventName": null,
+            "functionId": "Variable.Set",
+            "pinTypes": {
+              "inputs": [
+                "exec",
+                "boolean"
+              ],
+              "outputs": [
+                "exec",
+                "boolean"
+              ]
+            },
+            "inputs": [
+              {
+                "name": "Exec",
+                "value": null
+              },
+              {
+                "name": "EstMort",
+                "value": true
+              }
+            ]
+          },
+          {
+            "id": 24,
+            "name": "Greater (>)",
+            "x": -208.82302054670345,
+            "y": 54.181296601575156,
+            "varName": null,
+            "customEventName": null,
+            "functionId": "Logic.Greater",
+            "pinTypes": {
+              "inputs": [
+                "float",
+                "float"
+              ],
+              "outputs": [
+                "boolean"
+              ]
+            },
+            "inputs": [
+              {
+                "name": "A",
+                "value": 0
+              },
+              {
+                "name": "B",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "id": 1,
+            "name": "Event BeginPlay",
+            "x": -221.00000000000006,
+            "y": -293.00000000000006,
+            "varName": null,
+            "customEventName": null,
+            "functionId": null,
+            "pinTypes": {
+              "inputs": [],
+              "outputs": [
+                "exec"
+              ]
+            },
+            "inputs": []
+          },
+          {
+            "id": 19,
+            "name": "Meurt",
+            "x": -375.4388214125049,
+            "y": 277.33822300850125,
+            "varName": null,
+            "customEventName": "Meurt",
+            "functionId": "Flow.CustomEvent",
+            "pinTypes": {
+              "inputs": [],
+              "outputs": [
+                "exec"
+              ]
+            },
+            "inputs": []
+          },
+          {
+            "id": 22,
+            "name": "Get Vie",
+            "x": -380.04596426964764,
+            "y": -65.69749127721337,
+            "varName": "Vie",
+            "customEventName": null,
+            "functionId": "Variable.Get",
+            "pinTypes": {
+              "inputs": [],
+              "outputs": [
+                "float"
+              ]
+            },
+            "inputs": []
           }
         ],
         "connections": [
-          { "id": 1, "fromNode": 1, "fromPin": 0, "toNode": 2, "toPin": 0, "type": "exec" },
-          { "id": 2, "fromNode": 2, "fromPin": 0, "toNode": 6, "toPin": 0, "type": "exec" },
-          { "id": 3, "fromNode": 2, "fromPin": 1, "toNode": 7, "toPin": 0, "type": "exec" },
-          { "id": 4, "fromNode": 3, "fromPin": 0, "toNode": 4, "toPin": 0, "type": "float" },
-          { "id": 5, "fromNode": 4, "fromPin": 0, "toNode": 5, "toPin": 0, "type": "float" },
-          { "id": 6, "fromNode": 5, "fromPin": 0, "toNode": 2, "toPin": 1, "type": "boolean" }
+          {
+            "id": 10,
+            "fromNode": 1,
+            "fromPin": 0,
+            "toNode": 9,
+            "toPin": 0,
+            "type": "exec",
+            "controlPoints": []
+          },
+          {
+            "id": 11,
+            "fromNode": 9,
+            "fromPin": 0,
+            "toNode": 15,
+            "toPin": 0,
+            "type": "exec",
+            "controlPoints": []
+          },
+          {
+            "id": 12,
+            "fromNode": 14,
+            "fromPin": 0,
+            "toNode": 16,
+            "toPin": 0,
+            "type": "float",
+            "controlPoints": []
+          },
+          {
+            "id": 13,
+            "fromNode": 17,
+            "fromPin": 0,
+            "toNode": 16,
+            "toPin": 1,
+            "type": "float",
+            "controlPoints": []
+          },
+          {
+            "id": 14,
+            "fromNode": 16,
+            "fromPin": 0,
+            "toNode": 15,
+            "toPin": 1,
+            "type": "float",
+            "controlPoints": []
+          },
+          {
+            "id": 16,
+            "fromNode": 15,
+            "fromPin": 0,
+            "toNode": 6,
+            "toPin": 0,
+            "type": "exec",
+            "controlPoints": []
+          },
+          {
+            "id": 18,
+            "fromNode": 19,
+            "fromPin": 0,
+            "toNode": 21,
+            "toPin": 0,
+            "type": "exec",
+            "controlPoints": []
+          },
+          {
+            "id": 19,
+            "fromNode": 21,
+            "fromPin": 0,
+            "toNode": 20,
+            "toPin": 0,
+            "type": "exec",
+            "controlPoints": []
+          },
+          {
+            "id": 22,
+            "fromNode": 22,
+            "fromPin": 0,
+            "toNode": 24,
+            "toPin": 0,
+            "type": "float",
+            "controlPoints": []
+          },
+          {
+            "id": 23,
+            "fromNode": 24,
+            "fromPin": 0,
+            "toNode": 9,
+            "toPin": 1,
+            "type": "boolean",
+            "controlPoints": []
+          },
+          {
+            "id": 24,
+            "fromNode": 9,
+            "fromPin": 1,
+            "toNode": 25,
+            "toPin": 0,
+            "type": "exec",
+            "controlPoints": []
+          }
         ]
       }
     }
