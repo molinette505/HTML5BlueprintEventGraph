@@ -24,6 +24,9 @@ export const FunctionRegistry = {
         const variableManager = window.App.variableManager;
         if (variableManager && this.varName) {
             variableManager.runtimeValues[this.varName] = incomingValue;
+            if (typeof variableManager.renderWatchedVariableOverlay === 'function') {
+                variableManager.renderWatchedVariableOverlay();
+            }
         }
         // Passthrough: The 'Set' node also outputs the value it just set.
         return incomingValue; 

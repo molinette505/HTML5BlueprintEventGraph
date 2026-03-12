@@ -16,6 +16,7 @@ export class VariableManager {
         this.lastAddedIsArray = false;
         this.activeTouchVariableDrag = null;
         this.touchVariableDragThreshold = 8;
+        this.activeVariableContextMenuTarget = null;
 
         // Helper to render widgets in the sidebar
         this.widgetRenderer = new WidgetRenderer();
@@ -24,8 +25,11 @@ export class VariableManager {
             eventList: document.getElementById('event-list'),
             addEventBtn: document.getElementById('btn-add-event'),
             list: document.getElementById('var-list'),
-            addBtn: document.getElementById('btn-add-var')
+            addBtn: document.getElementById('btn-add-var'),
+            watchOverlay: document.getElementById('variable-watch-overlay')
         };
+
+        this.createVariableContextMenu();
 
         this.bindEvents();
     }
@@ -37,6 +41,78 @@ export class VariableManager {
         if(this.ui.addBtn) {
             this.ui.addBtn.onclick = () => this.addVariable();
         }
+
+        window.addEventListener('mousedown', (event) => {
+            if (!this.variableContextMenu) return;
+            if (!this.variableContextMenu.classList.contains('visible')) return;
+            if (this.variableContextMenu.contains(event.target)) return;
+            this.hideVariableContextMenu();
+        });
+
+        window.addEventListener('contextmenu', (event) => {
+            if (!this.variableContextMenu) return;
+            if (!this.variableContextMenu.classList.contains('visible')) return;
+            if (this.variableContextMenu.contains(event.target)) return;
+            this.hideVariableContextMenu();
+        });
+    }
+
+    createVariableContextMenu() {
+        const menu = document.createElement('div');
+        menu.id = 'variable-context-menu';
+        menu.className = 'drawer-context-menu';
+        menu.innerHTML = '<ul></ul>';
+        document.body.appendChild(menu);
+        this.variableContextMenu = menu;
+        this.variableContextMenuList = menu.querySelector('ul');
+    }
+
+    hideVariableContextMenu() {
+        if (!this.variableContextMenu) return;
+        this.variableContextMenu.classList.remove('visible');
+        this.activeVariableContextMenuTarget = null;
+    }
+
+    showVariableContextMenu(clientX, clientY, variableName) {
+        if (!this.variableContextMenu || !this.variableContextMenuList) return;
+        this.activeVariableContextMenuTarget = variableName;
+        this.variableContextMenuList.innerHTML = '';
+
+        const addOption = (label, handler) => {
+            const item = document.createElement('li');
+            item.className = 'drawer-context-item';
+            item.innerText = label;
+            item.onmousedown = (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+            };
+            item.onclick = (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                handler();
+                this.hideVariableContextMenu();
+            };
+            this.variableContextMenuList.appendChild(item);
+        };
+
+        const isWatched = this.isVariableWatched(variableName);
+        addOption(isWatched ? 'Unwatch Variable' : 'Watch Variable', () => this.toggleVariableWatch(variableName));
+
+        this.variableContextMenu.style.left = `${clientX}px`;
+        this.variableContextMenu.style.top = `${clientY}px`;
+        this.variableContextMenu.classList.add('visible');
+
+        const rect = this.variableContextMenu.getBoundingClientRect();
+        let adjustedX = clientX;
+        let adjustedY = clientY;
+        if (rect.right > window.innerWidth - 8) {
+            adjustedX = Math.max(8, window.innerWidth - rect.width - 8);
+        }
+        if (rect.bottom > window.innerHeight - 8) {
+            adjustedY = Math.max(8, window.innerHeight - rect.height - 8);
+        }
+        this.variableContextMenu.style.left = `${adjustedX}px`;
+        this.variableContextMenu.style.top = `${adjustedY}px`;
     }
 
     getSupportedScalarTypes() {
@@ -109,7 +185,8 @@ export class VariableManager {
             name: String(variable.name || '').trim(),
             type: scalarType,
             isArray,
-            defaultValue
+            defaultValue,
+            watched: !!variable.watched
         };
     }
 
@@ -313,7 +390,8 @@ export class VariableManager {
             name: name,
             type: selectedType,
             isArray: this.variables.length > 0 ? !!this.lastAddedIsArray : false,
-            defaultValue: this.getTypeDefault(selectedType)
+            defaultValue: this.getTypeDefault(selectedType),
+            watched: false
         };
         if (newVar.isArray) newVar.defaultValue = [];
 
@@ -344,6 +422,18 @@ export class VariableManager {
         // 3. Re-render View
         this.editor.renderer.render(); // Redraw wires (since nodes are gone)
         this.renderList();
+    }
+
+    isVariableWatched(name) {
+        const variable = this.variables.find((entry) => entry.name === name);
+        return !!(variable && variable.watched);
+    }
+
+    toggleVariableWatch(name) {
+        const variable = this.variables.find((entry) => entry.name === name);
+        if (!variable) return;
+        variable.watched = !variable.watched;
+        this.renderWatchedVariableOverlay();
     }
 
     updateVariable(oldName, key, value) {
@@ -487,6 +577,7 @@ export class VariableManager {
 
     renderList() {
         if(!this.ui.list || !this.ui.eventList) return;
+        this.hideVariableContextMenu();
         this.ui.list.innerHTML = '';
         this.ui.eventList.innerHTML = '';
 
@@ -709,10 +800,17 @@ export class VariableManager {
             row.addEventListener('touchmove', (e) => this._updateTouchVariableDrag(e), { passive: false });
             row.addEventListener('touchend', (e) => this._endTouchVariableDrag(e), { passive: false });
             row.addEventListener('touchcancel', () => this._clearTouchVariableDrag(), { passive: true });
+            row.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                this.showVariableContextMenu(e.clientX, e.clientY, v.name);
+            });
 
             row.append(typeIndicator, col);
             this.ui.list.appendChild(row);
         });
+
+        this.renderWatchedVariableOverlay();
     }
 
     resetRuntime() {
@@ -720,6 +818,51 @@ export class VariableManager {
         this.variables.forEach(v => {
             this.runtimeValues[v.name] = this.cloneValue(v.defaultValue);
         });
+        this.renderWatchedVariableOverlay();
+    }
+
+    formatWatchedVariableValue(value) {
+        if (value === undefined) return '';
+        if (value === null) return 'null';
+        if (Array.isArray(value)) {
+            const shown = value.slice(0, 3).map((entry) => this.formatWatchedVariableValue(entry));
+            const suffix = value.length > 3 ? ', ...' : '';
+            return `[${shown.join(', ')}${suffix}]`;
+        }
+        if (typeof value === 'boolean') return value ? 'true' : 'false';
+        if (typeof value === 'number') return Number.isFinite(value) ? String(parseFloat(value.toFixed(3))) : String(value);
+        if (typeof value === 'object') {
+            if ('x' in value && 'y' in value && 'z' in value) {
+                return `(${this.formatWatchedVariableValue(value.x)}, ${this.formatWatchedVariableValue(value.y)}, ${this.formatWatchedVariableValue(value.z)})`;
+            }
+            return '{Obj}';
+        }
+        return String(value);
+    }
+
+    renderWatchedVariableOverlay() {
+        const overlay = this.ui.watchOverlay;
+        if (!overlay) return;
+        overlay.innerHTML = '';
+
+        this.variables
+            .filter((variable) => !!variable.watched)
+            .forEach((variable) => {
+                const badge = document.createElement('div');
+                badge.className = 'var-watch-badge';
+
+                const nameSpan = document.createElement('span');
+                nameSpan.className = 'var-watch-name';
+                nameSpan.innerText = variable.name;
+
+                const valueSpan = document.createElement('span');
+                valueSpan.className = 'var-watch-value';
+                const runtimeValue = this.runtimeValues[variable.name];
+                valueSpan.innerText = this.formatWatchedVariableValue(runtimeValue);
+
+                badge.append(nameSpan, valueSpan);
+                overlay.appendChild(badge);
+            });
     }
 
     createGetTemplate(varName) {

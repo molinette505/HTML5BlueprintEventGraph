@@ -405,6 +405,14 @@ export class Simulation {
         });
     }
 
+    refreshVariableWatches() {
+        if (!window.App || !window.App.variableManager) return;
+        const manager = window.App.variableManager;
+        if (typeof manager.renderWatchedVariableOverlay === 'function') {
+            manager.renderWatchedVariableOverlay();
+        }
+    }
+
     async animateExecConnection(conn, currentRunId) {
         if (!conn || !this.renderer) return true;
         const durationMs = this.renderer.animateExecWire(conn);
@@ -806,6 +814,7 @@ export class Simulation {
 
             this.pendingRequests.delete(item.id);
         }
+        this.refreshVariableWatches();
 
         if (this.status === 'RUNNING' && !isSingleStep) {
             this.timer = setTimeout(() => this.tick(), this.getScaledDelay(100));
