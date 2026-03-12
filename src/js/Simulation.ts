@@ -356,7 +356,10 @@ export class Simulation {
                 continue;
             }
 
-            const res = this.resolveInputs(task, !!task.instantMode);
+            const res = this.resolveInputs(task, !!task.instantMode, {
+                flattenUpstreamVisuals: !!task.flattenUpstreamVisuals,
+                directBreakpointTarget: false
+            });
             if (!res.ready) {
                 if (res.deps.length > 0) {
                     this.executionQueue = res.deps.concat([task], this.executionQueue);
@@ -428,9 +431,10 @@ export class Simulation {
         return args;
     }
 
-    resolveInputs(task, instantDataFlow = false) {
+    resolveInputs(task, instantDataFlow = false, options = null) {
         const ctx = this.pendingRequests.get(task.id);
         if (!ctx) return { ready: false, deps: [] };
+        const opts = options || {};
 
         const deps = [];
         const node = task.node;
@@ -463,6 +467,10 @@ export class Simulation {
             if (this.isPureNode(sourceNode)) {
                 if (!ctx.inputScheduled[i]) {
                     ctx.inputScheduled[i] = true;
+                    const sourceIsBreakpoint = this.isBreakpointNode(sourceNode);
+                    const flattenUpstreamVisuals = (!!opts.flattenUpstreamVisuals || !!opts.directBreakpointTarget)
+                        && !sourceIsBreakpoint;
+                    const instantMode = (instantDataFlow || flattenUpstreamVisuals) && !sourceIsBreakpoint;
                     const pureTask = this.createTask('pure', sourceNode, {
                         deliverTo: {
                             requestId: task.id,
@@ -470,7 +478,9 @@ export class Simulation {
                             conn: resolvedSource.sourceConnection || conn,
                             connPath
                         },
-                        instantMode: instantDataFlow && !this.isBreakpointNode(sourceNode)
+                        instantMode,
+                        flattenUpstreamVisuals,
+                        forceOutputLabel: !!opts.directBreakpointTarget
                     });
                     deps.push(pureTask);
                 }
@@ -561,6 +571,11 @@ export class Simulation {
 
         const instantStepMode = this.shouldUseInstantStepForItem(item, isSingleStep);
 
+        if ((item.kind === 'exec' || item.kind === 'pure') && !item.waitingHighlight) {
+            this.setNodeHighlight(item.node.id, '#ffffff');
+            item.waitingHighlight = true;
+        }
+
         if (item.kind === 'exec') {
             if (!item.execWireDone) {
                 if (item.conn) {
@@ -573,11 +588,6 @@ export class Simulation {
                 }
                 item.execWireDone = true;
             }
-
-            if (!item.waitingHighlight) {
-                this.setNodeHighlight(item.node.id, '#ffffff');
-                item.waitingHighlight = true;
-            }
         }
 
         let ready = false;
@@ -585,7 +595,14 @@ export class Simulation {
         if (this.execPolicies.shouldSkipInputResolution(item)) {
             ready = true;
         } else {
-            const res = this.resolveInputs(item, instantStepMode);
+            const isBreakpointInputFetchStep = isSingleStep
+                && item.kind === 'exec'
+                && this.isBreakpointTask(item)
+                && !item.breakpointReadyToFire;
+            const res = this.resolveInputs(item, instantStepMode, {
+                flattenUpstreamVisuals: !!item.flattenUpstreamVisuals,
+                directBreakpointTarget: isBreakpointInputFetchStep
+            });
             ready = res.ready;
             deps = res.deps;
         }
@@ -653,6 +670,9 @@ export class Simulation {
             const continuations = item.continuations ? item.continuations.slice() : [];
 
             this.executeExecNode(node, ctx, item, continuations, currentRunId);
+            if (this.status !== 'STOPPED' && node.functionId !== 'Flow.Delay') {
+                this.highlightNode(node.id, '#ff9900');
+            }
 
             this.pendingRequests.delete(item.id);
             this.lastProcessedItem = item;
@@ -664,25 +684,15 @@ export class Simulation {
                 if (this.runInstanceId !== currentRunId) return;
             }
 
-            if (!this.isPersistentExecHighlightNode(node)) {
-                const nodeId = node.id;
-                setTimeout(() => {
-                    if (this.status === 'STOPPED') return;
-                    if (this.isPersistentExecHighlightNode(node)) return;
-                    const hasPendingSameNode = this.executionQueue.some((queued) =>
-                        queued.kind === 'exec' && queued.node && queued.node.id === nodeId
-                    );
-                    if (hasPendingSameNode) return;
-                    const el = document.getElementById(`node-${nodeId}`);
-                    if (el) el.style.boxShadow = "";
-                }, this.getScaledDelay(900));
-            }
         } else if (item.kind === 'pure') {
             const node = item.node;
             this.clearInputVisuals(node);
             node.setError(null);
 
             await this.executePureNode(node, ctx, item, currentRunId);
+            if (this.status !== 'STOPPED') {
+                this.highlightNode(node.id, '#ff9900');
+            }
 
             this.pendingRequests.delete(item.id);
         }
@@ -772,7 +782,8 @@ export class Simulation {
                         const connPath = item.deliverTo.connPath && item.deliverTo.connPath.length > 0
                             ? item.deliverTo.connPath
                             : (item.deliverTo.conn ? [item.deliverTo.conn] : []);
-                        const animated = this.animateDataPath(connPath, debugLabel, !!item.instantMode);
+                        const useInstantOutput = !!item.instantMode && !item.forceOutputLabel;
+                        const animated = this.animateDataPath(connPath, debugLabel, useInstantOutput);
                         const waitMs = animated.waitMs;
                         if (waitMs > 0) {
                             await new Promise(r => setTimeout(r, waitMs));

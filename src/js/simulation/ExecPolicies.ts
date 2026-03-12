@@ -21,7 +21,6 @@ function runForLoop(api, node, ctx, item, continuations) {
     const state = node.loopState;
     if (state.current <= state.last) {
         node.executionResult = state.current;
-        api.setNodeHighlight(node.id, '#ffffff');
 
         const loopBodyPin = node.outputs.find((pin) => pin.type === 'exec' && pin.name === "Loop Body");
         const loopConn = loopBodyPin
@@ -46,7 +45,6 @@ function runForLoop(api, node, ctx, item, continuations) {
 
     state.active = false;
     node.executionResult = state.last;
-    api.highlightNode(node.id, '#ff9900');
 
     const completedPin = node.outputs.find((pin) => pin.type === 'exec' && pin.name === "Completed");
     const completedConn = completedPin
@@ -67,7 +65,6 @@ function runWhileLoop(api, node, ctx, item, continuations) {
 
     if (condition) {
         node.executionResult = condition;
-        api.setNodeHighlight(node.id, '#ffffff');
 
         const loopBodyPin = node.outputs.find((pin) => pin.type === 'exec' && pin.name === "Loop Body");
         const loopConn = loopBodyPin
@@ -89,7 +86,6 @@ function runWhileLoop(api, node, ctx, item, continuations) {
     }
 
     node.executionResult = null;
-    api.highlightNode(node.id, '#ff9900');
 
     const completedPin = node.outputs.find((pin) => pin.type === 'exec' && pin.name === "Completed");
     const completedConn = completedPin
@@ -114,7 +110,6 @@ function runDoOnce(api, node, ctx, item, continuations) {
 
     if (!node.doOnceFired) {
         node.doOnceFired = true;
-        api.highlightNode(node.id, '#ff9900');
         routeToNextExec(api, node, continuations);
     }
 }
@@ -154,8 +149,6 @@ function runDelay(api, node, ctx, item, continuations, currentRunId) {
 }
 
 function runCallCustomEvent(api, node, ctx, item, continuations) {
-    api.highlightNode(node.id, '#ff9900');
-
     const eventName = node.customEventName || '';
     if (eventName) {
         const targets = api.graph.nodes.filter(
@@ -173,7 +166,6 @@ function runDefaultExec(api, node, ctx, item, continuations) {
     if (node.jsFunctionRef) {
         try {
             const args = api.buildArgs(node, ctx);
-            api.highlightNode(node.id, '#ff9900');
             node.executionResult = node.jsFunctionRef.apply(node, args);
         } catch (err) {
             if (err.isBlueprintError) node.setError(err.message);
@@ -181,8 +173,6 @@ function runDefaultExec(api, node, ctx, item, continuations) {
             api.stop();
             return;
         }
-    } else {
-        api.highlightNode(node.id, '#ff9900');
     }
 
     routeToNextExec(api, node, continuations);
