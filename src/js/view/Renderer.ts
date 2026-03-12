@@ -38,7 +38,7 @@ export class Renderer {
     normalizeSpeedFactor(value) {
         const n = Number(value);
         if (!Number.isFinite(n)) return 1;
-        return Math.min(12, Math.max(0.25, n));
+        return Math.min(1.75, Math.max(0.25, n));
     }
 
     getScaledDelay(ms) {

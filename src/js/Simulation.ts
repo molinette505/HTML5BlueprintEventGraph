@@ -59,7 +59,7 @@ export class Simulation {
     normalizeSpeedFactor(value) {
         const n = Number(value);
         if (!Number.isFinite(n)) return 1;
-        return Math.min(12, Math.max(0.25, n));
+        return Math.min(1.75, Math.max(0.25, n));
     }
 
     getScaledDelay(ms) {
@@ -257,6 +257,10 @@ export class Simulation {
         }
 
         if (this.isBreakpointTask(next)) {
+            if (next.breakpointReadyToFire) {
+                this.endStepBurst();
+                return false;
+            }
             if (!this.resumeBreakpointConsumed && next.id === this.resumeBreakpointTaskId) {
                 this.resumeBreakpointConsumed = true;
                 return true;
@@ -620,6 +624,19 @@ export class Simulation {
             item.postInputSettleDone = true;
             await new Promise(r => setTimeout(r, this.postInputSettleDelayMs));
             if (this.runInstanceId !== currentRunId) return;
+        }
+
+        if (
+            isSingleStep
+            && item.kind === 'exec'
+            && this.isBreakpointTask(item)
+            && !item.breakpointReadyToFire
+        ) {
+            item.breakpointReadyToFire = true;
+            this.executionQueue.unshift(item);
+            this.endStepBurst();
+            if (this.onStateChange) this.onStateChange(this.status);
+            return;
         }
 
         if (item.kind === 'exec') {

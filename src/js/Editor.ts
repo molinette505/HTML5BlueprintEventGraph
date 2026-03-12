@@ -126,7 +126,8 @@ export class Editor {
                 const raw = Number(this.dom.speedFactor.value);
                 this.simulation.setSpeedFactor(raw);
                 if (this.dom.speedFactorValue) {
-                    this.dom.speedFactorValue.innerText = `${this.simulation.speedFactor.toFixed(1)}x`;
+                    const speedText = this.simulation.speedFactor.toFixed(2).replace(/\.?0+$/, '');
+                    this.dom.speedFactorValue.innerText = `${speedText}x`;
                 }
             };
             this.dom.speedFactor.oninput = applySpeed;
