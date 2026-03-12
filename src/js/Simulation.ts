@@ -25,6 +25,9 @@ export class Simulation {
         // Tracks all visuals (labels AND glowing wires) for the current step
         this.activeStepVisuals = [];
         this.connectionVisuals = new Map();
+        this.stepBurstActive = false;
+        this.resumeBreakpointTaskId = null;
+        this.resumeBreakpointConsumed = true;
 
         this.execPolicies = createExecPolicies({
             graph: this.graph,
@@ -96,6 +99,7 @@ export class Simulation {
         this.nextRequestId = 1;
         this.lastProcessedItem = null;
         this.lastProcessedExec = null;
+        this.endStepBurst();
         this.clearStepVisuals(); // Ensure clean slate
 
         const starts = this.graph.nodes.filter(n => n.name === "Event BeginPlay");
@@ -116,6 +120,7 @@ export class Simulation {
         this.pendingAsyncExecCount = 0;
         this.lastProcessedItem = null;
         this.lastProcessedExec = null;
+        this.endStepBurst();
         if (this.timer) clearTimeout(this.timer);
         this.runInstanceId++;
 
@@ -139,8 +144,16 @@ export class Simulation {
     }
 
     step() {
-        if (this.status === 'STOPPED') { this.startPaused(); this.processNext(true); }
-        else if (this.status === 'PAUSED') { this.processNext(true); }
+        if (this.status === 'STOPPED') {
+            this.startPaused();
+            this.beginStepBurst(false);
+            this.processNext(true);
+            return;
+        }
+        if (this.status === 'PAUSED') {
+            this.beginStepBurst(true);
+            this.processNext(true);
+        }
     }
 
     replayStep() {
@@ -202,6 +215,30 @@ export class Simulation {
         return !!node && !!node.breakpoint;
     }
 
+    isBreakpointTask(task) {
+        if (!task) return false;
+        if (task.kind !== 'exec' && task.kind !== 'pure') return false;
+        return this.isBreakpointNode(task.node);
+    }
+
+    beginStepBurst(allowResumeCurrentBreakpoint = true) {
+        this.stepBurstActive = true;
+        const next = this.executionQueue[0];
+        if (allowResumeCurrentBreakpoint && this.isBreakpointTask(next)) {
+            this.resumeBreakpointTaskId = next.id;
+            this.resumeBreakpointConsumed = false;
+            return;
+        }
+        this.resumeBreakpointTaskId = null;
+        this.resumeBreakpointConsumed = true;
+    }
+
+    endStepBurst() {
+        this.stepBurstActive = false;
+        this.resumeBreakpointTaskId = null;
+        this.resumeBreakpointConsumed = true;
+    }
+
     shouldUseInstantStepForItem(item, isSingleStep) {
         if (!isSingleStep || !item) return false;
         if (item.kind === 'exec' || item.kind === 'pure') {
@@ -212,11 +249,23 @@ export class Simulation {
 
     shouldAutoContinueSingleStep() {
         if (this.status !== 'PAUSED') return false;
+        if (!this.stepBurstActive) return false;
         const next = this.executionQueue[0];
-        if (!next) return false;
-        if (next.kind === 'pure') return !this.isBreakpointNode(next.node);
-        if (next.kind === 'exec') return !this.isBreakpointNode(next.node);
-        return false;
+        if (!next) {
+            this.endStepBurst();
+            return false;
+        }
+
+        if (this.isBreakpointTask(next)) {
+            if (!this.resumeBreakpointConsumed && next.id === this.resumeBreakpointTaskId) {
+                this.resumeBreakpointConsumed = true;
+                return true;
+            }
+            this.endStepBurst();
+            return false;
+        }
+
+        return next.kind === 'pure' || next.kind === 'exec';
     }
 
     flashConnection(conn) {
@@ -473,11 +522,18 @@ export class Simulation {
         try {
         const currentRunId = this.runInstanceId;
         if (this.executionQueue.length === 0) {
-            if (this.status === 'RUNNING') {
-                if (this.pendingAsyncExecCount > 0) {
+            if (this.pendingAsyncExecCount > 0) {
+                if (this.status === 'RUNNING') {
                     this.timer = setTimeout(() => this.tick(), this.getScaledDelay(50));
-                    return;
                 }
+                return;
+            }
+            if (isSingleStep && this.stepBurstActive) {
+                this.endStepBurst();
+                this.stop();
+                return;
+            }
+            if (this.status === 'RUNNING') {
                 this.stop();
             }
             return;
