@@ -847,8 +847,11 @@ export class Simulation {
     highlightNode(id, color = '#ff9900') {
         const el = document.getElementById(`node-${id}`);
         if (el) {
-            el.style.transition = "box-shadow 0.2s ease-out";
+            // Force an immediate switch from "waiting white" to execution color.
+            el.style.transition = "none";
             el.style.boxShadow = `0 0 0 4px ${color}`;
+            void el.offsetWidth;
+            el.style.transition = "box-shadow 0.2s ease-out";
             setTimeout(() => {
                 if (this.status !== 'STOPPED') el.style.boxShadow = "";
             }, 800);
