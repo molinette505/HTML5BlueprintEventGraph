@@ -26,7 +26,7 @@ export class NodeRenderer {
         }
         
         // Apply classes: 'compact' for math nodes, 'expanded' for advanced view
-        el.className = `node ${node.hideHeader ? 'compact' : ''} ${node.showAdvanced ? 'expanded' : ''}`;
+        el.className = `node ${node.hideHeader ? 'compact' : ''} ${node.showAdvanced ? 'expanded' : ''} ${node.breakpoint ? 'has-breakpoint' : ''}`;
         el.id = `node-${node.id}`;
         
         // Positioning
@@ -126,7 +126,7 @@ export class NodeRenderer {
     }
 
     createRerouteElement(node, el) {
-        el.className = 'node reroute';
+        el.className = `node reroute ${node.breakpoint ? 'has-breakpoint' : ''}`;
         el.id = `node-${node.id}`;
         el.style.left = `${node.x}px`;
         el.style.top = `${node.y}px`;

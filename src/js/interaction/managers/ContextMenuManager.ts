@@ -220,6 +220,18 @@ export class ContextMenuManager {
         addItem('Copy', () => this.callbacks.onCopy());
         addItem('Cut', () => this.callbacks.onCut());
 
+        if (this.callbacks.onToggleBreakpoint) {
+            const bpState = this.callbacks.getBreakpointState
+                ? this.callbacks.getBreakpointState(targetId, selectedCount)
+                : null;
+            const count = bpState && Number.isFinite(bpState.count) ? bpState.count : (selectedCount > 1 ? selectedCount : 1);
+            const hasAnyWithoutBreakpoint = bpState ? !!bpState.hasAnyWithoutBreakpoint : true;
+            const label = hasAnyWithoutBreakpoint
+                ? `Add ${count > 1 ? 'Breakpoints' : 'Breakpoint'}`
+                : `Remove ${count > 1 ? 'Breakpoints' : 'Breakpoint'}`;
+            addItem(label, () => this.callbacks.onToggleBreakpoint(targetId));
+        }
+
         // Dynamic label: "Delete Node" vs "Delete 5 Nodes"
         const count = selectedCount > 1 ? selectedCount : 1;
         const delLabel = `Delete ${count > 1 ? count + ' Nodes' : 'Node'}`;

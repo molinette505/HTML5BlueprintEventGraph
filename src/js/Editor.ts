@@ -30,7 +30,6 @@ export class Editor {
             variableDrawerHandle: document.getElementById('variable-drawer-handle'),
             
             // Simulation Toolbar Buttons
-            btnPlay: document.getElementById('btn-play'),
             btnStep: document.getElementById('btn-step'),
             btnReplay: document.getElementById('btn-replay'),
             btnStop: document.getElementById('btn-stop'),
@@ -114,15 +113,6 @@ export class Editor {
                 e.stopPropagation();
                 toggleVariablePanel();
             }, { passive: false });
-        }
-
-        // Play/Pause Toggle Button Logic
-        if (this.dom.btnPlay) {
-            this.dom.btnPlay.onclick = () => {
-                if (this.simulation.status === 'RUNNING') this.simulation.pause();
-                else if (this.simulation.status === 'PAUSED') this.simulation.resume();
-                else this.simulation.start();
-            };
         }
 
         // Stepping and Stopping
@@ -529,24 +519,21 @@ export class Editor {
      */
     updateControls(status) {
         const d = this.dom;
-        if (!d.btnPlay) return; 
-
-        // Icons
-        const iconPlay = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="6 3 20 12 6 21 6 3"></polygon></svg>`;
-        const iconPause = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="4" width="4" height="16" rx="1"></rect><rect x="14" y="4" width="4" height="16" rx="1"></rect></svg>`;
 
         if (status === 'STOPPED') {
-            d.btnPlay.disabled = false; d.btnPlay.innerHTML = iconPlay; d.btnPlay.title = "Play";
-            d.btnReplay.disabled = true; d.btnStep.disabled = false; d.btnStop.disabled = true;
+            if (d.btnReplay) d.btnReplay.disabled = true;
+            if (d.btnStep) d.btnStep.disabled = false;
+            if (d.btnStop) d.btnStop.disabled = true;
         } 
         else if (status === 'RUNNING') {
-            d.btnPlay.disabled = false; d.btnPlay.innerHTML = iconPause; d.btnPlay.title = "Pause";
-            d.btnReplay.disabled = true; d.btnStep.disabled = true; d.btnStop.disabled = false;
+            if (d.btnReplay) d.btnReplay.disabled = true;
+            if (d.btnStep) d.btnStep.disabled = true;
+            if (d.btnStop) d.btnStop.disabled = false;
         } 
         else if (status === 'PAUSED') {
-            d.btnPlay.disabled = false; d.btnPlay.innerHTML = iconPlay; d.btnPlay.title = "Resume";
-            d.btnReplay.disabled = !this.simulation.lastProcessedItem;
-            d.btnStep.disabled = false; d.btnStop.disabled = false;
+            if (d.btnReplay) d.btnReplay.disabled = !this.simulation.lastProcessedItem;
+            if (d.btnStep) d.btnStep.disabled = false;
+            if (d.btnStop) d.btnStop.disabled = false;
         }
     }
 
@@ -713,6 +700,8 @@ export class Editor {
     }
 
     _restoreNodeState(node, nodeData) {
+        node.breakpoint = !!nodeData.breakpoint;
+
         if (nodeData.pinTypes) {
             ['inputs', 'outputs'].forEach(dir => {
                 const pins = nodeData.pinTypes[dir];

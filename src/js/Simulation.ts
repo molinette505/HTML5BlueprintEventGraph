@@ -175,6 +175,45 @@ export class Simulation {
         return !!node && node.functionId === 'Flow.RerouteExec';
     }
 
+    isBreakpointNode(node) {
+        return !!node && !!node.breakpoint;
+    }
+
+    shouldUseInstantStepForItem(item, isSingleStep) {
+        if (!isSingleStep || !item) return false;
+        if (item.kind === 'exec' || item.kind === 'pure') {
+            return !this.isBreakpointNode(item.node);
+        }
+        return false;
+    }
+
+    shouldAutoContinueSingleStep() {
+        if (this.status !== 'PAUSED') return false;
+        const next = this.executionQueue[0];
+        if (!next) return false;
+        if (next.kind === 'pure') return !this.isBreakpointNode(next.node);
+        if (next.kind === 'exec') return !this.isBreakpointNode(next.node);
+        return false;
+    }
+
+    flashConnection(conn) {
+        if (!conn) return;
+        const path = document.getElementById(`conn-${conn.id}`);
+        if (!path) return;
+        path.classList.remove('data-flow');
+        void path.offsetWidth;
+        path.classList.add('data-flow');
+        setTimeout(() => {
+            if (path) path.classList.remove('data-flow');
+        }, 180);
+    }
+
+    flashDataPath(connPath) {
+        const pathList = Array.isArray(connPath) ? connPath.filter(Boolean) : [];
+        pathList.forEach((conn) => this.flashConnection(conn));
+        return { waitMs: 0 };
+    }
+
     isPersistentExecHighlightNode(node) {
         if (!node) return false;
         return node.functionId === 'Flow.Delay'
@@ -196,8 +235,12 @@ export class Simulation {
             if (!nextItem || nextItem.kind !== 'exec') return;
             if (nextItem.execWireDone || !nextItem.conn) return;
 
-            const stillActive = await this.animateExecConnection(nextItem.conn, currentRunId);
-            if (!stillActive) return;
+            if (this.isBreakpointNode(nextItem.node)) {
+                const stillActive = await this.animateExecConnection(nextItem.conn, currentRunId);
+                if (!stillActive) return;
+            } else {
+                this.flashConnection(nextItem.conn);
+            }
             nextItem.execWireDone = true;
 
             if (!this.isExecRerouteNode(nextItem.node)) return;
@@ -236,7 +279,7 @@ export class Simulation {
                 continue;
             }
 
-            const res = this.resolveInputs(task);
+            const res = this.resolveInputs(task, !!task.instantMode);
             if (!res.ready) {
                 if (res.deps.length > 0) {
                     this.executionQueue = res.deps.concat([task], this.executionQueue);
@@ -280,10 +323,11 @@ export class Simulation {
         return { sourceNode, sourceConnection, connPath };
     }
 
-    animateDataPath(connPath, debugLabel) {
+    animateDataPath(connPath, debugLabel, instant = false) {
         if (!this.renderer) return { waitMs: 0 };
         const normalizedPath = Array.isArray(connPath) ? connPath.filter(Boolean) : [];
         if (normalizedPath.length === 0) return { waitMs: 0 };
+        if (instant) return this.flashDataPath(normalizedPath);
 
         let visualObj = null;
         if (normalizedPath.length > 1 && typeof this.renderer.animateDataWirePath === 'function') {
@@ -307,7 +351,7 @@ export class Simulation {
         return args;
     }
 
-    resolveInputs(task) {
+    resolveInputs(task, instantDataFlow = false) {
         const ctx = this.pendingRequests.get(task.id);
         if (!ctx) return { ready: false, deps: [] };
 
@@ -348,7 +392,8 @@ export class Simulation {
                             inputIndex: i,
                             conn: resolvedSource.sourceConnection || conn,
                             connPath
-                        }
+                        },
+                        instantMode: instantDataFlow && !this.isBreakpointNode(sourceNode)
                     });
                     deps.push(pureTask);
                 }
@@ -358,7 +403,7 @@ export class Simulation {
                 ctx.inputReady[i] = true;
                 if (this.renderer && connPath.length > 0) {
                     const debugLabel = window.FunctionRegistry.getVisualDebug(sourceNode, [], incomingVal);
-                    const animated = this.animateDataPath(connPath, debugLabel);
+                    const animated = this.animateDataPath(connPath, debugLabel, instantDataFlow);
                     const waitMs = animated.waitMs;
                     ctx.inputVisualWaitMs = Math.max(ctx.inputVisualWaitMs || 0, waitMs);
                 }
@@ -430,11 +475,17 @@ export class Simulation {
             return;
         }
 
+        const instantStepMode = this.shouldUseInstantStepForItem(item, isSingleStep);
+
         if (item.kind === 'exec') {
             if (!item.execWireDone) {
                 if (item.conn) {
-                    const stillActive = await this.animateExecConnection(item.conn, currentRunId);
-                    if (!stillActive) return;
+                    if (instantStepMode) {
+                        this.flashConnection(item.conn);
+                    } else {
+                        const stillActive = await this.animateExecConnection(item.conn, currentRunId);
+                        if (!stillActive) return;
+                    }
                 }
                 item.execWireDone = true;
             }
@@ -450,7 +501,7 @@ export class Simulation {
         if (this.execPolicies.shouldSkipInputResolution(item)) {
             ready = true;
         } else {
-            const res = this.resolveInputs(item);
+            const res = this.resolveInputs(item, instantStepMode);
             ready = res.ready;
             deps = res.deps;
         }
@@ -544,6 +595,9 @@ export class Simulation {
         }
         } finally {
             this.isProcessingNext = false;
+            if (isSingleStep && this.shouldAutoContinueSingleStep()) {
+                setTimeout(() => this.processNext(true), 0);
+            }
         }
     }
 
@@ -621,7 +675,7 @@ export class Simulation {
                         const connPath = item.deliverTo.connPath && item.deliverTo.connPath.length > 0
                             ? item.deliverTo.connPath
                             : (item.deliverTo.conn ? [item.deliverTo.conn] : []);
-                        const animated = this.animateDataPath(connPath, debugLabel);
+                        const animated = this.animateDataPath(connPath, debugLabel, !!item.instantMode);
                         const waitMs = animated.waitMs;
                         if (waitMs > 0) {
                             await new Promise(r => setTimeout(r, waitMs));

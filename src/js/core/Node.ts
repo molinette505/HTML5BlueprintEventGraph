@@ -40,6 +40,7 @@ export class GraphNode {
         this.executionResult = null; 
         this.dynamicInputCount = 0;
         this.arrayElementAllowedTypes = null;
+        this.breakpoint = !!nodeTemplate.breakpoint;
 
         // Initialize Input Pins
         this.inputs = (nodeTemplate.inputs || []).map((pinDefinition, pinIndex) => {
@@ -166,6 +167,7 @@ export class GraphNode {
             varName: this.varName, 
             customEventName: this.customEventName,
             functionId: this.functionId, // Persist functionId to identify logic (e.g. Get/Set) on restore
+            breakpoint: !!this.breakpoint,
             
             // Save types to validation/reconstruction
             pinTypes: {

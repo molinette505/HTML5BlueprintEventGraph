@@ -61,6 +61,8 @@ export class Interaction {
                 onCopy: () => this.clipboard.copy(),
                 onCut: () => this.cutSelection(),
                 onPaste: (x, y) => this.clipboard.paste(x, y),
+                onToggleBreakpoint: (targetId) => this.toggleBreakpointForSelection(targetId),
+                getBreakpointState: (targetId, selectedCount = 1) => this.getBreakpointStateForSelection(targetId, selectedCount),
                 onPinChange: (node, pin, newType, index, dir) => {
                     this.graph.disconnectPin(node.id, index, dir);
                     pin.setType(newType);
@@ -235,6 +237,37 @@ export class Interaction {
             this.nodeManager.deleteNodes([targetId]);
         }
         this.selectionManager.clear();
+    }
+
+    resolveContextSelectionNodeIds(targetId, selectedCount = 1) {
+        if (this.selectionManager.selected.has(targetId) && selectedCount > 1) {
+            return Array.from(this.selectionManager.selected);
+        }
+        return [targetId];
+    }
+
+    getBreakpointStateForSelection(targetId, selectedCount = 1) {
+        const ids = this.resolveContextSelectionNodeIds(targetId, selectedCount);
+        const nodes = ids
+            .map((id) => this.graph.nodes.find((node) => node.id === id))
+            .filter((node) => !!node);
+        return {
+            count: nodes.length,
+            hasAnyWithBreakpoint: nodes.some((node) => !!node.breakpoint),
+            hasAnyWithoutBreakpoint: nodes.some((node) => !node.breakpoint),
+            nodes
+        };
+    }
+
+    toggleBreakpointForSelection(targetId) {
+        const selectedCount = this.selectionManager.selected.has(targetId) ? this.selectionManager.selected.size : 1;
+        const state = this.getBreakpointStateForSelection(targetId, selectedCount);
+        const shouldEnable = state.hasAnyWithoutBreakpoint;
+        state.nodes.forEach((node) => {
+            node.breakpoint = shouldEnable;
+            const el = document.getElementById(`node-${node.id}`);
+            if (el) el.classList.toggle('has-breakpoint', shouldEnable);
+        });
     }
 
     async cutSelection() {
