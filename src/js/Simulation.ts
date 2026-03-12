@@ -40,6 +40,7 @@ export class Simulation {
             highlightNode: (id, color) => this.highlightNode(id, color),
             beginAsyncExec: () => { this.pendingAsyncExecCount += 1; },
             endAsyncExec: () => { this.pendingAsyncExecCount = Math.max(0, this.pendingAsyncExecCount - 1); },
+            getSpeedFactor: () => this.speedFactor,
             isRunActive: (runId) => this.runInstanceId === runId,
             tick: () => this.tick(),
             stop: () => this.stop()
@@ -47,7 +48,29 @@ export class Simulation {
         this.purePolicies = {
             "default": (node, ctx, item, currentRunId) => this.runDefaultPure(node, ctx, item, currentRunId)
         };
-        this.postInputSettleDelayMs = 360;
+        this.basePostInputSettleDelayMs = 360;
+        this.speedFactor = 1;
+        this.postInputSettleDelayMs = this.basePostInputSettleDelayMs;
+    }
+
+    normalizeSpeedFactor(value) {
+        const n = Number(value);
+        if (!Number.isFinite(n)) return 1;
+        return Math.min(12, Math.max(0.25, n));
+    }
+
+    getScaledDelay(ms) {
+        const base = Number(ms) || 0;
+        const factor = Math.max(0.01, this.speedFactor || 1);
+        return Math.max(0, base / factor);
+    }
+
+    setSpeedFactor(value) {
+        this.speedFactor = this.normalizeSpeedFactor(value);
+        this.postInputSettleDelayMs = this.getScaledDelay(this.basePostInputSettleDelayMs);
+        if (this.renderer && typeof this.renderer.setSpeedFactor === 'function') {
+            this.renderer.setSpeedFactor(this.speedFactor);
+        }
     }
 
     initialize() {
@@ -205,7 +228,7 @@ export class Simulation {
         path.classList.add('data-flow');
         setTimeout(() => {
             if (path) path.classList.remove('data-flow');
-        }, 180);
+        }, this.getScaledDelay(180));
     }
 
     flashDataPath(connPath) {
@@ -223,8 +246,9 @@ export class Simulation {
 
     async animateExecConnection(conn, currentRunId) {
         if (!conn || !this.renderer) return true;
-        this.renderer.animateExecWire(conn);
-        await new Promise(r => setTimeout(r, 1500));
+        const durationMs = this.renderer.animateExecWire(conn);
+        const waitMs = Number.isFinite(durationMs) ? durationMs : this.getScaledDelay(1500);
+        await new Promise(r => setTimeout(r, waitMs));
         return this.runInstanceId === currentRunId;
     }
 
@@ -451,7 +475,7 @@ export class Simulation {
         if (this.executionQueue.length === 0) {
             if (this.status === 'RUNNING') {
                 if (this.pendingAsyncExecCount > 0) {
-                    this.timer = setTimeout(() => this.tick(), 50);
+                    this.timer = setTimeout(() => this.tick(), this.getScaledDelay(50));
                     return;
                 }
                 this.stop();
@@ -470,7 +494,7 @@ export class Simulation {
         const ctx = this.pendingRequests.get(item.id);
         if (!ctx) {
             if (this.status === 'RUNNING' && !isSingleStep) {
-                this.timer = setTimeout(() => this.tick(), 100);
+                this.timer = setTimeout(() => this.tick(), this.getScaledDelay(100));
             }
             return;
         }
@@ -517,7 +541,7 @@ export class Simulation {
             }
 
             if (this.status === 'RUNNING' && !isSingleStep) {
-                this.timer = setTimeout(() => this.tick(), 100);
+                this.timer = setTimeout(() => this.tick(), this.getScaledDelay(100));
             }
             return;
         }
@@ -536,7 +560,7 @@ export class Simulation {
                 return this.graph.connections.some(c => c.toNode === item.node.id && c.toPin === pin.index);
             })
             : false;
-        if (hasConnectedDataInputs && !item.postInputSettleDone) {
+        if (hasConnectedDataInputs && !item.postInputSettleDone && !instantStepMode) {
             item.postInputSettleDone = true;
             await new Promise(r => setTimeout(r, this.postInputSettleDelayMs));
             if (this.runInstanceId !== currentRunId) return;
@@ -578,7 +602,7 @@ export class Simulation {
                     if (hasPendingSameNode) return;
                     const el = document.getElementById(`node-${nodeId}`);
                     if (el) el.style.boxShadow = "";
-                }, 900);
+                }, this.getScaledDelay(900));
             }
         } else if (item.kind === 'pure') {
             const node = item.node;
@@ -591,12 +615,12 @@ export class Simulation {
         }
 
         if (this.status === 'RUNNING' && !isSingleStep) {
-            this.timer = setTimeout(() => this.tick(), 100);
+            this.timer = setTimeout(() => this.tick(), this.getScaledDelay(100));
         }
         } finally {
             this.isProcessingNext = false;
             if (isSingleStep && this.shouldAutoContinueSingleStep()) {
-                setTimeout(() => this.processNext(true), 0);
+                this.processNext(true);
             }
         }
     }

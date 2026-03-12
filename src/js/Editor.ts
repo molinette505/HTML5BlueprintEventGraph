@@ -33,6 +33,8 @@ export class Editor {
             btnStep: document.getElementById('btn-step'),
             btnReplay: document.getElementById('btn-replay'),
             btnStop: document.getElementById('btn-stop'),
+            speedFactor: document.getElementById('speed-factor'),
+            speedFactorValue: document.getElementById('speed-factor-value'),
 
             // Save / Load
             btnSave: document.getElementById('btn-save'),
@@ -119,6 +121,17 @@ export class Editor {
         if (this.dom.btnStep) this.dom.btnStep.onclick = () => this.simulation.step();
         if (this.dom.btnReplay) this.dom.btnReplay.onclick = () => this.simulation.replayStep();
         if (this.dom.btnStop) this.dom.btnStop.onclick = () => this.simulation.stop();
+        if (this.dom.speedFactor) {
+            const applySpeed = () => {
+                const raw = Number(this.dom.speedFactor.value);
+                this.simulation.setSpeedFactor(raw);
+                if (this.dom.speedFactorValue) {
+                    this.dom.speedFactorValue.innerText = `${this.simulation.speedFactor.toFixed(1)}x`;
+                }
+            };
+            this.dom.speedFactor.oninput = applySpeed;
+            applySpeed();
+        }
 
         if (this.dom.btnSave) this.dom.btnSave.onclick = () => this.openSaveLoadModal('save');
         if (this.dom.btnLoad) this.dom.btnLoad.onclick = () => this.openSaveLoadModal('load');
@@ -563,6 +576,36 @@ export class Editor {
             });
             this.saveProject(this.defaultSaveName, true);
         }
+        this.centerGraphInView();
+        this.renderer.render();
+    }
+
+    centerGraphInView() {
+        if (!this.graph || !Array.isArray(this.graph.nodes) || this.graph.nodes.length === 0) return;
+        if (!this.dom.container) return;
+
+        let minX = Number.POSITIVE_INFINITY;
+        let minY = Number.POSITIVE_INFINITY;
+        let maxX = Number.NEGATIVE_INFINITY;
+        let maxY = Number.NEGATIVE_INFINITY;
+
+        this.graph.nodes.forEach((node) => {
+            minX = Math.min(minX, node.x);
+            minY = Math.min(minY, node.y);
+            maxX = Math.max(maxX, node.x + (node.width || 180));
+            maxY = Math.max(maxY, node.y + 120);
+        });
+
+        if (!Number.isFinite(minX) || !Number.isFinite(minY) || !Number.isFinite(maxX) || !Number.isFinite(maxY)) return;
+
+        const boundsCenterX = (minX + maxX) * 0.5;
+        const boundsCenterY = (minY + maxY) * 0.5;
+        const rect = this.dom.container.getBoundingClientRect();
+        const viewportCenterX = rect.width * 0.5;
+        const viewportCenterY = rect.height * 0.5;
+
+        this.graph.pan.x = viewportCenterX - (boundsCenterX * this.graph.scale);
+        this.graph.pan.y = viewportCenterY - (boundsCenterY * this.graph.scale);
     }
 
     _loadStarterGraph(serializedGraph) {

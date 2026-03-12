@@ -39,10 +39,30 @@
 .btn-control:disabled { opacity: 0.3; cursor: not-allowed; border-color: transparent; }
 
 /* Specific Colors */
-#btn-play:not(:disabled) { color: #4caf50; } 
 #btn-pause:not(:disabled) { color: #ff9800; } 
 #btn-stop:not(:disabled) { color: #f44336; }  
 #btn-step:not(:disabled) { color: #2196f3; }  
+
+.speed-control {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #c8c8c8;
+    font-size: 11px;
+    margin-left: 6px;
+}
+
+.speed-control input[type="range"] {
+    width: 120px;
+}
+
+#speed-factor-value {
+    min-width: 34px;
+    text-align: right;
+    color: #dcdcdc;
+    font-family: monospace;
+    font-size: 11px;
+}
 
 /* Action Button (Variables, Apply) */
 .btn-action {

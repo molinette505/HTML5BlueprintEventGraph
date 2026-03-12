@@ -20,6 +20,7 @@ export class Renderer {
         
         // Store the drag callback so we can re-attach it when refreshing nodes
         this.dragCallback = null;
+        this.speedFactor = 1;
 
         // Listen for requests to redraw a specific node (e.g., expanding advanced pins)
         window.addEventListener('node-refresh', (e) => {
@@ -32,6 +33,22 @@ export class Renderer {
             node.addMakeArrayPin();
             this.refreshNode(node);
         });
+    }
+
+    normalizeSpeedFactor(value) {
+        const n = Number(value);
+        if (!Number.isFinite(n)) return 1;
+        return Math.min(12, Math.max(0.25, n));
+    }
+
+    getScaledDelay(ms) {
+        const base = Number(ms) || 0;
+        const factor = Math.max(0.01, this.speedFactor || 1);
+        return Math.max(0, base / factor);
+    }
+
+    setSpeedFactor(value) {
+        this.speedFactor = this.normalizeSpeedFactor(value);
     }
 
     /**
@@ -179,7 +196,7 @@ export class Renderer {
      */
     animateExecWire(conn) {
         const path = document.getElementById(`conn-${conn.id}`);
-        if (!path) return;
+        if (!path) return 0;
 
         // Create the Ball
         const ball = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
@@ -188,7 +205,7 @@ export class Renderer {
         this.dom.connectionsLayer.appendChild(ball);
 
         // Animation Logic
-        const duration = 1500; // 1.5 seconds match simulation delay
+        const duration = this.getScaledDelay(1500); // 1.5 seconds baseline
         const start = performance.now();
         const totalLen = path.getTotalLength();
 
@@ -208,6 +225,7 @@ export class Renderer {
             }
         };
         requestAnimationFrame(animate);
+        return duration;
     }
 
     /**
@@ -225,7 +243,7 @@ export class Renderer {
         // Remove glow after 500ms
         setTimeout(() => {
             if(path) path.classList.remove('data-flow');
-        }, 500); 
+        }, this.getScaledDelay(500)); 
 
         // 2. Create Floating Label
         let displayVal = value;
@@ -247,9 +265,9 @@ export class Renderer {
         // 3. Animate Label along path with DELAY
         const totalLen = path.getTotalLength();
         const startPoint = path.getPointAtLength(0);
-        const startDelay = 80;
+        const startDelay = this.getScaledDelay(80);
         const pxPerSecond = 180;
-        const travelMs = Math.max(320, Math.min(2400, (totalLen / pxPerSecond) * 1000));
+        const travelMs = this.getScaledDelay(Math.max(320, Math.min(2400, (totalLen / pxPerSecond) * 1000)));
         
         // Set initial position immediately so it appears at the start
         label.style.left = `${startPoint.x}px`;
@@ -298,7 +316,7 @@ export class Renderer {
             pathEl.classList.add('data-flow');
             setTimeout(() => {
                 if (pathEl) pathEl.classList.remove('data-flow');
-            }, 500);
+            }, this.getScaledDelay(500));
         });
 
         let displayVal = value;
@@ -323,9 +341,9 @@ export class Renderer {
 
         const totalLen = tempPath.getTotalLength();
         const startPoint = tempPath.getPointAtLength(0);
-        const startDelay = 80;
+        const startDelay = this.getScaledDelay(80);
         const pxPerSecond = 180;
-        const travelMs = Math.max(320, Math.min(2400, (totalLen / pxPerSecond) * 1000));
+        const travelMs = this.getScaledDelay(Math.max(320, Math.min(2400, (totalLen / pxPerSecond) * 1000)));
 
         label.style.left = `${startPoint.x}px`;
         label.style.top = `${startPoint.y}px`;

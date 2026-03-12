@@ -122,7 +122,10 @@ function runDoOnce(api, node, ctx, item, continuations) {
 function runDelay(api, node, ctx, item, continuations, currentRunId) {
     const args = api.buildArgs(node, ctx);
     const durationSeconds = api.castValue(args[0], 'float') ?? 0;
-    const delayMs = Math.max(0, durationSeconds * 1000);
+    const speedFactor = typeof api.getSpeedFactor === 'function'
+        ? Math.max(0.01, api.getSpeedFactor())
+        : 1;
+    const delayMs = Math.max(0, (durationSeconds * 1000) / speedFactor);
     api.setNodeHighlight(node.id, '#ffffff');
 
     const nextInfo = api.getNextExecConnection(node);
@@ -132,6 +135,11 @@ function runDelay(api, node, ctx, item, continuations, currentRunId) {
     }
 
     const { nextConn, nextNode } = nextInfo;
+    if (item && item.instantMode) {
+        api.highlightNode(node.id, '#ff9900');
+        api.queueExec(nextNode, nextConn, false, continuations);
+        return;
+    }
     api.beginAsyncExec();
     setTimeout(() => {
         try {
