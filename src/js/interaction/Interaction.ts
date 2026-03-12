@@ -872,7 +872,16 @@ export class Interaction {
         const pin = pins && pins[pinMeta.index] ? pins[pinMeta.index] : null;
         if (!pin) return false;
 
-        return Array.isArray(pin.allowedTypes) && pin.allowedTypes.length > 0;
+        const canChangeType = Array.isArray(pin.allowedTypes) && pin.allowedTypes.length > 0;
+        if (canChangeType) return true;
+        return this._isWatchableOutputPin(node, pinMeta.dir, pin);
+    }
+
+    _isWatchableOutputPin(node, pinDir, pin) {
+        if (!node || !pin) return false;
+        if (pinDir !== 'output') return false;
+        if (pin.type === 'exec') return false;
+        return Array.isArray(node.inputs) && node.inputs.some((inputPin) => inputPin.type === 'exec');
     }
 
     _handleTouchChordAction(e) {

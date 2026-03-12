@@ -16,6 +16,7 @@ export class VariableManager {
         this.lastAddedIsArray = false;
         this.activeTouchVariableDrag = null;
         this.touchVariableDragThreshold = 8;
+        this.touchVariableLongPressMs = 520;
         this.activeVariableContextMenuTarget = null;
 
         // Helper to render widgets in the sidebar
@@ -55,6 +56,13 @@ export class VariableManager {
             if (this.variableContextMenu.contains(event.target)) return;
             this.hideVariableContextMenu();
         });
+
+        window.addEventListener('touchstart', (event) => {
+            if (!this.variableContextMenu) return;
+            if (!this.variableContextMenu.classList.contains('visible')) return;
+            if (this.variableContextMenu.contains(event.target)) return;
+            this.hideVariableContextMenu();
+        }, { passive: true });
     }
 
     createVariableContextMenu() {
@@ -306,7 +314,16 @@ export class VariableManager {
             lastX: touch.clientX,
             lastY: touch.clientY,
             dragging: false,
-            ghost: null
+            ghost: null,
+            longPressTriggered: false,
+            longPressTimer: window.setTimeout(() => {
+                if (!this.activeTouchVariableDrag) return;
+                if (this.activeTouchVariableDrag.dragging) return;
+                this.activeTouchVariableDrag.longPressTriggered = true;
+                if (payload.itemType === 'variable') {
+                    this.showVariableContextMenu(this.activeTouchVariableDrag.lastX, this.activeTouchVariableDrag.lastY, payload.itemName);
+                }
+            }, this.touchVariableLongPressMs)
         };
     }
 
@@ -319,9 +336,17 @@ export class VariableManager {
 
         drag.lastX = touch.clientX;
         drag.lastY = touch.clientY;
+        const distance = Math.hypot(drag.lastX - drag.startX, drag.lastY - drag.startY);
+        if (distance > this.touchVariableDragThreshold && drag.longPressTimer) {
+            clearTimeout(drag.longPressTimer);
+            drag.longPressTimer = null;
+        }
+        if (drag.longPressTriggered) {
+            event.preventDefault();
+            return;
+        }
 
         if (!drag.dragging) {
-            const distance = Math.hypot(drag.lastX - drag.startX, drag.lastY - drag.startY);
             if (distance <= this.touchVariableDragThreshold) return;
 
             drag.dragging = true;
@@ -346,6 +371,12 @@ export class VariableManager {
         const touch = Array.from(event.changedTouches || []).find(t => t.identifier === drag.touchId);
         if (!touch) return;
 
+        if (drag.longPressTriggered) {
+            event.preventDefault();
+            this._clearTouchVariableDrag();
+            return;
+        }
+
         if (drag.dragging) {
             const dropX = touch.clientX;
             const dropY = touch.clientY;
@@ -368,6 +399,10 @@ export class VariableManager {
     }
 
     _clearTouchVariableDrag() {
+        if (this.activeTouchVariableDrag && this.activeTouchVariableDrag.longPressTimer) {
+            clearTimeout(this.activeTouchVariableDrag.longPressTimer);
+            this.activeTouchVariableDrag.longPressTimer = null;
+        }
         if (this.activeTouchVariableDrag && this.activeTouchVariableDrag.ghost) {
             this.activeTouchVariableDrag.ghost.remove();
         }
