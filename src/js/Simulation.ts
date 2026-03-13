@@ -733,9 +733,12 @@ export class Simulation {
         if (!ready) {
             if (deps.length > 0) {
                 this.executionQueue = deps.concat([item], this.executionQueue);
-                if (isSingleStep && item.kind === 'exec') {
+                if (isSingleStep && item.kind === 'exec' && !this.isBreakpointTask(item)) {
                     await this.processOnePureTaskForSingleStep(currentRunId);
                     if (this.runInstanceId !== currentRunId) return;
+                }
+                if (isSingleStep && item.kind === 'exec' && this.isBreakpointTask(item)) {
+                    this.endStepBurst();
                 }
             } else {
                 this.executionQueue.push(item);

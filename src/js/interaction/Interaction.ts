@@ -267,8 +267,11 @@ export class Interaction {
         const shouldEnable = state.hasAnyWithoutBreakpoint;
         state.nodes.forEach((node) => {
             node.breakpoint = shouldEnable;
-            const el = document.getElementById(`node-${node.id}`);
-            if (el) el.classList.toggle('has-breakpoint', shouldEnable);
+            this.renderer.refreshNode(node);
+            if (this.selectionManager.has(node.id)) {
+                const el = document.getElementById(`node-${node.id}`);
+                if (el) el.classList.add('selected');
+            }
         });
     }
 
