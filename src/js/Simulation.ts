@@ -254,6 +254,7 @@ export class Simulation {
 
     shouldUseInstantStepForItem(item, isSingleStep) {
         if (!isSingleStep || !item) return false;
+        if (item.manualStepChain) return false;
         if (item.kind === 'exec' || item.kind === 'pure') {
             return !this.isBreakpointNode(item.node);
         }
@@ -265,6 +266,11 @@ export class Simulation {
         if (!this.stepBurstActive) return false;
         const next = this.executionQueue[0];
         if (!next) {
+            this.endStepBurst();
+            return false;
+        }
+
+        if (next.manualStepChain) {
             this.endStepBurst();
             return false;
         }
@@ -484,7 +490,8 @@ export class Simulation {
             }
 
             const res = this.resolveInputs(task, !!task.instantMode, {
-                flattenUpstreamVisuals: !!task.flattenUpstreamVisuals
+                flattenUpstreamVisuals: !!task.flattenUpstreamVisuals,
+                manualStepChain: !!task.manualStepChain
             });
             if (!res.ready) {
                 if (res.deps.length > 0) {
@@ -604,7 +611,8 @@ export class Simulation {
                             connPath
                         },
                         instantMode,
-                        flattenUpstreamVisuals
+                        flattenUpstreamVisuals,
+                        manualStepChain: !!opts.manualStepChain
                     });
                     deps.push(pureTask);
                 }
@@ -725,7 +733,8 @@ export class Simulation {
             ready = true;
         } else {
             const res = this.resolveInputs(item, instantStepMode, {
-                flattenUpstreamVisuals: !!item.flattenUpstreamVisuals
+                flattenUpstreamVisuals: !!item.flattenUpstreamVisuals,
+                manualStepChain: this.isBreakpointTask(item) || !!item.manualStepChain
             });
             ready = res.ready;
             deps = res.deps;
@@ -733,6 +742,9 @@ export class Simulation {
         if (!ready) {
             if (deps.length > 0) {
                 this.executionQueue = deps.concat([item], this.executionQueue);
+                if (isSingleStep && item.kind === 'exec' && this.isBreakpointTask(item)) {
+                    item.hadRecursiveInputChain = true;
+                }
                 if (isSingleStep && item.kind === 'exec' && !this.isBreakpointTask(item)) {
                     await this.processOnePureTaskForSingleStep(currentRunId);
                     if (this.runInstanceId !== currentRunId) return;
@@ -775,6 +787,7 @@ export class Simulation {
             && item.kind === 'exec'
             && this.isBreakpointTask(item)
             && hasConnectedDataInputs
+            && !item.hadRecursiveInputChain
             && !item.breakpointReadyToFire
         ) {
             item.breakpointReadyToFire = true;
