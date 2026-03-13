@@ -334,12 +334,15 @@ export class Simulation {
         } else if (node.outputValueCache && Object.prototype.hasOwnProperty.call(node.outputValueCache, pinIndex)) {
             return node.outputValueCache[pinIndex];
         }
-
-        const firstDataPin = this.getFirstDataOutputPin(node);
-        if (firstDataPin && firstDataPin.index === pinIndex) {
-            return node.executionResult;
-        }
         return undefined;
+    }
+
+    hasNodeOutputValue(node, pinIndex) {
+        if (!node || !Number.isInteger(pinIndex)) return false;
+        if (typeof node.hasOutputValue === 'function') {
+            return node.hasOutputValue(pinIndex);
+        }
+        return !!(node.outputValueCache && Object.prototype.hasOwnProperty.call(node.outputValueCache, pinIndex));
     }
 
     clearNodeOutputValueCache(node) {
@@ -370,7 +373,7 @@ export class Simulation {
     }
 
     formatWatchValue(value) {
-        if (value === undefined) return '';
+        if (value === undefined) return 'undefined';
         if (value === null) return 'null';
         if (Array.isArray(value)) {
             const shown = value.slice(0, 3).map((entry) => this.formatWatchValue(entry));
@@ -393,6 +396,10 @@ export class Simulation {
         if (!node || !Number.isInteger(pinIndex)) return;
         const watchEl = document.querySelector(`.pin-watch-value[data-node="${node.id}"][data-index="${pinIndex}"]`);
         if (!watchEl) return;
+        if (!this.hasNodeOutputValue(node, pinIndex)) {
+            watchEl.innerText = 'Not executed yet';
+            return;
+        }
         const value = this.getNodeOutputValue(node, pinIndex);
         watchEl.innerText = this.formatWatchValue(value);
     }
@@ -886,6 +893,9 @@ export class Simulation {
                 result = this.castValue(rawRes, outPin ? outPin.type : 'wildcard');
 
                 node.executionResult = result;
+                if (outPin) {
+                    this.setNodeOutputValue(node, outPinIndex, result);
+                }
                 if (this.status !== 'STOPPED') {
                     this.highlightNode(node.id, '#ff9900');
                 }

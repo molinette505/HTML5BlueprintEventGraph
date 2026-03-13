@@ -280,7 +280,7 @@ export class Interaction {
 
     togglePinWatch(nodeId, pinIndex) {
         const node = this.graph.nodes.find((candidate) => candidate.id === nodeId);
-        if (!node || typeof node.isImpure !== 'function' || !node.isImpure()) return;
+        if (!node) return;
         const pin = node.outputs && node.outputs[pinIndex];
         if (!pin || pin.type === 'exec') return;
 
@@ -878,10 +878,10 @@ export class Interaction {
     }
 
     _isWatchableOutputPin(node, pinDir, pin) {
-        if (!node || !pin) return false;
+        if (!pin) return false;
         if (pinDir !== 'output') return false;
         if (pin.type === 'exec') return false;
-        return Array.isArray(node.inputs) && node.inputs.some((inputPin) => inputPin.type === 'exec');
+        return true;
     }
 
     _handleTouchChordAction(e) {

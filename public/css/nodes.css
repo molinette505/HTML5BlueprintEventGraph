@@ -53,22 +53,28 @@
     white-space: nowrap;
 }
 
-.node.has-breakpoint .node-header {
-    position: relative;
-    padding-right: 24px;
-}
-
-.node.has-breakpoint .node-header::after {
+.node.has-breakpoint:not(.reroute)::before {
     content: '';
     position: absolute;
-    right: 9px;
-    top: 50%;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    transform: translateY(-50%);
+    left: -9px;
+    top: -9px;
+    width: 16px;
+    height: 16px;
     background: #ff3b30;
-    box-shadow: 0 0 6px rgba(255, 59, 48, 0.7);
+    border: 2px solid #111;
+    clip-path: polygon(
+        30% 0%,
+        70% 0%,
+        100% 30%,
+        100% 70%,
+        70% 100%,
+        30% 100%,
+        0% 70%,
+        0% 30%
+    );
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.22), 0 0 8px rgba(255, 59, 48, 0.45);
+    z-index: 3;
+    pointer-events: none;
 }
 
 .node-body { 

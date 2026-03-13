@@ -217,10 +217,15 @@ export class NodeRenderer {
                 watchValue.className = 'pin-watch-value';
                 watchValue.dataset.node = String(pin.nodeId);
                 watchValue.dataset.index = String(pin.index);
+                const hasValue = pin.node && typeof pin.node.hasOutputValue === 'function'
+                    ? pin.node.hasOutputValue(pin.index)
+                    : false;
                 const currentValue = pin.node && typeof pin.node.getOutputValue === 'function'
                     ? pin.node.getOutputValue(pin.index)
                     : undefined;
-                watchValue.innerText = this.formatWatchValue(currentValue);
+                watchValue.innerText = hasValue
+                    ? this.formatWatchValue(currentValue)
+                    : 'Not executed yet';
                 row.append(watchValue);
             }
         }
@@ -263,14 +268,13 @@ export class NodeRenderer {
         if (!pin || pin.direction !== 'output') return false;
         if (pin.type === 'exec') return false;
         const node = pin.node;
-        if (!node || typeof node.isImpure !== 'function') return false;
-        if (!node.isImpure()) return false;
+        if (!node) return false;
         if (typeof node.isOutputWatched !== 'function') return false;
         return node.isOutputWatched(pin.index);
     }
 
     formatWatchValue(value) {
-        if (value === undefined) return '';
+        if (value === undefined) return 'undefined';
         if (value === null) return 'null';
         if (Array.isArray(value)) {
             const shown = value.slice(0, 3).map((entry) => this.formatWatchValue(entry) || '...');

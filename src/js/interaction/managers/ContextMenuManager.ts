@@ -177,9 +177,8 @@ export class ContextMenuManager {
             list.appendChild(li);
         };
 
-        const isImpureNode = Array.isArray(node.inputs) && node.inputs.some((inputPin) => inputPin.type === 'exec');
         const isOutputDataPin = dir === 'output' && pin.type !== 'exec';
-        if (isImpureNode && isOutputDataPin && this.callbacks.onTogglePinWatch) {
+        if (isOutputDataPin && this.callbacks.onTogglePinWatch) {
             const isWatched = this.callbacks.getPinWatchState
                 ? !!this.callbacks.getPinWatchState(node.id, pinIndex)
                 : false;
