@@ -442,6 +442,10 @@ export class Simulation {
                 this.flashConnection(nextItem.conn);
             }
             nextItem.execWireDone = true;
+            if (!this.isExecRerouteNode(nextItem.node) && !nextItem.waitingHighlight) {
+                this.setNodeHighlight(nextItem.node.id, '#ffffff');
+                nextItem.waitingHighlight = true;
+            }
 
             if (!this.isExecRerouteNode(nextItem.node)) return;
 
@@ -480,8 +484,7 @@ export class Simulation {
             }
 
             const res = this.resolveInputs(task, !!task.instantMode, {
-                flattenUpstreamVisuals: !!task.flattenUpstreamVisuals,
-                directBreakpointTarget: false
+                flattenUpstreamVisuals: !!task.flattenUpstreamVisuals
             });
             if (!res.ready) {
                 if (res.deps.length > 0) {
@@ -591,8 +594,7 @@ export class Simulation {
                 if (!ctx.inputScheduled[i]) {
                     ctx.inputScheduled[i] = true;
                     const sourceIsBreakpoint = this.isBreakpointNode(sourceNode);
-                    const flattenUpstreamVisuals = (!!opts.flattenUpstreamVisuals || !!opts.directBreakpointTarget)
-                        && !sourceIsBreakpoint;
+                    const flattenUpstreamVisuals = !!opts.flattenUpstreamVisuals && !sourceIsBreakpoint;
                     const instantMode = (instantDataFlow || flattenUpstreamVisuals) && !sourceIsBreakpoint;
                     const pureTask = this.createTask('pure', sourceNode, {
                         deliverTo: {
@@ -602,8 +604,7 @@ export class Simulation {
                             connPath
                         },
                         instantMode,
-                        flattenUpstreamVisuals,
-                        forceOutputLabel: !!opts.directBreakpointTarget
+                        flattenUpstreamVisuals
                     });
                     deps.push(pureTask);
                 }
@@ -723,13 +724,8 @@ export class Simulation {
         if (this.execPolicies.shouldSkipInputResolution(item)) {
             ready = true;
         } else {
-            const isBreakpointInputFetchStep = isSingleStep
-                && item.kind === 'exec'
-                && this.isBreakpointTask(item)
-                && !item.breakpointReadyToFire;
             const res = this.resolveInputs(item, instantStepMode, {
-                flattenUpstreamVisuals: !!item.flattenUpstreamVisuals,
-                directBreakpointTarget: isBreakpointInputFetchStep
+                flattenUpstreamVisuals: !!item.flattenUpstreamVisuals
             });
             ready = res.ready;
             deps = res.deps;
@@ -775,6 +771,7 @@ export class Simulation {
             isSingleStep
             && item.kind === 'exec'
             && this.isBreakpointTask(item)
+            && hasConnectedDataInputs
             && !item.breakpointReadyToFire
         ) {
             item.breakpointReadyToFire = true;
@@ -914,7 +911,7 @@ export class Simulation {
                         const connPath = item.deliverTo.connPath && item.deliverTo.connPath.length > 0
                             ? item.deliverTo.connPath
                             : (item.deliverTo.conn ? [item.deliverTo.conn] : []);
-                        const useInstantOutput = !!item.instantMode && !item.forceOutputLabel;
+                        const useInstantOutput = !!item.instantMode;
                         const animated = this.animateDataPath(connPath, debugLabel, useInstantOutput);
                         const waitMs = animated.waitMs;
                         if (waitMs > 0) {

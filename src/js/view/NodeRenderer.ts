@@ -37,6 +37,10 @@ export class NodeRenderer {
         if (node.width) el.style.width = `${node.width}px`;
         if (node.color) el.style.setProperty('--header-bg', node.color);
 
+        if (node.breakpoint) {
+            el.appendChild(this.createBreakpointIcon());
+        }
+
         // 1. Header (Name & Color)
         if (!node.hideHeader) {
             const header = document.createElement('div');
@@ -140,6 +144,10 @@ export class NodeRenderer {
         const dot = document.createElement('div');
         dot.className = 'reroute-dot';
         el.appendChild(dot);
+
+        if (node.breakpoint) {
+            el.appendChild(this.createBreakpointIcon());
+        }
 
         const grabZone = document.createElement('div');
         grabZone.className = 'reroute-grab';
@@ -262,6 +270,17 @@ export class NodeRenderer {
                 <rect x="14" y="14" width="7" height="7" rx="1"></rect>
             </svg>
         `;
+    }
+
+    createBreakpointIcon() {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'node-breakpoint-icon';
+        wrapper.innerHTML = `
+            <svg viewBox="0 0 24 24" fill="#ff3b30" stroke="#111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="m7.86 2 8.28 0L22 7.86v8.28L16.14 22H7.86L2 16.14V7.86z"></path>
+            </svg>
+        `;
+        return wrapper;
     }
 
     shouldRenderOutputWatch(pin) {
