@@ -453,6 +453,10 @@ export class Simulation {
                 nextItem.waitingHighlight = true;
             }
 
+            if (this.isBreakpointTask(nextItem)) {
+                this.preExecuteBreakpointDependencyChain(nextItem);
+            }
+
             if (!this.isExecRerouteNode(nextItem.node)) return;
 
             const rerouteItem = this.executionQueue.shift();
@@ -473,6 +477,27 @@ export class Simulation {
             if (this.runInstanceId !== currentRunId) return;
             safety += 1;
         }
+    }
+
+    preExecuteBreakpointDependencyChain(item) {
+        if (!item || item.kind !== 'exec') return false;
+        if (!this.isBreakpointTask(item)) return false;
+        if (item.hadRecursiveInputChain) return false;
+        if (this.executionQueue[0] !== item) return false;
+
+        const res = this.resolveInputs(item, false, {
+            flattenUpstreamVisuals: false,
+            manualStepChain: true,
+            suppressVisuals: true
+        });
+
+        if (res.ready || res.deps.length === 0) return false;
+
+        const expandedDeps = this.expandManualPureDependencyChain(res.deps);
+        this.executionQueue.shift();
+        this.executionQueue = expandedDeps.concat([item], this.executionQueue);
+        item.hadRecursiveInputChain = true;
+        return true;
     }
 
     async processOnePureTaskForSingleStep(currentRunId) {
@@ -510,6 +535,42 @@ export class Simulation {
             this.pendingRequests.delete(task.id);
             return;
         }
+    }
+
+    expandManualPureDependencyChain(initialTasks = []) {
+        const ordered = [];
+        let queue = Array.isArray(initialTasks) ? initialTasks.slice() : [];
+        let safety = 0;
+
+        while (queue.length > 0 && safety < 512) {
+            const task = queue.shift();
+            safety += 1;
+            if (!task || task.kind !== 'pure') continue;
+
+            task.manualStepChain = true;
+            if (!task.waitingHighlight) {
+                this.setNodeHighlight(task.node.id, '#ffffff');
+                task.waitingHighlight = true;
+            }
+
+            const ctx = this.pendingRequests.get(task.id);
+            if (!ctx) continue;
+
+            const res = this.resolveInputs(task, false, {
+                flattenUpstreamVisuals: !!task.flattenUpstreamVisuals,
+                manualStepChain: true,
+                suppressVisuals: true
+            });
+
+            if (res.deps.length > 0) {
+                queue = res.deps.concat([task], queue);
+                continue;
+            }
+
+            ordered.push(task);
+        }
+
+        return ordered;
     }
 
     resolveDataSource(connection) {
@@ -621,7 +682,7 @@ export class Simulation {
                 const incomingVal = this.castValue(sourceVal, pin.type);
                 ctx.inputValues[i] = incomingVal;
                 ctx.inputReady[i] = true;
-                if (this.renderer && connPath.length > 0) {
+                if (this.renderer && connPath.length > 0 && !opts.suppressVisuals) {
                     const debugLabel = window.FunctionRegistry.getVisualDebug(sourceNode, [], incomingVal);
                     const animated = this.animateDataPath(connPath, debugLabel, instantDataFlow);
                     const waitMs = animated.waitMs;
@@ -741,7 +802,12 @@ export class Simulation {
         }
         if (!ready) {
             if (deps.length > 0) {
-                this.executionQueue = deps.concat([item], this.executionQueue);
+                if (isSingleStep && item.kind === 'exec' && this.isBreakpointTask(item)) {
+                    const expandedDeps = this.expandManualPureDependencyChain(deps);
+                    this.executionQueue = expandedDeps.concat([item], this.executionQueue);
+                } else {
+                    this.executionQueue = deps.concat([item], this.executionQueue);
+                }
                 if (isSingleStep && item.kind === 'exec' && this.isBreakpointTask(item)) {
                     item.hadRecursiveInputChain = true;
                 }
