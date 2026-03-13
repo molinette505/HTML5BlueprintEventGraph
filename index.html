@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Visual Blueprint Editor</title>
+    
+    <link rel="stylesheet" href="/HTML5BlueprintEventGraph/css/colors.css">
+    <link rel="stylesheet" href="/HTML5BlueprintEventGraph/css/graph.css">
+    <link rel="stylesheet" href="/HTML5BlueprintEventGraph/css/nodes.css">
+    <link rel="stylesheet" href="/HTML5BlueprintEventGraph/css/pins.css">
+    <link rel="stylesheet" href="/HTML5BlueprintEventGraph/css/connections.css">
+    <link rel="stylesheet" href="/HTML5BlueprintEventGraph/css/editor.css">
+  <script type="module" crossorigin src="/HTML5BlueprintEventGraph/assets/index-CdK7838r.js"></script>
+</head>
+<body>
+
+<div id="app">
+    <div id="toolbar">
+        <div class="toolbar-left">
+            <div class="controls">
+                <button class="btn-control" id="btn-step" title="Step Forward">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <line x1="6" y1="4" x2="6" y2="20"></line>
+                        <polygon points="10 4 20 12 10 20 10 4"></polygon>
+                    </svg>
+                </button>
+                <button class="btn-control" id="btn-replay" title="Replay Last Step" disabled>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M3 12a9 9 0 1 0 9-9"></path>
+                        <polyline points="3 3 3 9 9 9"></polyline>
+                    </svg>
+                </button>
+                <button class="btn-control" id="btn-stop" title="Stop & Reset" disabled>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <rect x="5" y="5" width="14" height="14" rx="2"></rect>
+                    </svg>
+                </button>
+                <label class="speed-control" for="speed-factor">
+                    <span>Speed</span>
+                    <input id="speed-factor" type="range" min="0.25" max="1.75" step="0.05" value="1">
+                    <span id="speed-factor-value">1.0x</span>
+                </label>
+            </div>
+        </div>
+
+        <div class="toolbar-right">
+            <button id="btn-save" class="btn-action" title="Save Graph">Save</button>
+            <button id="btn-load" class="btn-action btn-action-secondary" title="Load Graph">Load</button>
+        </div>
+    </div>
+
+    <div id="main-content">
+        <div id="graph-view" class="view active">
+            <div id="graph-container">
+                <div id="transform-layer">
+                    <svg id="connections-layer"></svg>
+                    <div id="nodes-layer"></div>
+                </div>
+                <div id="variable-watch-overlay"></div>
+            </div>
+            <div id="context-menu">
+                <div id="context-controls">
+                    <label id="context-sensitive-label">
+                        <input type="checkbox" id="context-sensitive-toggle" checked>
+                        Context Sensitive
+                    </label>
+                </div>
+                <input type="text" id="context-search" placeholder="Search nodes..." autocomplete="off">
+                <ul id="context-list"></ul>
+            </div>
+        </div>
+
+        <div id="variable-panel">
+            <div class="panel-content">
+                <div class="drawer-section">
+                    <div class="section-header">
+                        <h3>Event Graph</h3>
+                        <button id="btn-add-event" class="btn-small" title="Add Custom Event">+</button>
+                    </div>
+                    <div id="event-list">
+                    </div>
+                </div>
+                <div class="drawer-section">
+                    <div class="section-header">
+                        <h3>Variables</h3>
+                        <button id="btn-add-var" class="btn-small" title="Add Variable">+</button>
+                    </div>
+                    <div id="var-list">
+                    </div>
+                </div>
+            </div>
+            <div class="hint-footer">
+                Drag to Graph (Alt+Drag to Set)
+            </div>
+        </div>
+        <button id="variable-drawer-handle" aria-label="Toggle Drawer">|</button>
+    </div>
+</div>
+
+<div id="notification"></div>
+<div id="save-load-modal" class="modal-overlay">
+    <div class="modal-card">
+        <div class="modal-header">
+            <h3 id="modal-title">Save</h3>
+            <button id="btn-modal-close" class="btn-small" title="Close">×</button>
+        </div>
+        <div class="modal-body">
+            <div id="modal-save-name-row" class="modal-save-name-row">
+                <label for="modal-save-name">Save Name</label>
+                <input id="modal-save-name" type="text" autocomplete="off" />
+            </div>
+            <div id="modal-save-list" class="modal-save-list"></div>
+        </div>
+        <div class="modal-footer">
+            <button id="btn-modal-delete" class="btn-action btn-action-danger">Delete</button>
+            <button id="btn-modal-confirm" class="btn-action">Save</button>
+        </div>
+    </div>
+</div>
+
+
+</body>
+</html>

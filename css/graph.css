@@ -1,0 +1,47 @@
+/* RESET & BASE */
+* { box-sizing: border-box; outline: none; -webkit-tap-highlight-color: transparent; user-select: none; }
+
+body, html {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    overflow: hidden;
+    font-family: 'Segoe UI', Inter, Roboto, Helvetica, Arial, sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-main);
+}
+
+#app { display: flex; flex-direction: column; height: 100vh; }
+#main-content { flex-grow: 1; position: relative; overflow: hidden; }
+
+/* GRAPH CONTAINER */
+#graph-container {
+    width: 100%; height: 100%;
+    background-color: var(--bg-color);
+    background-image: 
+        linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+        linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+    background-size: 100px 100px, 100px 100px, 20px 20px, 20px 20px;
+    background-position: -1px -1px;
+    cursor: default;
+    position: relative;
+    overflow: hidden;
+    touch-action: none;
+    -webkit-touch-callout: none;
+}
+#graph-container:active { cursor: grabbing; }
+
+/* LAYERS */
+#transform-layer { transform-origin: 0 0; position: absolute; top:0; left:0; width:100%; height:100%; pointer-events: none; }
+#connections-layer { width: 100%; height: 100%; position: absolute; top:0; left:0; overflow: visible; z-index: 1; pointer-events: auto; }
+#nodes-layer { width: 100%; height: 100%; position: absolute; top:0; left:0; z-index: 10; pointer-events: none; }
+
+/* SELECTION BOX */
+#selection-box {
+    position: absolute;
+    border: 1px solid var(--accent-color);
+    background-color: rgba(0, 122, 204, 0.2);
+    pointer-events: none;
+    display: none;
+    z-index: 1000;
+}
